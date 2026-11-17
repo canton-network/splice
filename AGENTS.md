@@ -73,9 +73,8 @@ When you change a Daml package, bump the version of that package and of every pa
 
 ### Daml Code Style
 
-Apply these rules to code you write or change, but follow the naming scheme of the code you are editing.
-Don't rewrite existing code only to follow them: that adds review noise,
-and changing released templates and choices is often not upgrade-compatible.
+Apply these rules to code you write or change. Don't rewrite existing code only to follow them:
+that adds review noise, and changing released templates and choices is often not upgrade-compatible.
 
 #### Readability
 
@@ -91,14 +90,12 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 
 #### Types and Names
 
+* Within a module, follow its existing naming scheme; apply the naming rules below where there is none.
 * Name recurring tuples and argument groups with a record type or type synonym.
 * Give each constructor of a variant its own record type if some functions handle only one of them.
 * Spell out names; avoid single letters and non-standard abbreviations.
-* Name choices `<Template>_<Verb>`, e.g., `AmuletRules_Transfer`.
-* Give every choice its own result record `<Choice>Result`, and every contract key its own record `<Template>Key`,
-  even if they have only one field. Unlike a bare type, a record can gain optional fields in an SCU-compatible upgrade,
-  which leaves room for future changes.
-  Choices of interfaces return the result type that the interface defines.
+* Name choices `<Template>_<Verb>`, their result records `<Choice>Result` and contract key records `<Template>Key`,
+  e.g., `AmuletRules_BuyMemberTraffic` and `AmuletRules_BuyMemberTrafficResult`.
 
 #### Documentation
 
@@ -114,11 +111,16 @@ Write them for app developers and auditors, and only where they add information.
   Explain why, not what the code does.
 * Where a definition implements a CIP, link to the relevant section instead of restating it.
 
-#### Future Changes
+#### Future Proofing
 
-Write code with future changes in mind: not by making it more general than needed,
-but by making the compiler flag code that must handle new fields or constructors.
+Released Daml can only change in SCU-compatible ways (see "Backwards-compatible Daml changes" above):
+records only gain `Optional` fields at the end, variants only gain constructors at the end,
+and templates, choices, fields and constructors can be neither removed nor renamed.
+Write code that can evolve within these limits, not code that is more general than needed.
 
+* Give every new choice its own result record and every contract key its own record, even if they have only one field:
+  unlike a bare type, a record can gain fields later. Choices of interfaces return the result type that the interface defines.
+* Make the compiler flag code that must handle new fields or constructors.
 * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
   Where every field must be processed, match positionally and name unused fields `_field`.
 * Avoid catch-all branches (`_ -> ...`) in `case` expressions: a constructor added later silently takes them
