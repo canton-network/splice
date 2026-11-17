@@ -110,6 +110,7 @@ let
     sphinx
     sphinx-lint
     syft
+
     tinyproxy
     tmux
     toxiproxy
