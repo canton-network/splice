@@ -40,8 +40,8 @@ jobs:
         with:
           cmd_retry_count: 5 # Retry in case of dependency download errors
           cmd: make cluster/pulumi/test
-          cmd_before_retry: git reset --hard # revert changes before retrying, because make cluster/pulumi/test actually "fixes" the test pulumi files in-place
-      
+          cmd_before_retry: git reset --hard && git clean -fd -- cluster/expected # revert changes before retrying, because make cluster/pulumi/test actually "fixes" the test pulumi files in-place
+
       - name: Check that pinned docker images are multi-arch
         uses: ./.github/actions/nix/run
         with:

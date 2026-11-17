@@ -201,7 +201,6 @@ spec:
                 canton.sv-apps.sv.domain-migration-dump-path = "/domain-upgrade-dump/domain_migration_dump.json"
             {{- if .Values.domain }}
             - name: ADDITIONAL_CONFIG_SV_DOMAIN
-              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.current {
                   sequencer {
@@ -233,7 +232,6 @@ spec:
             {{- range $syncName, $sync := .Values.synchronizers }}
             {{- if kindIs "map" $sync }}
             - name: ADDITIONAL_CONFIG_SV_DOMAIN_{{ $syncName | upper }}
-              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.{{ $syncName }} {
                   sequencer {
@@ -265,7 +263,6 @@ spec:
             {{- end }}
             {{- range $i, $sync := .Values.synchronizers.additionalLegacy }}
             - name: ADDITIONAL_CONFIG_SV_DOMAIN_ADDITIONAL_LEGACY_{{ $i }}
-              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.{{ $i }} {
                   sequencer {

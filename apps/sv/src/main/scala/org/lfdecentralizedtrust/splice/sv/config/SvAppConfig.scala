@@ -557,6 +557,8 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    // Safety list of parties that must never be marked as unavailable by the automation
+    protectedPartyIds: Set[PartyId] = Set.empty,
     // Capped exponential backoff used by the persisted unavailable parties store
     // (used when `enablePersistedUnavailableParties` is set)
     unavailablePartiesBackoffParameters: UnavailablePartiesBackoffParameters =
@@ -693,7 +695,6 @@ final case class SvSynchronizerNodeConfig(
     // We want to be able to override this for simtime tests
     topologyChangeDelayDuration: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMillis(250),
-    // TODO(##7162) Set sensible defaults here once Canton comes up with some magic numbers.
     synchronizerLimits: Option[SynchronizerLimits] = Some(
       SvSynchronizerNodeConfig.defaultSynchronizerLimits
     ),

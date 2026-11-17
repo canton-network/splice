@@ -89,7 +89,6 @@ import org.lfdecentralizedtrust.splice.util.*
 import org.scalatest.wordspec.AsyncWordSpec
 import org.slf4j.event.Level
 
-import java.nio.file.{Files, Paths}
 import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
 import java.util
@@ -119,40 +118,30 @@ abstract class StoreTestBase
       NoOpMetricsFactory,
     )
 
-  // Looks up the package name from the package ID in dars.lock, to avoid having to parse all DARs just to find this mapping
-  // TODO(#3937): this is quite hacky. What we should really do is just auto-generate DarResources instead of deriving it from DARs at runtime.
-  protected def tryGetPackageNameFromDarLock(identifier: Identifier): Option[String] = {
-    val path = Paths.get("daml/dars.lock")
-    Files
-      .readAllLines(path)
-      .asScala
-      .map(_.trim.split("\\s+"))
-      .filter(line => line.length > 1 && line(2) == identifier.getPackageId)
-      .map(_(0))
-      .headOption
-  }
+  // All packages in the generated DarResources, including splitwell, which
+  // `PackageQualifiedName.lookupFromResources` doesn't cover.
+  private lazy val packageNamesFromResources: Map[String, String] =
+    DarResources.packageResources.view
+      .flatMap(_.all)
+      .map(resource => resource.packageId -> (resource.metadata.name: String))
+      .toMap
 
-  protected def getPackageName(identifier: Identifier) = {
-    tryGetPackageNameFromDarLock(identifier).getOrElse(
-      PackageQualifiedName
-        .lookupFromResources(identifier)
-        .map(_.packageName)
-        // should only be necessary for upgrade/malicious identifiers
-        .orElse(
-          Map(
-            upgradedAppRewardCouponPackageId -> amuletCodegen.AppRewardCoupon.PACKAGE_NAME,
-            dummyHoldingPackageId -> DummyHolding.PACKAGE_NAME, // not in DarResources
-            maliciousPackageId -> "malicious-package",
-          )
-            .get(identifier.getPackageId)
+  // Packages that are not in DarResources: test-only DARs and mock package IDs.
+  private lazy val packageNamesNotInResources: Map[String, String] = Map(
+    upgradedAppRewardCouponPackageId -> amuletCodegen.AppRewardCoupon.PACKAGE_NAME,
+    dummyHoldingPackageId -> DummyHolding.PACKAGE_NAME,
+    maliciousPackageId -> "malicious-package",
+  )
+
+  protected def getPackageName(identifier: Identifier): String =
+    packageNamesFromResources
+      .get(identifier.getPackageId)
+      .orElse(packageNamesNotInResources.get(identifier.getPackageId))
+      .getOrElse(
+        throw new IllegalArgumentException(
+          s"Identifier is not present in resources nor does it look like mock data: $identifier"
         )
-        .getOrElse(
-          throw new IllegalArgumentException(
-            s"Identifier is not present in resources nor does it look like mock data: $identifier"
-          )
-        )
-    )
-  }
+      )
 
   protected def mkPartyId(name: String) = PartyId.tryFromProtoPrimitive(name + "::dummy")
 
