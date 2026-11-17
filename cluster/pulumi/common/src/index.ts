@@ -35,3 +35,4 @@ export * from './ratelimit';
 export * from './config/config';
 export * from './storage/storageClass';
 export * from './storage/volumeSnapshot';
+export * from './resolvedOutput';
