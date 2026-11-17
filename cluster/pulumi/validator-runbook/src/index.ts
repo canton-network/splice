@@ -12,7 +12,6 @@ async function auth0CacheAndInstallNode(auth0Fetch: Auth0Fetch) {
   await auth0Fetch.persistFixedTokensCache();
 }
 
-// TODO(DACH-NY/canton-network-node#8008): Reduce duplication from sv-runbook stack
 async function main() {
   const auth0ClusterCfg = getAuth0ClusterConfig();
   if (!auth0ClusterCfg.validatorRunbook) {

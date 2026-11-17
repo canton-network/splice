@@ -754,8 +754,6 @@ export function installRunnerScaleSets(
         // (fine-grained) permissions for this to work, since the controller and
         // listeners use the actions/runners/registration-token endpoint to create a temporary token
         // for registration, and this endpoint seems to require admin rights.
-        // TODO(DACH-NY/canton-network-node#17842): The recommended thing to do is use a GitHub App. See here for a guide
-        // on setting it up: https://medium.com/@timburkhardt8/registering-github-self-hosted-runners-using-github-app-9cc952ea6ca
         github_token: getSecretVersionOutput({ secret: 'gh-runners-access-token' }).apply(
           k => k.secretData
         ),
