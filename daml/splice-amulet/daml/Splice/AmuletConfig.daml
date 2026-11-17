@@ -102,9 +102,9 @@ data RewardConfig = RewardConfig with
 -- | Configuration for the credential registry.
 data CredentialRegistryConfig = CredentialRegistryConfig with
     freePeriod : RelTime
-      -- ^ Free validity added when a credential is issued or extended.
+      -- ^ Free registry lease added when a credential is issued or extended.
     extensionUsdPerYear : Decimal
-      -- ^ USD price of one extra year of validity.
+      -- ^ USD price of one extra year of registry lease.
   deriving (Eq, Show, Serializable)
 
 

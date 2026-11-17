@@ -338,9 +338,8 @@ final case class InitialGovernanceLockConfig(
   * The defaults are the recommended values.
   */
 final case class InitialCredentialRegistryConfig(
-    freePeriod: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(90),
-    extensionUsdPerYear: NonNegativeNumeric[BigDecimal] =
-      NonNegativeNumeric.tryCreate(BigDecimal(1.0)),
+    freePeriod: PositiveFiniteDuration = PositiveFiniteDuration.ofDays(90),
+    extensionUsdPerYear: PositiveNumeric[BigDecimal] = PositiveNumeric.tryCreate(BigDecimal(1.0)),
 ) {
   final def toCredentialRegistryConfig: splice.amuletconfig.CredentialRegistryConfig =
     new splice.amuletconfig.CredentialRegistryConfig(
