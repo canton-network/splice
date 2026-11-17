@@ -15,7 +15,7 @@ Released Daml can only change in SCU-compatible ways (see [Backwards-compatible 
 
 ## Templates and Choices
 
-* Validate inside the choice body, not only in the helper that exercises the choice. `fetchChecked` every contract id taken from a choice argument; for templates without a `HasCheckedFetch` instance, fetch the contract and check the relevant party field instead. Comment on each `potentiallyUnsafeArchive` why it is safe.
+* Validate inside the choice body, not only in the helper that exercises the choice. `fetchChecked` every contract id taken from a choice argument; for templates without a `HasCheckedFetch` instance, add one if the template has a single owning party; otherwise fetch the contract and check the relevant party field. Comment on each `potentiallyUnsafeArchive` why it is safe.
 * Fail early: use `require`, `fail` or `error` instead of threading `Optional` or `Either` through `Update` code or falling back to defaults. Guard impossible cases explicitly.
 * New feature flags in Daml config default to off, so that voting in a package does not enable the feature. Name them as described in [Config Parameters](AGENTS.md#config-parameters).
 
