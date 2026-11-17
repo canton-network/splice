@@ -453,7 +453,7 @@ describe('replicatedTablesFor', () => {
         table.columns.filter(column => typeof column === 'string'),
       ])
     );
-    expect(plainColumns).toEqual({
+    const createdWith = {
       update_history_creates: [
         'history_id',
         'row_id',
@@ -532,7 +532,17 @@ describe('replicatedTablesFor', () => {
         'app_activity_weights',
       ],
       interned_strings: ['id', 'value'],
-    });
+    };
+    try {
+      expect(plainColumns).toEqual(createdWith);
+    } catch (e) {
+      throw new Error(
+        'A column without a `since` changed. Do NOT edit this test for that: give a new ' +
+          'column the `since` of the migration that adds it, in ' +
+          'bigquery-replicated-tables.yaml. Only the cases in the comment above this test ' +
+          `extend its list.\n\n${(e as Error).message}`
+      );
+    }
   });
 
   test('rejects a `since` that is not an allowed migration', async () => {
