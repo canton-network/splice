@@ -66,6 +66,17 @@ When you change a Daml package, bump the version of that package and of every pa
 - When interacting with the Ledger API, convert Scala `BigDecimal`s to Java `BigDecimal`s.
 - Refer to the `wallet.tap` command implementation for the canonical handling of Daml Numerics.
 
+### Daml Code Style
+
+Write Daml so that developers who know mainstream languages, but not Haskell, can read it.
+
+* Prefer `do` blocks, `case` expressions, explicit lambdas and named functions (`void`, `forA`, `mapA`)
+  over Haskell operators such as `<$`, `$>`, `<*>`, `>>=` and `=<<`. `<$>`, `$` and `<>` are fine.
+  Use point-free composition with `.` judiciously.
+* To discard a result, end a `do` block with `pure ()`, or use `void` where a `do` block does not work,
+  e.g., on `Commands` in Daml Script, which is only an `Applicative`. Do not add `ApplicativeDo` just for this.
+* Don't rewrite existing code only to remove operators; apply this to code you write or change.
+
 ## Message Definitions
 
 * All Protobuf definitions must use `proto3`.
