@@ -1,0 +1,164 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TestUnclaimedRewardsBurnInstruction where
+
+import DA.Assert
+import DA.Action (void)
+import DA.Foldable (forA_)
+import DA.Time
+
+import Daml.Script
+
+import Splice.Amulet
+import Splice.DsoRules
+import Splice.DSO.Instruction
+
+import Splice.Scripts.DsoTestUtils
+import Splice.Scripts.Util
+import Splice.Scripts.TestUnallocatedUnclaimedActivityRecord (mergeUnclaimedRewards, mkUnclaimedReward)
+
+test_UnclaimedRewardsBurnInstruction_FullFlow : Script ()
+test_UnclaimedRewardsBurnInstruction_FullFlow = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+
+  -- start issuing
+  runNextIssuance app
+
+  -- merge unclaimed rewards
+  mergeUnclaimedRewards app
+  [(unclaimedRewardCid, initialReward)] <- query @UnclaimedReward dso
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  let amount = 10.0
+      reason = "Missed milestone"
+
+  -- Vote
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
+    ARC_DsoRules with
+      dsoAction = SRARC_CreateUnclaimedRewardsBurnInstruction
+        DsoRules_CreateUnclaimedRewardsBurnInstruction with amount; reason
+  [(instructionCid, instruction)] <- query @UnclaimedRewardsBurnInstruction dso
+  instruction.amount === amount
+  instruction.reason === reason
+
+  -- Execute UnclaimedRewardsBurnInstruction
+  void $ submit (actAs sv2 <> readAs dso) $
+    exerciseCmd dsoRulesCid DsoRules_ExecuteUnclaimedRewardsBurnInstruction with
+      instructionCid
+      unclaimedRewardCids = [unclaimedRewardCid]
+      sv = sv2
+
+  rewards <- query @UnclaimedReward dso
+  sum (map (\(_, reward) -> reward.amount) rewards) === initialReward.amount - amount
+  query @UnclaimedRewardsBurnInstruction dso >>= (=== [])
+  query @UnclaimedActivityRecord dso >>= (=== [])
+  query @UnallocatedUnclaimedActivityRecord dso >>= (=== [])
+
+test_DsoRules_CreateUnclaimedRewardsBurnInstruction : Script ()
+test_DsoRules_CreateUnclaimedRewardsBurnInstruction = do
+  (_, dso, (_, sv, _, _)) <- initMainNet
+  [(dsoRulesCid, rules)] <- query @DsoRules dso
+  now <- getTime
+  let amount = 15.0
+      reason = "Missed milestone"
+      choiceArg = DsoRules_CreateUnclaimedRewardsBurnInstruction with amount; reason
+
+  -- Unhappy paths
+  ----------------
+  -- Invalid amounts
+  submitMustFail dso $ exerciseCmd dsoRulesCid choiceArg with amount = 0.0
+  submitMustFail dso $ exerciseCmd dsoRulesCid choiceArg with amount = -10.0
+  -- A single SV cannot create a burn instruction without a vote
+  submitMustFail (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid choiceArg
+
+  -- Happy path
+  result <- submit dso $ exerciseCmd dsoRulesCid choiceArg
+  Some instruction <- queryContractId dso result.instructionCid
+  instruction === UnclaimedRewardsBurnInstruction with
+    dso; amount; reason
+    expiresAt = now `addRelTime` rules.config.voteRequestTimeout
+  query @UnclaimedRewardsBurnInstruction dso >>= (=== [(result.instructionCid, instruction)])
+
+test_DsoRules_ExecuteUnclaimedRewardsBurnInstruction : Script ()
+test_DsoRules_ExecuteUnclaimedRewardsBurnInstruction = do
+  (_, dso, (_, sv, _, _)) <- initMainNet
+  outsider <- allocateParty "outsider"
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  now <- getTime
+
+  -- Create an UnclaimedRewardsBurnInstruction
+  result <- submit dso $ exerciseCmd dsoRulesCid DsoRules_CreateUnclaimedRewardsBurnInstruction with
+    amount = 15.0
+    reason = "Missed milestone"
+  let instructionCid = result.instructionCid
+      execute unclaimedRewardCids = DsoRules_ExecuteUnclaimedRewardsBurnInstruction with
+        instructionCid; unclaimedRewardCids; sv
+  Some instruction <- queryContractId dso instructionCid
+
+  -- Unhappy paths
+  ----------------
+  -- insufficient unclaimed rewards
+  forA_ [[], [10.0], [4.0, 10.0]] \amounts -> do
+    inputs <- forA amounts (mkUnclaimedReward dso)
+    submitMustFail (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid (execute inputs)
+    queryContractId dso instructionCid >>= (=== Some instruction)
+    forA_ inputs \cid -> do
+      reward <- queryContractId @UnclaimedReward dso cid
+      assert $ reward /= None
+  -- UnclaimedRewardsBurnInstruction has expired
+  inputs <- forA [5.0, 10.0] (mkUnclaimedReward dso)
+  setTime $ instruction.expiresAt `addRelTime` seconds 1
+  submitMustFail (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid (execute inputs)
+  queryContractId dso instructionCid >>= (=== Some instruction)
+  setTime now
+  -- controller is not an SV
+  submitMustFail (actAs outsider <> readAs dso) $
+    exerciseCmd dsoRulesCid (execute inputs) with sv = outsider
+  queryContractId dso instructionCid >>= (=== Some instruction)
+
+  -- Happy paths
+  --------------
+  -- inputs exactly cover the amount
+  exact <- submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid (execute inputs)
+  exact.optUnclaimedRewardCid === None
+  queryContractId dso instructionCid >>= (=== None)
+  forA_ inputs \cid -> queryContractId @UnclaimedReward dso cid >>= (=== None)
+  -- an executed instruction cannot burn a second time
+  freshInputs <- forA [15.0] (mkUnclaimedReward dso)
+  submitMustFail (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid (execute freshInputs)
+
+  -- inputs exceed the amount
+  overInstruction <- submit dso $ exerciseCmd dsoRulesCid DsoRules_CreateUnclaimedRewardsBurnInstruction with
+    amount = 15.0
+    reason = "Another missed milestone"
+  overInputs <- forA [4.0, 5.0, 10.0] (mkUnclaimedReward dso)
+  over <- submit (actAs sv <> readAs dso) $
+    exerciseCmd dsoRulesCid DsoRules_ExecuteUnclaimedRewardsBurnInstruction with
+      instructionCid = overInstruction.instructionCid
+      unclaimedRewardCids = overInputs
+      sv
+  Some leftoverCid <- pure over.optUnclaimedRewardCid
+  queryContractId dso leftoverCid >>= (=== Some (UnclaimedReward with dso; amount = 4.0))
+  forA_ overInputs \cid -> queryContractId @UnclaimedReward dso cid >>= (=== None)
+  queryContractId dso overInstruction.instructionCid >>= (=== None)
+
+test_DsoRules_ExpireUnclaimedRewardsBurnInstruction : Script ()
+test_DsoRules_ExpireUnclaimedRewardsBurnInstruction = do
+  (_, dso, (_, sv, _, _)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  -- Expiry works both exactly at expiresAt and after it
+  forA_ [seconds 0, seconds 1] \delay -> do
+    result <- submit dso $ exerciseCmd dsoRulesCid DsoRules_CreateUnclaimedRewardsBurnInstruction with
+      amount = 15.0
+      reason = "Missed milestone"
+    Some instruction <- queryContractId dso result.instructionCid
+    let expire = DsoRules_ExpireUnclaimedRewardsBurnInstruction with
+          instructionCid = result.instructionCid
+          sv
+    -- Unhappy path - UnclaimedRewardsBurnInstruction has not expired
+    submitMustFail (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid expire
+    queryContractId dso result.instructionCid >>= (=== Some instruction)
+    -- Happy path - UnclaimedRewardsBurnInstruction has expired
+    setTime $ instruction.expiresAt `addRelTime` delay
+    void $ submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid expire
+    queryContractId dso result.instructionCid >>= (=== None)

@@ -30,3 +30,24 @@ template FeaturedAppConfigUpdateInstruction with
 
 instance HasCheckedFetch FeaturedAppConfigUpdateInstruction ForDso where
   contractGroupId FeaturedAppConfigUpdateInstruction {..} = ForDso with dso
+
+data UnclaimedRewardsBurnInstruction_ExpireResult = UnclaimedRewardsBurnInstruction_ExpireResult
+  deriving (Serializable)
+
+-- | A governance-approved burn of certain amount of `UnclaimedReward` from the pool.
+template UnclaimedRewardsBurnInstruction with
+    dso : Party
+    amount : Decimal -- ^ Amount of unclaimed rewards to burn.
+    reason : Text
+    expiresAt : Time
+  where
+    signatory dso
+    ensure amount > 0.0
+
+    choice UnclaimedRewardsBurnInstruction_Expire : UnclaimedRewardsBurnInstruction_ExpireResult
+      controller dso
+      do assertDeadlineExceeded "expiresAt" expiresAt
+         return UnclaimedRewardsBurnInstruction_ExpireResult
+
+instance HasCheckedFetch UnclaimedRewardsBurnInstruction ForDso where
+  contractGroupId UnclaimedRewardsBurnInstruction {..} = ForDso with dso
