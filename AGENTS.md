@@ -85,6 +85,8 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * Use `case` expressions, or one definition per constructor, instead of fold-style helpers.
 * Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
 * Inline helpers that are used only once or whose type signature is longer than their body.
+* Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
+  State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
 
 #### Types and Names
 
@@ -92,6 +94,11 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * Give each constructor of a variant its own record type if some functions handle only one of them.
 * Spell out names; avoid single letters and non-standard abbreviations.
 * Follow the naming scheme of the code you are editing to maintain consistency.
+* Name choices `<Template>_<Verb>`, e.g., `AmuletRules_Transfer`.
+* Give every choice its own result record `<Choice>Result`, and every contract key its own record `<Template>Key`,
+  even if they have only one field. Unlike a bare type, a record can gain optional fields in an SCU-compatible upgrade,
+  which leaves room for future changes.
+  Choices of interfaces return the result type that the interface defines.
 
 #### Future Changes
 
@@ -103,18 +110,8 @@ but by making the compiler flag code that must handle new fields or constructors
 * Avoid catch-all branches (`_ -> ...`) in `case` expressions: a constructor added later silently takes them
   instead of being flagged as unhandled. Use one only if it saves a lot of code and is correct for any future constructor.
 
-#### Documentation
-
-* Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
-  State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
-
 #### Daml Templates and Choices
 
-* Name choices `<Template>_<Verb>`, e.g., `AmuletRules_Transfer`.
-* Give every choice its own result record `<Choice>Result`, and every contract key its own record `<Template>Key`,
-  even if they have only one field. Unlike a bare type, a record can gain optional fields in an SCU-compatible upgrade,
-  which leaves room for future changes.
-  Choices of interfaces return the result type that the interface defines.
 * Don't add choices, fields or parameters without a concrete need: a released choice cannot be removed.
   Prefer one choice with an `Optional` argument over several near-duplicate choices.
 * Validate inside the choice body, not only in the helper that exercises the choice.
