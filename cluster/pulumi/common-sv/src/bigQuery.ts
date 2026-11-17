@@ -500,8 +500,7 @@ function recordTimestampExprFor(tableConfig: ReplicatedTableConfig): string {
   } else if (tableConfig.timeType === 'datastream_metadata') {
     return `TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)`;
   } else {
-    const unreachable: never = tableConfig.timeType;
-    throw new Error(`impossible time config: ${unreachable}`);
+    throw new Error(`impossible time config: ${tableConfig.timeType satisfies never}`);
   }
 }
 
