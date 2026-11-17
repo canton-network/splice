@@ -428,6 +428,20 @@ function expandSql(template: string, vars: Record<string, string>): string {
   return expanded;
 }
 
+function bigQueryServiceAccountName(projectId: pulumi.Input<string>): pulumi.Output<string> {
+  return pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`;
+}
+
+function hourlySchedule(minute: number): string {
+  const mm = String(minute).padStart(2, '0');
+  return `every 1 hours from 00:${mm} to 23:${mm}`;
+}
+
+// the minute past each hour at which the appends run
+const appendMinute = 7;
+// 5 minutes before the appends, so they rarely find a column missing
+const fixMinute = appendMinute - 5;
+
 // ============================================================================
 // PRODUCTION SCHEMA MIGRATION
 // ============================================================================
@@ -704,16 +718,14 @@ END`,
     );
   });
 
-  // 5 minutes before the appends, so they rarely find a column
-  // missing
   new gcp.bigquery.DataTransferConfig(
     `${CLUSTER_BASENAME}_prod-schema-hourly-fix`,
     {
       displayName: `${CLUSTER_BASENAME} Production Schema Hourly Fix`,
       location: cloudsdkComputeRegion(),
-      serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+      serviceAccountName: bigQueryServiceAccountName(projectId),
       dataSourceId: 'scheduled_query',
-      schedule: 'every 1 hours from 00:02 to 23:02',
+      schedule: hourlySchedule(fixMinute),
 
       params: {
         // Each table's fix runs even if another's fails; the query
@@ -820,9 +832,9 @@ CALL ${checkRoutineName}(${prodSchemaRoutineArgs(namespace, tableName, tableConf
       {
         displayName: `${CLUSTER_BASENAME}_${tableName} Hourly Append Pipeline`,
         location: cloudsdkComputeRegion(),
-        serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+        serviceAccountName: bigQueryServiceAccountName(projectId),
         dataSourceId: 'scheduled_query',
-        schedule: 'every 1 hours from 00:07 to 23:07',
+        schedule: hourlySchedule(appendMinute),
 
         params: {
           query: pulumi.interpolate`CALL \`${projectId}.${prodDataset.datasetId}.${routineId}\`();`,
@@ -882,7 +894,7 @@ function installDailyPurgeScheduledQueries(
       {
         displayName: `${CLUSTER_BASENAME}_${tableName} Daily Retention Purge`,
         location: cloudsdkComputeRegion(),
-        serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+        serviceAccountName: bigQueryServiceAccountName(projectId),
         dataSourceId: 'scheduled_query',
         schedule: 'every day 05:21', // Runs daily at 05:21 AM
 
