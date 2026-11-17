@@ -94,8 +94,8 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
   but by making the compiler flag code that must handle new fields or constructors.
 * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
   Where every field must be processed, match positionally and name unused fields `_field`.
-* Use a wildcard case `_ ->` only when it is safe for constructors added in later upgrades and saves a lot of code.
-  Otherwise a new constructor silently takes the wildcard branch instead of being flagged as unhandled.
+* Avoid catch-all branches (`_ -> ...`) in `case` expressions: a constructor added later silently takes them
+  instead of being flagged as unhandled. Use one only if it saves a lot of code and is correct for any future constructor.
 * Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
   State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
 
