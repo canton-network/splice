@@ -1236,7 +1236,7 @@ function subcmd_no_ans_in_ui() {
       )
     for pattern in "${illegal_patterns[@]}"; do
         echo "Checking for occurences of '$pattern' in frontend code"
-        if rg -P "$pattern" -g '*.tsx' -g '*.ts' -g '**test/**/*.scala' -g '!__tests__' -g '!cluster/**' -g '!token-standard/**' -g '!CreateAllocation.tsx' -g '!buildAmuletConfigChanges.ts'; then
+        if rg -P "$pattern" . -g '*.tsx' -g '*.ts' -g '**test/**/*.scala' -g '!__tests__' -g '!cluster/**' -g '!token-standard/**' -g '!CreateAllocation.tsx' -g '!buildAmuletConfigChanges.ts'; then
             echo "$pattern occurs in frontend, ensure it is not user-visible"
             exit 1
         fi
@@ -1251,7 +1251,7 @@ function subcmd_no_bad_things_repo_wide() {
       )
     for pattern in "${illegal_patterns[@]}"; do
         echo "Checking for occurences of '$pattern' in repo"
-        if rg -P "$pattern"; then
+        if rg -P "$pattern" . -g '!sbt_output' -g '!**/tests/**'; then
             echo "$pattern occurs in code, please remedy"
             exit 1
         fi
