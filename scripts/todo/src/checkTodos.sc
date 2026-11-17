@@ -225,7 +225,7 @@ object ExcludedBucket extends Bucket {
 
 object SqlMigrationBucket extends Bucket {
   override val name =
-    "TODOs are not allowed in Flyway migrations (files are immutable once merged; a TODO there can never be resolved)"
+    "TODOs are not allowed in Flyway migrations (files are immutable once released; a TODO there can never be resolved)"
   override val classPosition = 5
   override val withinClassPosition = (0, "")
   override val shouldNotExist = true
