@@ -572,7 +572,8 @@ test_settleBatchV2_nonIterated_noNextIterationFunding = test_settleBatchV2_gener
         extraArgs = emptyExtraArgs
         actors = [provider1, provider2]
   pure $ (,) choiceArg $
-    expectMessageContains "no next iteration funding allowed when iterated settlement is disabled"
+    expectMessageContains "'finalizedAllocation.nextIterationFunding' is not equal to 'expected value'" <>
+    expectMessageContains "expected value: None"
 
 test_settleBatchV2_wrongAllocationAdmin: Script ()
 test_settleBatchV2_wrongAllocationAdmin = do
