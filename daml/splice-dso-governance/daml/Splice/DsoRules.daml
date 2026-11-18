@@ -278,7 +278,7 @@ data DsoRules_MigrateToOnLedgerSvRightOwnersResult = DsoRules_MigrateToOnLedgerS
 
 data DsoRules_ExecuteMigrateToOnLedgerSvRightOwnersInstructionResult = DsoRules_ExecuteMigrateToOnLedgerSvRightOwnersInstructionResult with
     newDsoRules : ContractId DsoRules
-    svRightOwners : TextMap (ContractId SvRightOwner, ContractId SvRewardState)
+    svRightOwners : TextMap (ContractId SvRightOwner, ContractId SvRightsOwnerRewardState)
   deriving (Serializable)
 
 data DsoRules_ExpireMigrateToOnLedgerSvRightOwnersInstructionResult = DsoRules_ExpireMigrateToOnLedgerSvRightOwnersInstructionResult
@@ -291,7 +291,7 @@ data DsoRules_AddSvRightOwnerResult = DsoRules_AddSvRightOwnerResult with
 data DsoRules_ExecuteAddSvRightOwnerInstructionResult = DsoRules_ExecuteAddSvRightOwnerInstructionResult with
     newDsoRules : ContractId DsoRules
     svRightOwner : ContractId SvRightOwner
-    svRewardState : ContractId SvRewardState
+    svRewardState : ContractId SvRightsOwnerRewardState
   deriving (Serializable)
 
 data DsoRules_ExpireAddSvRightOwnerInstructionResult = DsoRules_ExpireAddSvRightOwnerInstructionResult
@@ -404,7 +404,7 @@ data DsoRules_ReceiveSvRewardCouponResult = DsoRules_ReceiveSvRewardCouponResult
   deriving (Serializable)
 
 data DsoRules_ReceiveSvRewardCouponV2Result = DsoRules_ReceiveSvRewardCouponV2Result with
-    svRewardStates : TextMap (ContractId SvRewardState)
+    svRewardStates : TextMap (ContractId SvRightsOwnerRewardState)
     svRewardCoupons : TextMap (Map Party (ContractId SvRewardCoupon))
   deriving (Serializable)
 
@@ -1643,7 +1643,7 @@ template DsoRules with
       with
         svOperator : Party
         openRoundCid : ContractId OpenMiningRound
-        svRightOwnerRewardInputs : TextMap (ContractId SvRightOwner, ContractId SvRewardState)
+        svRightOwnerRewardInputs : TextMap (ContractId SvRightOwner, ContractId SvRightsOwnerRewardState)
           -- ^ The SV right owners to mint rewards for, keyed by their name. They must all be
           -- hosted by `svOperator`.
       controller svOperator
@@ -2268,7 +2268,7 @@ template DsoRules with
       with
         instructionCid : ContractId RemoveSvRightOwnerInstruction
         svRightOwnerCid : ContractId SvRightOwner
-        svRewardStateCids : TextMap (ContractId SvRewardState)
+        svRewardStateCids : TextMap (ContractId SvRightsOwnerRewardState)
         svOperator : Party
       controller svOperator
       do
@@ -2331,7 +2331,7 @@ template DsoRules with
       with
         instructionCid : ContractId UpdateSvRightOwnerInfoInstruction
         svRightOwnerCid : ContractId SvRightOwner
-        removedSvRewardStateCids : TextMap (ContractId SvRewardState)
+        removedSvRewardStateCids : TextMap (ContractId SvRightsOwnerRewardState)
         openMiningRoundTriple : OpenMiningRoundTriple
         svOperator : Party
       controller svOperator

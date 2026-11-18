@@ -59,6 +59,8 @@ data OperatorAssignment = OperatorAssignment
       -- ^ Name of the SV node operator through which rewards are minted.
     rewardWeight : Int
       -- ^ The weight of an SV Right Owner for reward minting
+    escrowedRewardWeight : Int
+      -- ^ The weight held in escrow; minted as one coupon to the DSO party, which expires into the unclaimed rewards. Changed only by a vote.
     beneficiaries : [BeneficiaryInfo]
       -- ^ At most 20 beneficiaries, paid in order until no weight remains.
     defaultBeneficiary : Party
@@ -70,6 +72,7 @@ instance Patchable OperatorAssignment where
     with
       operatorName = patch new.operatorName base.operatorName current.operatorName
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
+      escrowedRewardWeight = patch new.escrowedRewardWeight base.escrowedRewardWeight current.escrowedRewardWeight
       beneficiaries = patchListAsScalar new.beneficiaries base.beneficiaries current.beneficiaries
       defaultBeneficiary = patch new.defaultBeneficiary base.defaultBeneficiary current.defaultBeneficiary
 

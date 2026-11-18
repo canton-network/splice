@@ -54,6 +54,23 @@ template SvRewardState with
   where
     signatory dso
 
+data SvRightsOwnerRewardStateKey = SvRightsOwnerRewardStateKey with
+    dso : Party
+    svRightsOwnerName : Text
+    svOperatorName : Text
+  deriving (Eq, Show, Serializable)
+
+-- | State of reward collection for an SV rights owner at one SV node operator.
+template SvRightsOwnerRewardState with
+    dso : Party
+    svRightsOwnerName : Text
+    svOperatorName : Text
+    state : RewardState
+  where
+    signatory dso
+    key (SvRightsOwnerRewardStateKey with dso; svRightsOwnerName; svOperatorName) : SvRightsOwnerRewardStateKey
+    maintainer key.dso
+
 
 -- Node State Management
 ------------------------
