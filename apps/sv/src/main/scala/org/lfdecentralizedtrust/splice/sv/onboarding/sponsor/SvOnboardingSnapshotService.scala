@@ -197,20 +197,27 @@ class SvOnboardingSnapshotService(
     }
   }
 
-  private val (queue, queueTerminated) = Source
-    .queue[QueuedExport](config.queueSize.value)
-    .mapAsyncUnordered(config.parallelism.value)(runExport)
-    .toMat(Sink.ignore)(Keep.both)
-    .run()
-
-  queueTerminated.onComplete { result =>
-    if (!shuttingDown)
-      retryProvider
-        .logTerminationAndRecoverOnShutdown("onboarding snapshot export queue", logger)(result)(
-          TraceContext.empty
-        )
-        .discard
+  private def exportQueue() = {
+    val (queue, terminated) = Source
+      .queue[QueuedExport](config.queueSize.value)
+      .mapAsyncUnordered(config.parallelism.value)(runExport)
+      .toMat(Sink.ignore)(Keep.both)
+      .run()
+    terminated.onComplete { result =>
+      if (!shuttingDown)
+        retryProvider
+          .logTerminationAndRecoverOnShutdown("onboarding snapshot export queue", logger)(result)(
+            TraceContext.empty
+          )
+          .discard
+    }
+    (queue, terminated)
   }
+
+  private val (acsQueue, acsQueueTerminated) = exportQueue()
+  private val (sequencerQueue, sequencerQueueTerminated) = exportQueue()
+  private val queueTerminated: Future[Done] =
+    acsQueueTerminated.zip(sequencerQueueTerminated).map(_ => Done)
 
   retryProvider.runOnOrAfterClose_(new RunOnClosing {
     override def name: String = "terminate onboarding snapshot export queue"
@@ -219,9 +226,11 @@ class SvOnboardingSnapshotService(
   })(TraceContext.empty)
 
   private def stopExports(): Unit =
-    try queue.complete()
-    catch {
-      case _: IllegalStateException => ()
+    Seq(acsQueue, sequencerQueue).foreach { queue =>
+      try queue.complete()
+      catch {
+        case _: IllegalStateException => ()
+      }
     }
 
   def prepare(key: SnapshotKey, exportTo: Path => Future[Unit])(implicit
@@ -243,6 +252,10 @@ class SvOnboardingSnapshotService(
       existing.getOrElse {
         val id = SvOnboardingSnapshotId(UUID.randomUUID().toString)
         val file = directory(id).resolve("snapshot")
+        val queue = key match {
+          case _: SnapshotKey.Acs => acsQueue
+          case _: SnapshotKey.SequencerOnboardingState => sequencerQueue
+        }
         queue.offer(QueuedExport(id, file, exportTo, tc)) match {
           case Enqueued =>
             jobs.update(id, Job(key, clock.now, None))
