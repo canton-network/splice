@@ -55,8 +55,6 @@ instance Patchable SvRightOwnerInfo where
 
 data OperatorAssignment = OperatorAssignment
   with
-    operatorName : Text
-      -- ^ Name of the SV node operator through which rewards are minted.
     rewardWeight : Int
       -- ^ The weight of an SV Right Owner for reward minting
     escrowedRewardWeight : Int
