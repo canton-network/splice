@@ -358,7 +358,7 @@ class SvOnboardingSnapshotServiceTest
           val sequencer =
             service.prepare(sequencerKey("sv3"), writeSnapshot(Future.unit)).futureValue
           eventually()(service.lookup(sequencer) should matchPattern {
-            case Some(SnapshotState.Ready(_)) =>
+            case Some(SnapshotState.Ready(_, _)) =>
           })
           service.lookup(queuedAcs) should matchPattern { case Some(SnapshotState.Queued(_)) => }
         } finally { val _ = blocked.trySuccess(()) }
