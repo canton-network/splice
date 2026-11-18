@@ -19,7 +19,6 @@ object TxLogEntry extends StoreErrors {
     val ClosedMiningRoundTxLogEntry = String3.tryCreate("cmr")
     val OpenMiningRoundTxLogEntry = String3.tryCreate("omr")
     val VoteRequestTxLogEntry = String3.tryCreate("vot")
-    val TransferCommandTxLogEntry = String3.tryCreate("trc")
     // The following entry types correspond to entries that were removed from `scan_tx_log.proto`
     // Those entries might still exist in databases, but we don't produce new ones and we don't read them.
     // The values are only kept for documentation purposes.
@@ -33,6 +32,7 @@ object TxLogEntry extends StoreErrors {
     val Unused_ValidatorRewardTxLogEntry = String3.tryCreate("vre")
     val Unused_SvRewardTxLogEntry = String3.tryCreate("sre")
     val Unused_AbortTransferInstructionTxLogEntry = String3.tryCreate("ati")
+    val Unused_TransferCommandTxLogEntry = String3.tryCreate("trc")
   }
 
   def encode(entry: TxLogEntry): (String3, String) = {
@@ -42,7 +42,6 @@ object TxLogEntry extends StoreErrors {
       case _: ClosedMiningRoundTxLogEntry => EntryType.ClosedMiningRoundTxLogEntry
       case _: OpenMiningRoundTxLogEntry => EntryType.OpenMiningRoundTxLogEntry
       case _: VoteRequestTxLogEntry => EntryType.VoteRequestTxLogEntry
-      case _: TransferCommandTxLogEntry => EntryType.TransferCommandTxLogEntry
       case _ => throw txEncodingFailed()
     }
     val jsonValue = entry match {
@@ -59,7 +58,6 @@ object TxLogEntry extends StoreErrors {
         case EntryType.ClosedMiningRoundTxLogEntry => from[ClosedMiningRoundTxLogEntry](json)
         case EntryType.OpenMiningRoundTxLogEntry => from[OpenMiningRoundTxLogEntry](json)
         case EntryType.VoteRequestTxLogEntry => from[VoteRequestTxLogEntry](json)
-        case EntryType.TransferCommandTxLogEntry => from[TransferCommandTxLogEntry](json)
         case _ => throw txLogIsOfWrongType(entryType.str)
       }
     } catch {
