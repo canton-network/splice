@@ -53,9 +53,12 @@ object ValueJsonCodecTranscode {
   private lazy val allPackages = DarResources.packageResources.flatMap(_.all).distinctBy(_.path)
   private lazy val latestPackages = DarResources.packageResources.map(_.latest)
 
-  // Name and version of every bundled version of every package, used to find the package name of a value
+  // Name and version of every bundled version of every package, and of the dependencies of the latest
+  // versions, used to find the package name of a value. The dependencies include packages that only
+  // define interfaces (e.g. splice-api-featured-app-v1), which are not listed in DarResources.packageResources.
   private lazy val packageMetadata: Map[Ref.PackageId, Ast.PackageMetadata] =
-    allPackages.map(r => Ref.PackageId.assertFromString(r.packageId) -> r.metadata).toMap
+    signatures.view.mapValues(_.metadata).toMap ++
+      allPackages.map(r => Ref.PackageId.assertFromString(r.packageId) -> r.metadata)
 
   // Of the latest versions of the bundled packages, and their dependencies (e.g. daml-stdlib).
   // Packages are shared between many DARs, so they are decoded only once per package id.
@@ -88,9 +91,13 @@ object ValueJsonCodecTranscode {
   private lazy val dictionaries: (ProtoDict, JsonDict) = {
     val jsonCodec = new JsonCodec(removeTrailingNonesInRecords = true)
     val visitor = SchemaVisitor.compose(jsonCodec, ProtobufCodec)
-    // Only the entities of the latest versions are included. Their dependencies, which can be older
-    // versions of other bundled packages, are only used to resolve types.
-    val latestIds = latestPackages.map(r => Ref.PackageId.assertFromString(r.packageId))
+    // Only the entities of the latest version of each package name are included. Older versions, which
+    // can be dependencies of other bundled packages, are only used to resolve types.
+    val latestIds = signatures.toSeq
+      .groupBy { case (_, signature) => signature.metadata.name }
+      .values
+      .flatMap(_.maxByOption { case (_, signature) => signature.metadata.version }.map(_._1))
+      .toSeq
     val (jsonDic, protoDic) = LfSchemaProcessor
       .process(latestIds, signatures, IdentifierFilter.AcceptAll)(visitor)
       .fold(error => throw new IllegalStateException(error), identity)

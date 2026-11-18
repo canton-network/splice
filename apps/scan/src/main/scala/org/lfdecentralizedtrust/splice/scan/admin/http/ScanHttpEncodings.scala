@@ -1134,10 +1134,12 @@ case object LedgerApiJsonScanHttpEncodings extends ScanHttpEncodings {
       templateId: javaApi.Identifier,
       json: Json,
   ): javaApi.DamlRecord =
-    decodeOrThrow(
-      "contract payload",
-      json,
-      ValueJsonCodecTranscode.deserializableContractPayload(templateId, json.noSpaces),
+    RemoveFieldLabels.record(
+      decodeOrThrow(
+        "contract payload",
+        json,
+        ValueJsonCodecTranscode.deserializableContractPayload(templateId, json.noSpaces),
+      )
     )
 
   override def decodeChoiceArgument(
@@ -1146,15 +1148,17 @@ case object LedgerApiJsonScanHttpEncodings extends ScanHttpEncodings {
       choice: String,
       json: Json,
   ): javaApi.Value =
-    decodeOrThrow(
-      "choice argument",
-      json,
-      ValueJsonCodecTranscode.deserializeChoiceArgument(
-        templateId,
-        interfaceId,
-        choice,
-        json.noSpaces,
-      ),
+    RemoveFieldLabels.value(
+      decodeOrThrow(
+        "choice argument",
+        json,
+        ValueJsonCodecTranscode.deserializeChoiceArgument(
+          templateId,
+          interfaceId,
+          choice,
+          json.noSpaces,
+        ),
+      )
     )
 
   override def decodeExerciseResult(
@@ -1163,15 +1167,17 @@ case object LedgerApiJsonScanHttpEncodings extends ScanHttpEncodings {
       choice: String,
       json: Json,
   ): javaApi.Value =
-    decodeOrThrow(
-      "exercise result",
-      json,
-      ValueJsonCodecTranscode.deserializeChoiceResult(
-        templateId,
-        interfaceId,
-        choice,
-        json.noSpaces,
-      ),
+    RemoveFieldLabels.value(
+      decodeOrThrow(
+        "exercise result",
+        json,
+        ValueJsonCodecTranscode.deserializeChoiceResult(
+          templateId,
+          interfaceId,
+          choice,
+          json.noSpaces,
+        ),
+      )
     )
 }
 

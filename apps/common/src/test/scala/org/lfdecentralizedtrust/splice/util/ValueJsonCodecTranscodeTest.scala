@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   round as roundCodegen,
   types as typesCodegen,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.featuredapprightv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   metadatav1,
   transferinstructionv1,
@@ -397,6 +398,38 @@ class ValueJsonCodecTranscodeTest extends StoreTestBase with EitherValues {
       )
       ValueJsonCodecTranscode.serializeChoiceArgument(event2).value shouldBe argJson
       ValueJsonCodecTranscode.serializeChoiceResult(event2).value shouldBe resultJson
+    }
+
+    "serialize choices of interfaces from packages that are only bundled as dependencies" in {
+      // splice-api-featured-app-v1 only defines interfaces, and is not listed in DarResources.packageResources
+      val interfaceId = featuredapprightv1.FeaturedAppRight.INTERFACE_ID_WITH_PACKAGE_ID
+      DarResources.packageResources
+        .flatMap(_.all)
+        .map(_.packageId) should not contain interfaceId.getPackageId
+      val event = exercisedEvent(
+        nextCid(),
+        amuletCodegen.FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID,
+        Some(interfaceId),
+        "FeaturedAppRight_CreateActivityMarker",
+        consuming = false,
+        new featuredapprightv1.FeaturedAppRight_CreateActivityMarker(
+          java.util.List.of(
+            new featuredapprightv1.AppRewardBeneficiary(
+              validator.toProtoPrimitive,
+              new java.math.BigDecimal("0.2"),
+            )
+          )
+        ).toValue,
+        new featuredapprightv1.FeaturedAppRight_CreateActivityMarkerResult(
+          java.util.List.of(
+            new featuredapprightv1.FeaturedAppActivityMarker.ContractId(validContractId(4))
+          )
+        ).toValue,
+      )
+      ValueJsonCodecTranscode.serializeChoiceArgument(event).value shouldBe
+        s"""{"beneficiaries":[{"beneficiary":"${validator.toProtoPrimitive}","weight":"0.2"}]}"""
+      ValueJsonCodecTranscode.serializeChoiceResult(event).value shouldBe
+        s"""{"activityMarkerCids":["${validContractId(4)}"]}"""
     }
 
     "fail for values of unknown packages" in {

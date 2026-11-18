@@ -969,6 +969,9 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
       encodings.encodeContractPayload(
         eventWithFields(decoded.getFields.asScala.toList.map(_.getValue))
       ) shouldBe json
+      // Like the other encodings, decoded values have no field labels, so that they are comparable
+      // with values from the update history
+      decoded shouldBe RemoveFieldLabels.record(event.getArguments)
     }
 
     "fall back and log an error for values of unknown packages" in {
