@@ -71,7 +71,7 @@ Doc comments in non-test Daml packages are published as the Daml API reference (
 
 ## Checks
 
-Run these checks after changing Daml code; CI runs them as part of the static checks.
+Run these checks after changing Daml code. CI runs them as part of the static checks. Run them in the direnv shell, e.g. with `direnv exec .`, rather than via sbt to avoid its startup time.
 
-* `direnv exec . ./scripts/check-daml-return-types.sh` checks that each choice `X` returns `XResult`.
-* `sbt illegalDamlReferencesCheck` (also part of `sbt lint`) rejects disallowed words and patterns in Daml code and comments, e.g. `coin` or `domain`, mentions of `DSO` other than e.g. "DSO party" or `DsoRules`, and GitHub links other than to CIPs. See `no_illegal_daml_references` in `scripts/rename.sh` for the full list.
+* `./scripts/check-daml-return-types.sh` checks that each choice `X` returns `XResult`.
+* `./scripts/rename.sh no_illegal_daml_references` rejects disallowed words and patterns in Daml code and comments, e.g. `coin` or `domain`, mentions of `DSO` other than e.g. "DSO party" or `DsoRules`, and GitHub links other than to CIPs; see the script for the full list. sbt runs it as `illegalDamlReferencesCheck`, part of `sbt lint`. The Daml checks have passed once it prints "Also checking frontend code:"; ignore failures after that point in files you did not change.
