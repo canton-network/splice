@@ -3,9 +3,9 @@
 
 module Splice.Amulet.SvRightOwner where
 
-import Prelude hiding (all, sum)
+import Prelude hiding (all)
 
-import DA.Foldable (forA_, all, sum)
+import DA.Foldable (forA_, all)
 import DA.Map (Map)
 import qualified DA.Map as Map
 import DA.TextMap (TextMap)
@@ -43,7 +43,7 @@ data SvRightOwnerInfo = SvRightOwnerInfo
       -- ^ The party of the SV right owner; manages the SV right owner controlled information.
     description : Text
     operatorAssignments : TextMap OperatorAssignment
-      -- ^ Keyed by the SV rights minting shard id; unique among all SV right owners.
+      -- ^ Keyed by the name of the SV node operator through which the rewards are minted.
   deriving (Eq, Show, Serializable)
 
 instance Patchable SvRightOwnerInfo where
@@ -55,21 +55,22 @@ instance Patchable SvRightOwnerInfo where
 
 data OperatorAssignment = OperatorAssignment
   with
-    operatorName : Text
-      -- ^ Name of the SV node operator through which rewards are minted.
     rewardWeight : Int
-      -- ^ The weight of an SV Right Owner for reward minting
+      -- ^ The weight of the SV rights owner at this SV node operator, including the escrowed weight.
+    escrowedRewardWeight : Int
+      -- ^ The part of `rewardWeight` held in escrow until a milestone is reached.
+      -- No coupons are created for it. Changed only by a DSO vote.
     beneficiaries : [BeneficiaryInfo]
-      -- ^ At most 20 beneficiaries, paid in order until no weight remains.
+      -- ^ At most 20 beneficiaries, paid in order from the non-escrowed weight until no weight remains.
     defaultBeneficiary : Party
-      -- ^ Receives the weight not paid to the beneficiaries.
+      -- ^ Receives the non-escrowed weight not paid to the beneficiaries.
   deriving (Eq, Show, Serializable)
 
 instance Patchable OperatorAssignment where
   patch new base current = OperatorAssignment
     with
-      operatorName = patch new.operatorName base.operatorName current.operatorName
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
+      escrowedRewardWeight = patch new.escrowedRewardWeight base.escrowedRewardWeight current.escrowedRewardWeight
       beneficiaries = patchListAsScalar new.beneficiaries base.beneficiaries current.beneficiaries
       defaultBeneficiary = patch new.defaultBeneficiary base.defaultBeneficiary current.defaultBeneficiary
 
@@ -80,12 +81,24 @@ data BeneficiaryInfo = BeneficiaryInfo
     weight : Int
   deriving (Eq, Show, Serializable)
 
+operatorAssignmentChecks : [(OperatorAssignment -> Bool, Text)]
+operatorAssignmentChecks =
+  [ (\a -> 0 <= a.escrowedRewardWeight && a.escrowedRewardWeight <= a.rewardWeight, "Escrowed reward weight is between zero and the reward weight")
+  , (\a -> all (\b -> b.weight > 0) a.beneficiaries, "Beneficiary weights are positive")
+  , (\a -> length a.beneficiaries <= 20, "There are at most 20 beneficiaries")
+  ]
+
 svRightOwnerInfoChecks : [(SvRightOwnerInfo -> Bool, Text)]
 svRightOwnerInfoChecks =
-  [ (all ((>= 0) . (.rewardWeight)) . (.operatorAssignments), "SV right owner's reward weight is non-negative")
-  , (all (all ((> 0) . (.weight)) . (.beneficiaries)) . (.operatorAssignments), "Beneficiary weights are positive")
-  , (all ((<= 20) . length . (.beneficiaries)) . (.operatorAssignments), "There are at most 20 beneficiaries")
+  [ (\info -> all check info.operatorAssignments, message)
+  | (check, message) <- operatorAssignmentChecks
   ]
+
+-- | The parts of an operator assignment that only a DSO vote may change.
+-- `DsoRules_UpdateSvRightOwnerBeneficiaries` requires them to be unchanged.
+dsoControlledWeights : SvRightOwnerInfo -> TextMap (Int, Int)
+dsoControlledWeights info =
+  fmap (\a -> (a.rewardWeight, a.escrowedRewardWeight)) info.operatorAssignments
 
 validSvRightOwnerInfo : SvRightOwnerInfo -> Bool
 validSvRightOwnerInfo info = all (\(check, _) -> check info) svRightOwnerInfoChecks
@@ -94,12 +107,12 @@ requireValidSvRightOwnerInfo : SvRightOwnerInfo -> Update ()
 requireValidSvRightOwnerInfo info =
   forA_ svRightOwnerInfoChecks $ \(check, message) -> require message (check info)
 
--- | The absolute reward weight for each party that receives rewards in the context of this SV rights operator assignment.
+-- | The coupon weight for each party for this operator assignment; the escrowed weight gets no coupons.
 svRewardCouponWeights : OperatorAssignment -> Map Party Int
 svRewardCouponWeights OperatorAssignment{..} =
   Map.filter (> 0) $ Map.insertWith (+) defaultBeneficiary remainingWeight $ Map.fromListWithR (+) paidWeights
   where
-    (remainingWeight, paidWeights) = foldl pay (rewardWeight, []) beneficiaries
+    (remainingWeight, paidWeights) = foldl pay (rewardWeight - escrowedRewardWeight, []) beneficiaries
     pay (remaining, paid) BeneficiaryInfo{beneficiary, weight} =
       let paidWeight = min weight remaining
       in (remaining - paidWeight, (beneficiary, paidWeight) :: paid)

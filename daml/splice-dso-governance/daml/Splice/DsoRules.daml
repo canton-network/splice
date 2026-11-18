@@ -2377,6 +2377,8 @@ template DsoRules with
         currentSvRightOwner <- fetchAndArchive (ForSv with dso; svName = name) svRightOwnerCid
         require "Beneficiaries are set by the SV right owner itself" $
           currentSvRightOwner.info.rightOwnerParty == rightOwner
+        require "The SV rights owner does not change operators, reward weights or escrow" $
+          dsoControlledWeights newInfo == dsoControlledWeights currentSvRightOwner.info
         let info = currentSvRightOwner.info with beneficiaries
         requireValidSvRightOwnerInfo info
         svRightOwner <- create currentSvRightOwner with info
