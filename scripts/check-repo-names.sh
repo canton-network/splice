@@ -26,7 +26,7 @@ function check_patterns_locally() {
   local exceptions=(
     '(\b|[`_])cn-docs'
     '@cn-load-tester\.com'
-    '^[^:]+V001__create_schema\.sql:' # TODO (DACH-NY/canton-network-node#15491) avoiding changing hashes
+    '^[^:]+V001__create_schema\.sql:'
     'AUTH0_CN_MANAGEMENT_API_CLIENT_(ID|SECRET)|"dev" => ."AUTH0_CN"' # TODO (DACH-NY/canton-network-internal#395) auth0 env names
     'ans-web-ui\.yaml:.*name: splice-app-cns-ui-auth' # TODO (DACH-NY/canton-network-internal#397) new secret
     'Headers.scala:.*"configs"'

@@ -42,6 +42,7 @@ import {
   standardStorageClassName,
   pvcSuffix,
   CnChartVersion,
+  defaultPostgresImage,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
@@ -184,7 +185,7 @@ async function installValidator(
     // No need to support legacy chart
     {
       deployment: 'docker-image',
-      postgresImage: postgresValuesFromFile.db.postgresImage || 'postgres:18',
+      postgresImage: postgresValuesFromFile.db.postgresImage || defaultPostgresImage,
     },
     postgresValues,
     true,

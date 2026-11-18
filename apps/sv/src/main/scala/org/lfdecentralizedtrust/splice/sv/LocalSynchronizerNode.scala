@@ -57,7 +57,6 @@ import scala.util.control.NonFatal
 
 /** Connections to the domain node (composed of sequencer + mediator) operated by the SV running this SV app.
   * Note that this is optional. An SV app can run without a dedicated domain node.
-  * TODO(DACH-NY/canton-network-node#5195) Consider making this mandatory.
   */
 class LocalSynchronizerNode(
     participantAdminConnection: ParticipantAdminConnection,
@@ -589,8 +588,6 @@ object LocalSynchronizerNode {
 
   def toEndpoint(config: ClientConfig): Endpoint = Endpoint(config.address, config.port)
 
-  // TODO(DACH-NY/canton-network-node#5107) Consider using something other than a ClientConfig in the config file
-  // to simplify conversion to GrpcSequencerConnection.
   private def toEndpoints(config: ClientConfig): NonEmpty[Set[Endpoint]] =
     NonEmpty.mk(Set, toEndpoint(config))
 

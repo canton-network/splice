@@ -59,7 +59,6 @@ class ScanTxLogParser(
   )(implicit
       tc: TraceContext
   ): State = {
-    // TODO(DACH-NY/canton-network-node#2930) add more checks on the nodes, at least that the DSO party is correct
     root match {
       case exercised: ExercisedEvent =>
         val eventId = EventId.prefixedFromUpdateIdAndNodeId(

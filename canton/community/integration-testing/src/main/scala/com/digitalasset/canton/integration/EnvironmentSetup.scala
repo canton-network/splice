@@ -195,6 +195,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
               // and transient disconnects are normal.
               SyncServiceInjectionError.NotConnectedToAnySynchronizer,
               SyncServiceInjectionError.NotConnectedToSynchronizer,
+              TransactionRoutingError.ConfigurationErrors.SubmissionSynchronizerNotReady,
               TransactionRoutingError.TopologyErrors.UnknownContractSynchronizers,
               TransactionRoutingError.TopologyErrors.UnknownInformees,
             )

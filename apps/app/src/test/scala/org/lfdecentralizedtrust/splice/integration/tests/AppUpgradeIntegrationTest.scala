@@ -656,7 +656,6 @@ object AppUpgradeIntegrationTest {
     val result = Process(
       Seq("bash", "-c", cmd),
       None,
-      // TODO(DACH-NY/canton-network-node#10595): consider reading these from config files:
       "SV1_URL" -> "http://127.0.0.1:5114",
       "SV1_SCAN_URL" -> "http://127.0.0.1:5012",
       "SV2_SCAN_URL" -> "http://127.0.0.1:5112",

@@ -228,8 +228,7 @@ case class ValidatorAppBackendConfig(
     // Start automation for external parties that only have a p2p with embedded keys instead of a separate p2k mapping.
     supportEmbeddedPartySigningKeys: Boolean = true,
     allowedOrigins: Option[Seq[String]] = None,
-) extends SpliceBackendConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
-    {
+) extends SpliceBackendConfig {
   override val nodeTypeName: String = "validator"
 
   override def clientAdminApi: ClientConfig = adminApi.clientConfig

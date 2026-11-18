@@ -9,15 +9,15 @@ services:
   canton:
     mem_limit: 4g
     environment:
-      _JAVA_OPTIONS: "-XX:-UseCompressedOops -Xms512m -Xmx2560m"
+      _JAVA_OPTIONS: "-XX:-UseCompressedOops -Xms512m -Xmx2560m -XX:-UseBASE64Intrinsics"
   splice:
     mem_limit: 3g
     environment:
-      _JAVA_OPTIONS: "-XX:-UseCompressedOops -Xms512m -Xmx2560m"
+      _JAVA_OPTIONS: "-XX:-UseCompressedOops -Xms512m -Xmx2560m -XX:-UseBASE64Intrinsics"
   console:
     mem_limit: 2g
     environment:
-      _JAVA_OPTIONS: "-XX:+UseContainerSupport -XX:-UseCompressedOops"
+      _JAVA_OPTIONS: "-XX:+UseContainerSupport -XX:-UseCompressedOops -XX:-UseBASE64Intrinsics"
   scan-web-ui:
     mem_limit: 256mb
   sv-web-ui:

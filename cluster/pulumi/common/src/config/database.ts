@@ -24,6 +24,9 @@ export const CloudSqlConfigSchema = z.object({
 });
 export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;
 
+export const defaultPostgresImage =
+  'postgres:18.7-trixie@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc';
+
 // Deployment strategy:
 // - If no migration is necessary, just default docker-image will deploy the latest version
 // - If you want to migrate data, you need to, in this order:
