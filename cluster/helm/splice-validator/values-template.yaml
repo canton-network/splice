@@ -159,7 +159,7 @@ securityContexts:
 
 # TODO(DACH-NY/canton-network-internal#5946) add static guards so that new charts don't forget to add security contexts.
 
+# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
 participantClient:
   adminApi:
-    # TODO(DACH-NY/canton-network-internal#8256): change this to false when we're ready to enable admin API auth by default
     disableAuth: true

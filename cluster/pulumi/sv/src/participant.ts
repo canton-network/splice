@@ -113,6 +113,7 @@ function installParticipantChart(
     },
     adminApi: {
       ...defaultValues.adminApi,
+      // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
       disableAuth: participant?.disableParticipantAdminApiAuth ?? false,
       auth: {
         ...defaultValues.adminApi?.auth,

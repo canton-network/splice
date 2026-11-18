@@ -116,6 +116,7 @@ spec:
         - name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
           value: canton.participants.participant.monitoring.http-health-server.port = 5071
         {{- end }}
+        # TODO(DACH-NY/canton-network-internal#8256): change this condition to .Values.disableAuth and remove .Values.adminApi.disableAuth once we're ready to enable admin API auth by default
         {{- if .Values.adminApi.disableAuth }}
         - name: ADDITIONAL_CONFIG_DISABLE_ADMIN_API_AUTH
           value: canton.participants.participant.admin-api.auth-services=[]

@@ -176,7 +176,7 @@
     "if": {
       "properties": {
         "disableAuth": {
-          "const": "true"
+          "const": true
         }
       }
     },
@@ -273,7 +273,7 @@
           "if": {
             "properties": {
               "disableAuth": {
-                "const": "false"
+                "const": false
               }
             }
           },

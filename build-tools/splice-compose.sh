@@ -123,6 +123,7 @@ function _start_validator {
   if [ "$auth" -eq 1 ]; then
     _export_auth0_env_vars
     extra_flags+=("-a")
+    extra_flags+=("--enable-participant-admin-api-auth")
   fi
   if [ -n "$network_name" ]; then
     extra_flags+=("-n" "$network_name")
@@ -147,9 +148,6 @@ function _start_validator {
   fi
   if [ "${wallet_gateway:-0}" -eq 1 ]; then
     extra_flags+=("-g")
-  fi
-  if [ "$auth" -eq 1 ] && [ "$enable_participant_admin_api_auth" -eq 1 ]; then
-    extra_flags+=("--enable-participant-admin-api-auth")
   fi
 
   secret_url="${sv_from_script}/api/sv/v0/devnet/onboard/validator/prepare"
@@ -228,7 +226,6 @@ function subcmd_start {
   external_access=0
   wallet_gateway=0
   enable_key_download=0
-  enable_participant_admin_api_auth=0
 
   # Long options (getopts only supports short ones)
   args=()
@@ -236,9 +233,6 @@ function subcmd_start {
     case "${arg}" in
       --enable-key-download)
         enable_key_download=1
-        ;;
-      --enable-participant-admin-api-auth)
-        enable_participant_admin_api_auth=1
         ;;
       *)
         args+=("${arg}")
@@ -329,7 +323,7 @@ function subcmd_start {
   fi
 }
 function usage_start {
-  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E] [-k] [-g] [--enable-key-download] [--enable-participant-admin-api-auth]"
+  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E] [-k] [-g] [--enable-key-download]"
   _info "      -a: Enable authentication"
   _info "      -l: Start the validator against a local SV (for integration tests). Default is against a cluster determined by GCP_CLUSTER_HOSTNAME"
   _info "      -d: Use images from the DA-internal repository (default: use locally built images)"
@@ -345,8 +339,6 @@ function usage_start {
   _info "      -k: Disable the validator participant db conflict check (forwarded to the validator start.sh as -k)."
   _info "      -g: Also deploy the wallet gateway and portfolio UI (forwarded to the validator start.sh as -g)."
   _info "      --enable-key-download: Allow downloading the participant's private keys (forwarded to the validator start.sh)."
-  # TODO(DACH-NY/canton-network-internal#8256): replace this with disable-participant-admin-api-auth
-  _info "      --enable-participant-admin-api-auth: enables authentication on the participant admin API"
 }
 
 subcommand_whitelist[stop]='stop a validator'

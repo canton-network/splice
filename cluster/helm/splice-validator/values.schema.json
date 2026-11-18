@@ -536,7 +536,7 @@
         "if": {
           "properties": {
             "disableAuth": {
-              "const": "true"
+              "const": true
             }
           }
         },

@@ -121,6 +121,7 @@ export async function installParticipant(
       disableAuth: disableAuth || false,
       adminApi: {
         ...participantValues.adminApi,
+        // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
         disableAuth: validatorConfig.participant?.disableParticipantAdminApiAuth ?? false,
         auth: {
           ...participantValues.adminApi?.auth,

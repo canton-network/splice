@@ -307,6 +307,7 @@ async function installSvAndValidator(
     persistentDataPvc: persistentHeapDumpsPvc(),
     participantClient: {
       adminApi: {
+        // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
         disableAuth: svConfig.participant?.disableParticipantAdminApiAuth ?? false,
       },
     },
@@ -407,6 +408,7 @@ async function installSvAndValidator(
     pvc: persistentHeapDumpsPvc(),
     participantClient: {
       adminApi: {
+        // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
         disableAuth: svConfig.participant?.disableParticipantAdminApiAuth ?? false,
       },
     },
@@ -466,6 +468,7 @@ async function installSvAndValidator(
     persistentDataPvc: persistentHeapDumpsPvc(),
     participantClient: {
       adminApi: {
+        // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
         disableAuth: svConfig.participant?.disableParticipantAdminApiAuth ?? false,
       },
     },

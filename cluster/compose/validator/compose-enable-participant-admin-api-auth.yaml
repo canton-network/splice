@@ -1,4 +1,4 @@
-# TODO(DACH-NY/canton-network-internal#8256): make admin API auth on by default
+# TODO(DACH-NY/canton-network-internal#8256): tie enabling admin API auth to enabling ledger API auth
 services:
   participant:
     environment:

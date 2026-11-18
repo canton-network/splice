@@ -119,7 +119,7 @@ securityContexts:
     persistence:
       security_context_profile: persistent_security_context
 
+# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
 participantClient:
   adminApi:
-    # TODO(DACH-NY/canton-network-internal#8256): change this to false when we're ready to enable admin API auth by default
     disableAuth: true
