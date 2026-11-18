@@ -495,7 +495,7 @@ class ScanTimeBasedIntegrationTest
         acsAtMidnightFromS3
       }
 
-      val acsAtMidnightFromS3 = checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.CompactJson)
+      val acsAtMidnightFromS3 = checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.LedgerApiJson)
       val protobufAcsAtMidnightFromS3 =
         checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.ProtobufJson)
       protobufAcsAtMidnightFromS3.map(_.contractId) shouldBe acsAtMidnightFromS3.map(_.contractId)
@@ -506,7 +506,11 @@ class ScanTimeBasedIntegrationTest
         .getAcsSnapshotAtV2(CantonTimestamp.assertFromInstant(lastMidnight), 0)
         .value
         .createdEvents
-      acsAtMidnightFromScan should contain theSameElementsInOrderAs acsAtMidnightFromS3
+      // The ACS snapshot endpoint encodes contract payloads as compact_json, bulk storage as ledger_api_json
+      def withoutPayload(c: definitions.ActiveContract) =
+        c.copy(createArguments = io.circe.Json.Null)
+      acsAtMidnightFromScan.map(withoutPayload) should contain theSameElementsInOrderAs
+        acsAtMidnightFromS3.map(withoutPayload)
 
       def checkUpdateEncoding(encoding: ScanStorageConfig.Encoding) = {
         def isInTimeRange(u: definitions.UpdateHistoryItemV2) = {
@@ -548,7 +552,7 @@ class ScanTimeBasedIntegrationTest
         updatesFromScan should contain theSameElementsAs updatesFromS3
       }
 
-      checkUpdateEncoding(ScanStorageConfig.Encoding.CompactJson)
+      checkUpdateEncoding(ScanStorageConfig.Encoding.LedgerApiJson)
       checkUpdateEncoding(ScanStorageConfig.Encoding.ProtobufJson)
 
       compareAcsV2(acsAtMidnightFromScan, acsAtMidnightFromScan)

@@ -2664,7 +2664,8 @@ class HttpScanHandler(
   private def getStorageEncodings(
       damlValueEncoding: Option[DamlValueEncoding]
   ): NonEmptyList[ScanStorageConfig.Encoding] = {
-    val requested = damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson)
+    // compact_json, the default of the other endpoints, is not available in bulk storage
+    val requested = damlValueEncoding.getOrElse(DamlValueEncoding.LedgerApiJson)
     val encoding = ScanStorageConfig.Encoding
       .fromDamlValueEncoding(requested)
       .getOrElse(

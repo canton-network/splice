@@ -153,21 +153,25 @@ object ScanStorageConfig {
       (".*" + Regex.quote(prefix) + "_" + Regex.quote(key) + "_\\d+\\.zstd").r
   }
   object Encoding {
-    case object CompactJson
-        extends Encoding("compact_json", definitions.DamlValueEncoding.CompactJson)
+    // The content of bulk storage objects must be the same on all SVs, independent of the version of their
+    // Scan app. This is why the human-readable encoding in bulk storage is ledger_api_json and not
+    // compact_json: the output of compact_json for a given value changes when a Daml upgrade appends
+    // optional fields to a record.
+    case object LedgerApiJson
+        extends Encoding("ledger_api_json", definitions.DamlValueEncoding.LedgerApiJson)
     case object ProtobufJson
         extends Encoding("protobuf_json", definitions.DamlValueEncoding.ProtobufJson)
 
-    lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](CompactJson, ProtobufJson)
+    lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](LedgerApiJson, ProtobufJson)
 
-    /** None for encodings that are not (yet) supported by bulk storage */
+    /** None for encodings that are not available in bulk storage */
     def fromDamlValueEncoding(
         damlValueEncoding: definitions.DamlValueEncoding
     ): Option[Encoding] =
       damlValueEncoding match {
-        case definitions.DamlValueEncoding.members.CompactJson => Some(CompactJson)
+        case definitions.DamlValueEncoding.members.LedgerApiJson => Some(LedgerApiJson)
         case definitions.DamlValueEncoding.members.ProtobufJson => Some(ProtobufJson)
-        case definitions.DamlValueEncoding.members.LedgerApiJson => None
+        case definitions.DamlValueEncoding.members.CompactJson => None
       }
   }
 }

@@ -26,7 +26,7 @@ import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
-  CompactJsonScanHttpEncodings,
+  LedgerApiJsonScanHttpEncodings,
   ProtobufJsonScanHttpEncodings,
   ScanHttpEncodings,
 }
@@ -120,11 +120,11 @@ class AcsSnapshotBulkStorageWriterFromDbTest
              with a migration plan for how to apply it consistently across SVs. */
           val (encodings, expectedDigests): (ScanHttpEncodings, Seq[String]) =
             encoding match {
-              case ScanStorageConfig.Encoding.CompactJson =>
+              case ScanStorageConfig.Encoding.LedgerApiJson =>
                 (
-                  new CompactJsonScanHttpEncodings(identity, identity),
+                  LedgerApiJsonScanHttpEncodings,
                   Seq(
-                    "0WSNhAAj6bT8k+U8zRyKxZWf1UGi39JcZwCNTsEhwyw=",
+                    "o35FaLTYrQSlqrkjDUbb5Njc+MZy7I8l2ZCDNoAN+as=",
                     "pU4VHpq4B7mEkVeqq8dYtkx7c2q59oHFmUZKy2ZymgM=",
                     "Je6fyr9Q0VbAcPupMdJ4i9l7N1VfRqMdaIVIRjP1IEk=",
                     "2KkRlMIHhccycmKMdioobNXDf9rgFJKLru0OUgpkdWw=",
@@ -211,7 +211,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             .map(_.checksum) should contain theSameElementsInOrderAs expectedDigests
         }
 
-        checkEncoding(ScanStorageConfig.Encoding.CompactJson)
+        checkEncoding(ScanStorageConfig.Encoding.LedgerApiJson)
         checkEncoding(ScanStorageConfig.Encoding.ProtobufJson)
       }
     }
@@ -335,7 +335,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             persistedTs1 shouldBe Some(ts1)
           }
           assertLatestSnapshotInMetrics(ts1)
-          assertGetObjects(ts1, ts1, ScanStorageConfig.Encoding.CompactJson, 12)
+          assertGetObjects(ts1, ts1, ScanStorageConfig.Encoding.LedgerApiJson, 12)
           assertGetObjects(ts1, ts1, ScanStorageConfig.Encoding.ProtobufJson, 13)
         }
 
@@ -354,7 +354,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             },
           )
           assertLatestSnapshotInMetrics(ts1)
-          assertGetObjects(ts2, ts1, ScanStorageConfig.Encoding.CompactJson, 12)
+          assertGetObjects(ts2, ts1, ScanStorageConfig.Encoding.LedgerApiJson, 12)
           assertGetObjects(ts2, ts1, ScanStorageConfig.Encoding.ProtobufJson, 13)
         }
 
@@ -366,7 +366,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             persistedTs3.value shouldBe ts3
           }
           assertLatestSnapshotInMetrics(ts3)
-          assertGetObjects(ts3, ts3, ScanStorageConfig.Encoding.CompactJson, 12)
+          assertGetObjects(ts3, ts3, ScanStorageConfig.Encoding.LedgerApiJson, 12)
           assertGetObjects(ts3, ts3, ScanStorageConfig.Encoding.ProtobufJson, 13)
         }
 
