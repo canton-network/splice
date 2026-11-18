@@ -1677,15 +1677,22 @@ class HttpScanHandler(
 
   }
 
-  private def toAcsV2Response(migrationId: Long, result: QueryAcsSnapshotResult)(implicit
+  private def toAcsV2Response(
+      migrationId: Long,
+      damlValueEncoding: Option[DamlValueEncoding],
+      result: QueryAcsSnapshotResult,
+  )(implicit
       tc: TraceContext
-  ) =
+  ) = {
+    val encodings = ScanHttpEncodings.fromDamlValueEncoding(
+      damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson)
+    )
     definitions.AcsResponseV2(
       Codec.encode(result.snapshotRecordTime),
       migrationId,
       result.createdEventsInPage
         .map(event =>
-          CompactJsonScanHttpEncodings().javaToHttpActiveContract(
+          encodings.javaToHttpActiveContract(
             event.eventId,
             event.recordTime,
             event.event,
@@ -1693,6 +1700,7 @@ class HttpScanHandler(
         ),
       result.afterToken.map(_.encodeToBase64),
     )
+  }
 
   override def getAcsSnapshotAtV2(respond: ScanResource.GetAcsSnapshotAtV2Response.type)(
       body: AcsRequestV2
@@ -1701,7 +1709,7 @@ class HttpScanHandler(
 
     def toResponse(result: QueryAcsSnapshotResult) = {
       ScanResource.GetAcsSnapshotAtV2ResponseOK(
-        toAcsV2Response(body.migrationId, result)
+        toAcsV2Response(body.migrationId, body.damlValueEncoding, result)
       )
     }
     val opId = "getAcsSnapshotAtV2"
@@ -1774,7 +1782,9 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[ScanResource.GetHoldingsStateAtV2Response] = {
     implicit val tc: TraceContext = extracted
     def toResponse(result: QueryAcsSnapshotResult) =
-      ScanResource.GetHoldingsStateAtV2ResponseOK(toAcsV2Response(body.migrationId, result))
+      ScanResource.GetHoldingsStateAtV2ResponseOK(
+        toAcsV2Response(body.migrationId, body.damlValueEncoding, result)
+      )
     val opId = "getHoldingsStateAtV2"
     withSpan(s"$workflowId.$opId") { _ => _ =>
       holdingStateQuery(

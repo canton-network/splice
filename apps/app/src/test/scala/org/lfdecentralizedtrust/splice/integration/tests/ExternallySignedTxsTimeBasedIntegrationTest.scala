@@ -3,7 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.daml.ledger.api.v2.interactive.InteractiveSubmissionServiceOuterClass.PreparedTransaction
 import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
@@ -44,7 +44,7 @@ class ExternallySignedTxsTimeBasedIntegrationTest
       val (_, updateId) =
         submitExternalPartySetupProposal(aliceValidatorBackend, onboarding1, preparePartySetup1)
       val update = eventuallySucceeds() {
-        sv1ScanBackend.getUpdate(updateId, encoding = CompactJson)
+        sv1ScanBackend.getUpdate(updateId, encoding = LedgerApiJson)
       }
       inside(update) {
         case definitions.UpdateHistoryItem.members.UpdateHistoryTransaction(transaction) =>

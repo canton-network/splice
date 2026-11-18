@@ -29,7 +29,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   ValidatorRewardCoupon,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItem
@@ -498,7 +498,7 @@ class WalletTxLogTimeBasedIntegrationTest
               EventId.updateIdFromEventId(transfer.eventId)
           }
           val createTransferUpdate = eventuallySucceeds() {
-            sv1ScanBackend.getUpdate(createTransferUpdateId, CompactJson)
+            sv1ScanBackend.getUpdate(createTransferUpdateId, LedgerApiJson)
           }
           createTransferUpdate match {
             case UpdateHistoryItem.members.UpdateHistoryReassignment(_) =>

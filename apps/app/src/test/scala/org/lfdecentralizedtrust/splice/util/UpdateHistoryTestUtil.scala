@@ -19,12 +19,12 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
 import com.daml.ledger.javaapi.data.*
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.{
-  CompactJson,
+  LedgerApiJson,
   ProtobufJson,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.TestCommon
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
-  CompactJsonScanHttpEncodings,
+  LedgerApiJsonScanHttpEncodings,
   ExternalHashInclusionPolicy,
   ProtobufJsonScanHttpEncodings,
   ScanHttpEncodings,
@@ -309,9 +309,9 @@ trait UpdateHistoryTestUtil extends TestCommon {
             updatesFromHistory.head.update.recordTime.addMicros(-1L).toString,
           )
         ),
-        encoding = CompactJson,
+        encoding = LedgerApiJson,
       )
-      .map(CompactJsonScanHttpEncodings().httpToLapiUpdate)
+      .map(LedgerApiJsonScanHttpEncodings.httpToLapiUpdate)
       .map(_.update)
       .map(dropTrailingNones)
 
@@ -336,8 +336,8 @@ trait UpdateHistoryTestUtil extends TestCommon {
 
     updatesFromScanApi.headOption.foreach(fromHistory => {
       val fromPointwiseLookup =
-        CompactJsonScanHttpEncodings().httpToLapiUpdate(
-          scanClient.getUpdate(fromHistory.update.updateId, encoding = CompactJson)
+        LedgerApiJsonScanHttpEncodings.httpToLapiUpdate(
+          scanClient.getUpdate(fromHistory.update.updateId, encoding = LedgerApiJson)
         )
       dropTrailingNones(fromPointwiseLookup.update) shouldBe fromHistory
     })
@@ -352,10 +352,10 @@ trait UpdateHistoryTestUtil extends TestCommon {
   ): Assertion = {
 
     val treeUpdate =
-      CompactJsonScanHttpEncodings().httpToLapiUpdate(
+      LedgerApiJsonScanHttpEncodings.httpToLapiUpdate(
         scanClient.getUpdate(
           updateId,
-          encoding = CompactJson,
+          encoding = LedgerApiJson,
         )
       )
     val extractedHash = treeUpdate.update.update match {
@@ -378,10 +378,10 @@ trait UpdateHistoryTestUtil extends TestCommon {
   ): Assertion = {
 
     val treeUpdate =
-      CompactJsonScanHttpEncodings().httpToLapiUpdate(
+      LedgerApiJsonScanHttpEncodings.httpToLapiUpdate(
         scanClient.getUpdateByHash(
           extTxnHash = extTxnHash,
-          encoding = CompactJson,
+          encoding = LedgerApiJson,
         )
       )
     val (extractedUpdateId, extractedExtTxnHash) = treeUpdate.update.update match {

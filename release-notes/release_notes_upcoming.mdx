@@ -49,6 +49,9 @@
       (`/v0/history/bulk/acs` and `/v0/history/bulk/updates`) no longer accept `compact_json`, and default to
       `ledger_api_json`. Existing `compact_json` objects in the buckets are no longer listed.
 
+    - Add an optional `daml_value_encoding` field to the requests of `/v2/state/acs` and `/v2/holdings/state`.
+      It defaults to `compact_json`, which is what these endpoints returned so far.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,

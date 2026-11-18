@@ -503,14 +503,14 @@ class ScanTimeBasedIntegrationTest
       // Compare bulk storage data to hot storage data from scan
       // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well
       val acsAtMidnightFromScan = sv1ScanBackend
-        .getAcsSnapshotAtV2(CantonTimestamp.assertFromInstant(lastMidnight), 0)
+        .getAcsSnapshotAtV2(
+          CantonTimestamp.assertFromInstant(lastMidnight),
+          0,
+          damlValueEncoding = Some(definitions.DamlValueEncoding.LedgerApiJson),
+        )
         .value
         .createdEvents
-      // The ACS snapshot endpoint encodes contract payloads as compact_json, bulk storage as ledger_api_json
-      def withoutPayload(c: definitions.ActiveContract) =
-        c.copy(createArguments = io.circe.Json.Null)
-      acsAtMidnightFromScan.map(withoutPayload) should contain theSameElementsInOrderAs
-        acsAtMidnightFromS3.map(withoutPayload)
+      acsAtMidnightFromScan should contain theSameElementsInOrderAs acsAtMidnightFromS3
 
       def checkUpdateEncoding(encoding: ScanStorageConfig.Encoding) = {
         def isInTimeRange(u: definitions.UpdateHistoryItemV2) = {
