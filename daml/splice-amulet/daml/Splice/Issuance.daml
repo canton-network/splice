@@ -57,7 +57,7 @@ validIssuanceConfig this@IssuanceConfig{..} =
 data OpenMiningRoundSummary = OpenMiningRoundSummary with
     totalValidatorRewardCoupons : Decimal
     totalFeaturedAppRewardCoupons : Decimal
-      -- If `RewardVersion_FeaturedAppMarkers` is enabled, this is the total of FeaturedAppMarkers.
+      -- If `RewardVersion_FeaturedAppMarkers` is enabled, this is the sum of the amounts of all `AppRewardCoupon` with `featured = True` for this round.
       -- Otherwise this is the total amount of Amulet burn associated to app activity; as specified in CIP-104.
     totalUnfeaturedAppRewardCoupons : Decimal
     totalSvRewardWeight : Int
@@ -74,7 +74,7 @@ data OpenMiningRoundSummary = OpenMiningRoundSummary with
     optUnclaimedAppRewards : Optional Decimal
       -- ^ If specified, the off-ledger computed value is used for UnclaimedReward.
       --
-      -- This is specified in Amulet and is the portion of the featured app issuance
+      -- This is denominated in Amulet and is the portion of the featured app issuance
       -- tranche which was not minted by the app and asset activity combined.
 
     optTotalFeaturedAssetRewardCoupons : Optional Decimal
