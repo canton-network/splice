@@ -1,0 +1,370 @@
+{
+  "SV-Nodeops-Limited": {
+    "rightOwnerParty": "<SV-Nodeops-Limited SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "SV-Nodeops-Limited": {"rewardWeight": 102500, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<SV-Nodeops-Limited SV party>"}
+    }
+  },
+  "Cumberland": {
+    "rightOwnerParty": "<Cumberland-1 SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "Cumberland-1": {"rewardWeight": 136125, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Cumberland-1 SV party>"},
+      "Cumberland-2": {"rewardWeight": 136125, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Cumberland-2 SV party>"}
+    }
+  },
+  "Digital-Asset": {
+    "rightOwnerParty": "<DA-Helm-Test-Node SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "DA-Helm-Test-Node": {"rewardWeight": 10000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<DA-Helm-Test-Node SV party>"},
+      "Digital-Asset-1": {"rewardWeight": 159250, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Digital-Asset-1 SV party>"},
+      "Digital-Asset-2": {"rewardWeight": 159250, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Digital-Asset-2 SV party>"}
+    }
+  },
+  "Ubyx": {
+    "rightOwnerParty": "ubyx-validator-1::1220c93467e4eab0473524cf4f33eff7a25df9a2832d6a19ebf2b5d70918336f9475",
+    "description": "Ubyx (CIP-0071)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 15500, "beneficiaries": [], "defaultBeneficiary": "ubyx-validator-1::1220c93467e4eab0473524cf4f33eff7a25df9a2832d6a19ebf2b5d70918336f9475"}
+    }
+  },
+  "Fireblocks": {
+    "rightOwnerParty": "Fireblocks-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7",
+    "description": "Fireblocks (CIP-0072)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 24200, "beneficiaries": [], "defaultBeneficiary": "Fireblocks-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7"}
+    }
+  },
+  "Talos": {
+    "rightOwnerParty": "Talos-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7",
+    "description": "Talos (CIP-0085)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 65000, "escrowedRewardWeight": 10917, "beneficiaries": [], "defaultBeneficiary": "Talos-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7"}
+    }
+  },
+  "BitGo": {
+    "rightOwnerParty": "BitGo-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7",
+    "description": "BitGo (CIP-0074)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 21333, "beneficiaries": [], "defaultBeneficiary": "BitGo-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7"}
+    }
+  },
+  "Global-Synchronizer-Foundation": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "GSF-1",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 266000, "escrowedRewardWeight": 0, "beneficiaries": [{"beneficiary": "GSF-validator-1::12203b389175d5d9a67a443078b3867fb179fc730d5dfb6aca3c509c37e926a6e24b", "weight": 100000}], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "The-Tie": {
+    "rightOwnerParty": "TheTie-validator-1::1220944b4dab3e3436c9ca6c331b6c9b11d908d71db471e44bc5d0bce6b5e81a796e",
+    "description": "The-Tie",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "TheTie-validator-1::1220944b4dab3e3436c9ca6c331b6c9b11d908d71db471e44bc5d0bce6b5e81a796e"}
+    }
+  },
+  "Copper": {
+    "rightOwnerParty": "copper-devnetValidator-recoveredex::12209da7ed8b1556a7b2cc0ebfd9ea0086ff47a7898f8ec3149bcbc8582fa5055c49",
+    "description": "Copper; Copper Clearloop (CIP-0039)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 20000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "copper-devnetValidator-recoveredex::12209da7ed8b1556a7b2cc0ebfd9ea0086ff47a7898f8ec3149bcbc8582fa5055c49"}
+    }
+  },
+  "Obsidian-Systems": {
+    "rightOwnerParty": "ObsidianSystems-validator-6::1220b8b7cfcc7e607c5aa967a880ef39c65543a617895aab20c0fe89ed5608d19edf",
+    "description": "Obsidian Systems (CIP-0037)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "ObsidianSystems-validator-6::1220b8b7cfcc7e607c5aa967a880ef39c65543a617895aab20c0fe89ed5608d19edf"}
+    }
+  },
+  "Circle": {
+    "rightOwnerParty": "circle-validator-1::12204f2fcd4f0b71ac10dc62a2fe2b57c7e8160008637d051d4bfff3f5236ae515fb",
+    "description": "Circle (CIP-0041)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "circle-validator-1::12204f2fcd4f0b71ac10dc62a2fe2b57c7e8160008637d051d4bfff3f5236ae515fb"}
+    }
+  },
+  "Bitwave": {
+    "rightOwnerParty": "<Bitwave-1 SV party>",
+    "description": "Bitwave (CIP-0055)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 0, "beneficiaries": [{"beneficiary": "bitwave-devnet-2::1220eecc99dfcc432bbfb358380472523f2189c014f7c632dd60c5430581eda25bc3", "weight": 10000}], "defaultBeneficiary": "<Bitwave-1 SV party>"},
+      "Bitwave-1": {"rewardWeight": 0, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Bitwave-1 SV party>"}
+    }
+  },
+  "AngelHack": {
+    "rightOwnerParty": "angelhack_devnet::12202884e80e7097caf94523e9e5533576ec2b5b016377bbd39f28b376f984a8a93d",
+    "description": "AngelHack (CIP-0053)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 25000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "angelhack_devnet::12202884e80e7097caf94523e9e5533576ec2b5b016377bbd39f28b376f984a8a93d"}
+    }
+  },
+  "Kaiko": {
+    "rightOwnerParty": "kaiko-devnet-1::12200fd571073e933e107afec72902c1a59f4f0ec3be8ef4ada5231c9d3f6d93de2c",
+    "description": "Kaiko (CIP-0063)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 65000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "kaiko-devnet-1::12200fd571073e933e107afec72902c1a59f4f0ec3be8ef4ada5231c9d3f6d93de2c"}
+    }
+  },
+  "Kiln": {
+    "rightOwnerParty": "kiln-devnetValidator-1::122030d0afac1b1d797fcef6095ca7c60a38ce644295c730389e0276d213d23f1a10",
+    "description": "Kiln (CIP-0036)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "kiln-devnetValidator-1::122030d0afac1b1d797fcef6095ca7c60a38ce644295c730389e0276d213d23f1a10"}
+    }
+  },
+  "Figment": {
+    "rightOwnerParty": "figment-devnet-validator-1::12200a16a17dd793b33b61b503fb291bd21e08d856a6d383b2034d1c2ef47977268a",
+    "description": "Figment (CIP-0054)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "figment-devnet-validator-1::12200a16a17dd793b33b61b503fb291bd21e08d856a6d383b2034d1c2ef47977268a"}
+    }
+  },
+  "Zero-Hash": {
+    "rightOwnerParty": "zhstaking-devnet::1220a5c87858708e08b30406776502d2506fdf9b9961195e6008fc04eca6fee9f0a7",
+    "description": "Zero Hash (CIP-0060)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 75000, "escrowedRewardWeight": 40000, "beneficiaries": [], "defaultBeneficiary": "zhstaking-devnet::1220a5c87858708e08b30406776502d2506fdf9b9961195e6008fc04eca6fee9f0a7"}
+    }
+  },
+  "Hypernative": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "Hypernative (CIP-0076)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 10000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Chainlink": {
+    "rightOwnerParty": "Chainlink-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7",
+    "description": "Chainlink (CIP-0061); Chainlink (CIP-0065)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 105000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": "Chainlink-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7"}
+    }
+  },
+  "Layer-Zero": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "Layer Zero (CIP-0065)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 30000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Wormhole": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "Wormhole (CIP-0065)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 30000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Ledger": {
+    "rightOwnerParty": "ledger-ledgeropsdevnet-0::12208f74f551f8c28b68414fc3bb4b8466178055845485878a1af8ac1fe96f88fad2",
+    "description": "Ledger (CIP-0069)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": "ledger-ledgeropsdevnet-0::12208f74f551f8c28b68414fc3bb4b8466178055845485878a1af8ac1fe96f88fad2"}
+    }
+  },
+  "Taurus": {
+    "rightOwnerParty": "Taurus-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7",
+    "description": "Taurus (CIP-0077)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 20000, "beneficiaries": [], "defaultBeneficiary": "Taurus-ghost-1::1220a9cc88707f22cdad61f2cacc5edea9820daf21b70dc9744171f28e9b5b3c30f7"}
+    }
+  },
+  "Zodia": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "Zodia (CIP-0075)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 50000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Republic": {
+    "rightOwnerParty": "Republic-Devel-1::122030b358dec6e1af7d6d9b2ec87a633eed9afd683be768ea0becc964274c4bb8da",
+    "description": "Republic (CIP-0080)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 60000, "escrowedRewardWeight": 20000, "beneficiaries": [], "defaultBeneficiary": "Republic-Devel-1::122030b358dec6e1af7d6d9b2ec87a633eed9afd683be768ea0becc964274c4bb8da"}
+    }
+  },
+  "Zenith": {
+    "rightOwnerParty": "zenith-validator-1::1220555bde23e4b405d3da100c2d6c4c648ece924e8e38f37ab2587e54e5ce643591",
+    "description": "Zenith (CIP-0091)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 90000, "beneficiaries": [], "defaultBeneficiary": "zenith-validator-1::1220555bde23e4b405d3da100c2d6c4c648ece924e8e38f37ab2587e54e5ce643591"}
+    }
+  },
+  "USDT0": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "USDT0 (CIP-0090)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "DTCC": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "DTCC (CIP-0083)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Mesh": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "Mesh (CIP-0095)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Nasdaq": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "Nasdaq (CIP-0097)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "YZi-Labs": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "YZi Labs (CIP-0081)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Societe-Generale": {
+    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "description": "Societe Generale (CIP-0115)",
+    "operatorAssignments": {
+      "Global-Synchronizer-Foundation": {"rewardWeight": 80000, "escrowedRewardWeight": 80000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+    }
+  },
+  "Hex-Trust": {
+    "rightOwnerParty": "HexTrust_73001ffe_ddc550b8::12201cb649212fb6a1d9e7e518dd07bc64c0713ba57293b35e37f786f977aeae9279",
+    "description": "HexTrust (CIP-0087)",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 30000, "escrowedRewardWeight": 20000, "beneficiaries": [], "defaultBeneficiary": "HexTrust_73001ffe_ddc550b8::12201cb649212fb6a1d9e7e518dd07bc64c0713ba57293b35e37f786f977aeae9279"}
+    }
+  },
+  "Blockdaemon": {
+    "rightOwnerParty": "Blockdaemon-SVrewards-1::1220738c50b544fcb6559af2894043f08562bec6a9feab975568673d22dff9ee304f",
+    "description": "Blockdaemon (CIP-0094)",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 50000, "escrowedRewardWeight": 40000, "beneficiaries": [], "defaultBeneficiary": "Blockdaemon-SVrewards-1::1220738c50b544fcb6559af2894043f08562bec6a9feab975568673d22dff9ee304f"}
+    }
+  },
+  "Tharimmune": {
+    "rightOwnerParty": "CantonStrategicHoldings-SVrewards-1::1220a816c3b1810840b0f40f74f3728e4f0d15fc4d15a472aab8bcdad796616e831c",
+    "description": "Tharimmune, Inc. (Canton Strategic Holdings) (CIP-0102, CIP-0114); Tharimmune/CSH, .5 split https://lists.sync.global/g/tokenomics-announce/message/323 https://github.com/canton-foundation/cips/blob/main/cip-0102/cip-0102.md",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 150000, "escrowedRewardWeight": 71250, "beneficiaries": [], "defaultBeneficiary": "CantonStrategicHoldings-SVrewards-1::1220a816c3b1810840b0f40f74f3728e4f0d15fc4d15a472aab8bcdad796616e831c"}
+    }
+  },
+  "Visa": {
+    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "description": "Visa (CIP-0109)",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+    }
+  },
+  "Marex": {
+    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "description": "Blockdaemon/Marex (CIP-0126)",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+    }
+  },
+  "LSEG": {
+    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "description": "London Stock Exchange Group (LSEG) (CIP-0124)",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+    }
+  },
+  "a16z": {
+    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "description": "a16z (CIP-0123)",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+    }
+  },
+  "MPC-Holding-Inc": {
+    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "MPC-Holding-Inc": {"rewardWeight": 20000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+    }
+  },
+  "Tradeweb-Markets": {
+    "rightOwnerParty": "<Tradeweb-Markets-1 SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "Tradeweb-Markets-1": {"rewardWeight": 100000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Tradeweb-Markets-1 SV party>"}
+    }
+  },
+  "Orb-1-LP": {
+    "rightOwnerParty": "<Orb-1-LP-1 SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "Orb-1-LP-1": {"rewardWeight": 100000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Orb-1-LP-1 SV party>"}
+    }
+  },
+  "C7-Technology-Services-Limited": {
+    "rightOwnerParty": "<C7-Technology-Services-Limited SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "C7-Technology-Services-Limited": {"rewardWeight": 105750, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<C7-Technology-Services-Limited SV party>"}
+    }
+  },
+  "Bosphorus-SV": {
+    "rightOwnerParty": "<Five-North-1 SV party>",
+    "description": "Bosphorus SV (BSV) (CIP-0093)",
+    "operatorAssignments": {
+      "Five-North-1": {"rewardWeight": 60000, "escrowedRewardWeight": 60000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+    }
+  },
+  "QCP-Group": {
+    "rightOwnerParty": "<Five-North-1 SV party>",
+    "description": "QCP Group SV (QCP) (CIP-0106)",
+    "operatorAssignments": {
+      "Five-North-1": {"rewardWeight": 50000, "escrowedRewardWeight": 50000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+    }
+  },
+  "ChainSafe": {
+    "rightOwnerParty": "chainsafe-dev-sv-0::1220096316d4ea75c021d89123cfd2792cfeac80dfbf90bfbca21bcd8bf1bb40d84c",
+    "description": "ChainSafe (CIP-0086)",
+    "operatorAssignments": {
+      "Five-North-1": {"rewardWeight": 39500, "escrowedRewardWeight": 20000, "beneficiaries": [], "defaultBeneficiary": "chainsafe-dev-sv-0::1220096316d4ea75c021d89123cfd2792cfeac80dfbf90bfbca21bcd8bf1bb40d84c"}
+    }
+  },
+  "Further-Asset-Management": {
+    "rightOwnerParty": "<Five-North-1 SV party>",
+    "description": "Further Asset Management (Further) (CIP-0113)",
+    "operatorAssignments": {
+      "Five-North-1": {"rewardWeight": 80000, "escrowedRewardWeight": 80000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+    }
+  },
+  "Apollo-Global-Management": {
+    "rightOwnerParty": "<Five-North-1 SV party>",
+    "description": "Apollo Global Management (Apollo) (CIP-0110)",
+    "operatorAssignments": {
+      "Five-North-1": {"rewardWeight": 70000, "escrowedRewardWeight": 70000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+    }
+  },
+  "Five-North": {
+    "rightOwnerParty": "<Five-North-1 SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "Five-North-1": {"rewardWeight": 30500, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+    }
+  },
+  "Proof-Group": {
+    "rightOwnerParty": "<Proof-Group-1 SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "Proof-Group-1": {"rewardWeight": 12500, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Proof-Group-1 SV party>"}
+    }
+  },
+  "Liberty-City-Ventures": {
+    "rightOwnerParty": "<Liberty-City-Ventures-1 SV party>",
+    "description": "",
+    "operatorAssignments": {
+      "Liberty-City-Ventures-1": {"rewardWeight": 100000, "escrowedRewardWeight": 0, "beneficiaries": [], "defaultBeneficiary": "<Liberty-City-Ventures-1 SV party>"}
+    }
+  }
+}
