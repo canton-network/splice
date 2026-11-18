@@ -10,6 +10,9 @@
       `scan/always-serve-verdict-round-number` in `svOperationsSwitchOverTimes` of the DSO rules configuration.
       SVs activate it with a "Set Decentralized Synchronizer Operations (DSO) Rules Configuration" vote.
       New networks serve it from the start.
+      The upgrade deletes the `round_number` values that Scan stored before, so verdicts ingested before the upgrade
+      have no `round_number`.
+      A Scan of a newly onboarded SV omits `round_number` for the verdicts of its first one or two rounds.
 
 ## Upcoming for next minor release (template):
 

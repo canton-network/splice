@@ -109,8 +109,11 @@ class EventHistorySanityCheckPlugin(
       }
 
       val otherScanHistory = paginateEventHistory(otherScan, Some(otherStart), Chain.empty).toVector
-        // the mediator takes some time after onboarding until it starts producing verdicts
-        .dropWhile(_.verdict.isEmpty)
+        // the mediator takes some time after onboarding until it starts producing verdicts,
+        // and the scan takes a round or two after onboarding until it can resolve the
+        // round_number of a verdict, as its rewards reference store has only seen part of
+        // the earlier rounds (see ScanRewardsReferenceStore.lookupActiveOpenMiningRounds)
+        .dropWhile(_.verdict.forall(_.roundNumber.isEmpty))
 
       val founderHistoryToUse = founderHistorySinceOtherOnboarding.dropWhile(item =>
         item.verdict != otherScanHistory.headOption.flatMap(_.verdict)
