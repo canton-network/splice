@@ -2008,7 +2008,7 @@ function subcmd_backup_nodes() {
     # If only migration is set, backup everything, otherwise backup specified nodes
     # Notably, prod networks which don't have sv-2 % sv-3
     if [ $# -eq 1 ]; then
-        nodes="sv-1 sv-2 sv-3 sv-da-1 validator1 splitwell"
+        nodes="sv-1 sv-2 sv-3 sv-da-1 sv validator1 splitwell"
     else
         shift 1
         nodes="$*"
