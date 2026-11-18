@@ -25,26 +25,22 @@ runs:
         SAVE_CACHES: ${{ inputs.save_caches }}
         EVENT_NAME: ${{ github.event_name }}
       run: |
-        # all:     push to main/release-line branches. These caches are shared with all PRs, so only trusted,
-        #          merged code may write them.
-        # missing: pull_request. GitHub scopes these caches to the PR, so no other run can read them. Only save
-        #          when nothing was restored, i.e. when the PR changed the cache dependencies and the base
-        #          branch caches don't apply. Otherwise each PR push would upload ~1.5GB that no one needs and
-        #          that evicts other caches from the 10GB repo quota.
-        # none:    everything else. In particular pull_request_target (PRs from forks), which would write into
-        #          the base branch scope, and scheduled/manual runs, which may use a non-default build config.
+        # all:  push to main/release-line branches. These caches are shared with all PRs, so only trusted,
+        #       merged code may write them.
+        # none: everything else.
+        #       - pull_request: PR caches are only visible to the PR itself, but each one is ~1.5GB and would
+        #         evict the shared caches from the 10GB repo quota. PRs restore from their base branch instead.
+        #       - pull_request_target (PRs from forks) would write into the base branch scope.
+        #       - scheduled/manual runs may use a non-default build config.
         mode=none
-        if [[ "$SAVE_CACHES" == "true" ]]; then
-          case "$EVENT_NAME" in
-            push) mode=all ;;
-            pull_request) mode=missing ;;
-          esac
+        if [[ "$SAVE_CACHES" == "true" && "$EVENT_NAME" == "push" ]]; then
+          mode=all
         fi
         echo "Cache save mode: $mode (save_caches=$SAVE_CACHES, event=$EVENT_NAME)"
         echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
     - name: Store precompiled classes
-      if: ${{ steps.policy.outputs.mode == 'all' || (steps.policy.outputs.mode == 'missing' && fromJson(inputs.setup_sbt_cache_hits).classes.matched_key == '') }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/precompiled_classes/save
       with:
         cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).classes.key }}
@@ -52,7 +48,7 @@ runs:
         splice_root: ${{ inputs.splice_root }}
 
     - name: Store SBT Cache
-      if: ${{ steps.policy.outputs.mode == 'all' || (steps.policy.outputs.mode == 'missing' && fromJson(inputs.setup_sbt_cache_hits).sbt.matched_key == '') }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/sbt/save
       with:
         cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).sbt.key }}
@@ -60,7 +56,7 @@ runs:
         splice_root: ${{ inputs.splice_root }}
 
     - name: Store frontend node_modules
-      if: ${{ steps.policy.outputs.mode == 'all' || (steps.policy.outputs.mode == 'missing' && fromJson(inputs.setup_sbt_cache_hits).node_modules.matched_key == '') }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/frontend_node_modules/save
       with:
         cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).node_modules.key }}
@@ -68,7 +64,7 @@ runs:
         splice_root: ${{ inputs.splice_root }}
 
     - name: Store Daml artifacts
-      if: ${{ steps.policy.outputs.mode == 'all' || (steps.policy.outputs.mode == 'missing' && fromJson(inputs.setup_sbt_cache_hits).daml.matched_key == '') }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/daml_artifacts/save
       with:
         cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).daml.key }}
