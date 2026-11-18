@@ -9,7 +9,7 @@ inputs:
     default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
 outputs:
   cache_hits:
-    description: "Cache hits"
+    description: "Restore results per cache as JSON ({<cache>: {hit, key, matched_key}}), to be passed to post_sbt"
     value: ${{ steps.cache_hits.outputs.cache_hits }}
 runs:
   using: 'composite'
@@ -54,22 +54,47 @@ runs:
       shell: bash
       env:
         CLASSES_HIT: ${{ steps.classes.outputs.cache_hit }}
+        CLASSES_KEY: ${{ steps.classes.outputs.cache_key }}
+        CLASSES_MATCHED_KEY: ${{ steps.classes.outputs.cache_matched_key }}
         SBT_HIT: ${{ steps.sbt.outputs.cache_hit }}
+        SBT_KEY: ${{ steps.sbt.outputs.cache_key }}
+        SBT_MATCHED_KEY: ${{ steps.sbt.outputs.cache_matched_key }}
         NODE_MODULES_HIT: ${{ steps.frontend_node_modules.outputs.cache_hit }}
+        NODE_MODULES_KEY: ${{ steps.frontend_node_modules.outputs.cache_key }}
+        NODE_MODULES_MATCHED_KEY: ${{ steps.frontend_node_modules.outputs.cache_matched_key }}
         DAML_HIT: ${{ steps.daml.outputs.cache_hit }}
+        DAML_KEY: ${{ steps.daml.outputs.cache_key }}
+        DAML_MATCHED_KEY: ${{ steps.daml.outputs.cache_matched_key }}
       run: |
-        # Collect cache hits into a json struct.
-        # Note that when there's a complete miss rather than a hit on an alternative key,
-        # the output from the cache/restore action is empty and not false,
-        # so we need to guard against that.
+        set -euo pipefail
+        # Collect the restore results into a json struct that post_sbt uses to decide what to save.
+        # The keys are passed along so that post_sbt saves under the key computed here, before the job
+        # modified any of the hashed files (recomputing hashFiles at the end of the job produced keys
+        # that no later restore ever matched).
 
-        classes="$CLASSES_HIT"
-        sbt="$SBT_HIT"
-        node_modules="$NODE_MODULES_HIT"
-        daml="$DAML_HIT"
-        echo "cache_hits={ \
-          \"classes\": ${classes:-false}, \
-          \"sbt\": ${sbt:-false}, \
-          \"node_modules\": ${node_modules:-false}, \
-          \"daml\": ${daml:-false} \
-        }" >> $GITHUB_OUTPUT
+        # The keys are built from the cache version, hex hashes and the commit sha only. Refuse anything
+        # else, as it would have to be escaped to be embedded into JSON.
+        for k in "$CLASSES_KEY" "$CLASSES_MATCHED_KEY" "$SBT_KEY" "$SBT_MATCHED_KEY" \
+                 "$NODE_MODULES_KEY" "$NODE_MODULES_MATCHED_KEY" "$DAML_KEY" "$DAML_MATCHED_KEY"; do
+          if [[ ! "$k" =~ ^[A-Za-z0-9\ :=._-]*$ ]]; then
+            echo "::error::Unexpected characters in cache key: $k"
+            exit 1
+          fi
+        done
+
+        entry() {
+          local name="$1" hit="$2" key="$3" matched="$4"
+          # Note that when there's a complete miss rather than a hit on an alternative key,
+          # the cache-hit output from the cache/restore action is empty and not false.
+          [[ "$hit" == "true" ]] || hit=false
+          printf '"%s": {"hit": %s, "key": "%s", "matched_key": "%s"}' "$name" "$hit" "$key" "$matched"
+        }
+
+        {
+          echo -n "cache_hits={"
+          entry classes "$CLASSES_HIT" "$CLASSES_KEY" "$CLASSES_MATCHED_KEY"; echo -n ", "
+          entry sbt "$SBT_HIT" "$SBT_KEY" "$SBT_MATCHED_KEY"; echo -n ", "
+          entry node_modules "$NODE_MODULES_HIT" "$NODE_MODULES_KEY" "$NODE_MODULES_MATCHED_KEY"; echo -n ", "
+          entry daml "$DAML_HIT" "$DAML_KEY" "$DAML_MATCHED_KEY"
+          echo "}"
+        } >> "$GITHUB_OUTPUT"

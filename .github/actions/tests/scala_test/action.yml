@@ -130,6 +130,7 @@ runs:
     - name: Setup
       uses: ./.github/actions/tests/common_test_setup
       with:
+        cache_version: ${{ inputs.cache_version }}
         test_name: ${{ inputs.test_suite_name }}
         with_sbt: false # we setup SBT later while canton is starting up
         target: 'default'
@@ -332,10 +333,8 @@ runs:
       if: ${{ !cancelled() }}
       uses: ./.github/actions/sbt/post_sbt
       with:
-        cache_version: ${{ inputs.cache_version }}
         setup_sbt_cache_hits: ${{ steps.setup_sbt.outputs.cache_hits }}
-        # Save caches only from one runner, to reduce conflicts on the save
-        save_caches: ${{ inputs.runner_index == 0 && inputs.test_suite_name == 'wall-clock-time' }}
+        # Caches are saved by the docs job only, see post_sbt.
 
     - name: Upload logs
       # We upload the logs on not success so that we also capture them for cancelled runs

@@ -34,6 +34,7 @@ jobs:
         with:
           cache_version: 10
           test_name: canton_consistency
+          with_sbt: false
           target: 'static_tests'
 
       - name: Run consistency check
