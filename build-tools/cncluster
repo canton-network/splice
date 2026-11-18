@@ -2090,6 +2090,10 @@ function subcmd_restore_node() {
             _info "Restoring validator node $node"
             SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" participant validator
             ;;
+        sv)
+            _info "Restoring sv runbook node $node"
+            SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" cantonBft sequencer participant mediator cn-apps
+            ;;
         *)
             _error "Unknown node $node"
             ;;
