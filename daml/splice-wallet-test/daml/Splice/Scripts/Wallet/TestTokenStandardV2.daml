@@ -83,6 +83,22 @@ testTokenStandardTransfer = script do
               transfer = enrichedChoice.arg.transfer
               extraArgs = enrichedChoice.arg.extraArgs
 
+  -- the install of alice only accepts transfers with alice as the actor
+  validatorHoldingCid <- AmuletRegistryV2.tapFaucet registry aliceValidator 100.0
+  enrichedChoice <- RegistryApiV2.getTransferFactory registry
+    Api.Token.TransferInstructionV2.TransferFactory_Transfer with
+      transfer = initialTransfer with
+        sender = basicAccount aliceValidator
+        inputHoldingCids = [validatorHoldingCid]
+      extraArgs = emptyExtraArgs
+      actors = [aliceValidator]
+  submitMustFail''
+    (expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'")
+    (actAs aliceValidator <> readAs alice <> disclose' enrichedChoice.disclosures) $
+    exerciseCmd aliceInstall WalletAppInstall_TransferFactoryV2_Transfer with
+      transferFactoryCid = enrichedChoice.factoryCid
+      transferArg = enrichedChoice.arg
+
   -- test withdraw
   result <- initiateTransferAsAlice [holdingCid]
 
