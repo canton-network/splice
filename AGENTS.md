@@ -50,9 +50,7 @@ If you make intentional changes in Daml code, run `sbt damlDarsLockFileUpdate` a
 
 ### Backwards-compatible Daml changes
 
-All Daml changes must be backwards-compatible. See the [Smart Contract Upgrading Reference from the Canton docs](https://docs.canton.network/appdev/deep-dives/smart-contract-upgrading-reference). In particular, records only gain `Optional` fields at the end, variants only gain constructors at the end, and templates, choices, fields and constructors can be neither removed nor renamed.
-
-When adding to enums, make sure to only add further nullary constructors to types that only have nullary constructors.
+All Daml changes must be backwards-compatible; see "Future Proofing" in the [Daml Style Guide](DAML_STYLE.md#future-proofing).
 
 Backends must keep working while only an older Daml version is voted in. Guard version-specific behavior, and tag tests that need a newer package with the matching scalatest tag from `org.lfdecentralizedtrust.splice.util.scalatesttags` (e.g. `SpliceAmulet_0_1_19`) so that the compatibility runs skip them. See "Daml Version Bump" and the sections after it in [DEVELOPMENT.md](DEVELOPMENT.md).
 
@@ -135,5 +133,5 @@ The `common-frontend` package (`@canton-network/splice-common-frontend`) contain
 - Mark work that is still to be done with the most specific tag, so that it is tracked and done when it is due:
   - `FIXME`: must be fixed before the PR is merged. The static CI checks reject FIXMEs.
   - `TODO(#1234)`: must be fixed as part of that issue. Use the feature's tracking issue if a separate issue makes no sense.
-  - `TODO(tech-debt)`: only for real tech debt that will not be addressed as part of the feature you are delivering.
+    For tech debt that will not be addressed as part of the feature you are delivering, create a tech-debt issue and reference it.
 - On branches in this repository, CI only runs if the last commit message contains `[ci]` (or `[static]` for static checks only). See [TESTING.md](TESTING.md) for other tags and for cluster tests.
