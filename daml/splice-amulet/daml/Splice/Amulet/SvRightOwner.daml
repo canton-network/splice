@@ -43,7 +43,7 @@ data SvRightOwnerInfo = SvRightOwnerInfo
       -- ^ The party of the SV right owner; manages the SV right owner controlled information.
     description : Text
     operatorAssignments : TextMap OperatorAssignment
-      -- ^ Keyed by the SV rights minting shard id; unique among all SV right owners.
+      -- ^ Keyed by the name of the SV node operator through which rewards are minted.
   deriving (Eq, Show, Serializable)
 
 instance Patchable SvRightOwnerInfo where
@@ -68,7 +68,6 @@ data OperatorAssignment = OperatorAssignment
 instance Patchable OperatorAssignment where
   patch new base current = OperatorAssignment
     with
-      operatorName = patch new.operatorName base.operatorName current.operatorName
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
       escrowedRewardWeight = patch new.escrowedRewardWeight base.escrowedRewardWeight current.escrowedRewardWeight
       beneficiaries = patchListAsScalar new.beneficiaries base.beneficiaries current.beneficiaries
