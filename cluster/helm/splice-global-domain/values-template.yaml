@@ -12,7 +12,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -XX:-UseBASE64Intrinsics
 resources:
   limits:
     memory: 8Gi

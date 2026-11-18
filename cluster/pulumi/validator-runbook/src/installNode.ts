@@ -207,6 +207,7 @@ async function installValidator(
       false, // We don't currently support non-auth for validator-runbook
       validatorVersion,
       postgres,
+      [],
       {
         dependsOn: imagePullDeps.concat([postgres]),
       }
@@ -290,6 +291,12 @@ async function installValidator(
     additionalEnvVars: validatorConfig.validatorApp?.additionalEnvVars,
     additionalJvmOptions: validatorConfig.validatorApp?.additionalJvmOptions,
     resources: validatorConfig.validatorApp?.resources,
+    participantClient: {
+      adminApi: {
+        // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
+        disableAuth: validatorConfig.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   };
 
   const validatorValuesWithOnboardingOverride = onboardingSecret

@@ -23,12 +23,27 @@ paths:
       responses:
         "200":
           description: The response body contains the exported snapshot file.
+          headers:
+            Repr-Digest:
+              description: "SHA-256 of the whole snapshot, as `sha-256=:<base64>:`"
+              required: true
+              schema:
+                type: string
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
                 x-scala-type: org.apache.pekko.http.scaladsl.model.ResponseEntity
+        "206":
+          description: |
+            Part of the snapshot, from the offset in the `Range` header to its end. Used to resume
+            an interrupted download with the same ID. `Content-Range` includes the length of the
+            whole snapshot and `Repr-Digest` is its SHA-256, as for status 200.
+        "416":
+          description: |
+            The offset in the `Range` header is at or past the end of the snapshot. The file
+            downloaded so far is complete only if its length and SHA-256 match the snapshot.
         "202":
           description: |
             The export is queued or still running. Retry the download with the same ID.

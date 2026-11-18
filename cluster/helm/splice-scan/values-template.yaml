@@ -11,7 +11,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=70 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=70 -Dscala.concurrent.context.numThreads=12 -XX:ActiveProcessorCount=12 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -XX:-UseBASE64Intrinsics
 resources:
   limits:
     memory: 6Gi
@@ -116,3 +116,7 @@ securityContexts:
       runAsUser: 101
       runAsGroup: 101
 
+# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
+participantClient:
+  adminApi:
+    disableAuth: true

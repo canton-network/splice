@@ -9,6 +9,7 @@ export type Auth0SecretMap = Map<string, Auth0ClientSecret>;
 
 export type Auth0NamespaceAudiences = {
   ledgerApi: string;
+  participantAdminApi: string;
   validatorApi: string;
   svAppApi?: string; // Empty for validator-only namespaces
 };
@@ -57,7 +58,7 @@ export interface Auth0Client {
     clientId: string,
     clientSecret: string,
     audience: string,
-    api: 'ledgerApi'
+    api: 'ledgerApi' | 'participantAdminApi'
   ) => Promise<string>;
   getCfg: () => Auth0Config;
 }

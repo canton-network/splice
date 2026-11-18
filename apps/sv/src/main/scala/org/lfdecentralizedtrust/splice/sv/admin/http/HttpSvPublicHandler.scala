@@ -42,7 +42,10 @@ import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting.DsoPartyMigrationFailure
-import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
+import org.lfdecentralizedtrust.splice.sv.onboarding.{
+  SvOnboardingSnapshotId,
+  SvOnboardingSnapshotSha256,
+}
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.{
   DsoPartyMigration,
   SvOnboardingSnapshotService,
@@ -867,14 +870,15 @@ object HttpSvPublicHandler {
               Pending(Pending.Status.Exporting, utc(queuedAt), Some(utc(startedAt)))
             )
           case Some(SnapshotState.Failed(reason)) => gone(reason)
-          case Some(SnapshotState.Ready(file)) =>
+          case Some(SnapshotState.Ready(file, sha256Base64)) =>
             try
               respond.OK(
                 HttpEntity(
                   ContentTypes.`application/octet-stream`,
                   Files.size(file),
                   FileIO.fromPath(file, DownloadChunkSize),
-                )
+                ),
+                SvOnboardingSnapshotSha256.reprDigest(sha256Base64),
               )
             catch {
               case _: NoSuchFileException =>

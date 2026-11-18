@@ -141,7 +141,6 @@ class UserWalletManager(
     *
     * Succeeds if the user has been onboarded and its wallet has been initialized.
     */
-  // TODO(DACH-NY/canton-network-node#12550): move away from tracking onboarded users via on-ledger contracts, and create only one WalletAppInstall per user-party
   final def lookupUserWallet(
       endUserName: String
   )(implicit tc: TraceContext): Future[Option[UserWalletService]] = {
@@ -263,7 +262,6 @@ class UserWalletManager(
           scanConnection,
           packageVersionSupport,
           Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
-          // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
           walletSweep.get(endUserParty.toProtoPrimitive),
           autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
           rewardSharingConfigByParty

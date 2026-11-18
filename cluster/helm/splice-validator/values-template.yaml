@@ -13,7 +13,7 @@ pod:
   annotations: {}
   labels: {}
 
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -Dpekko.http.server.idle-timeout=20m -Dpekko.http.client.idle-timeout=20m
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -Dpekko.http.server.idle-timeout=20m -Dpekko.http.client.idle-timeout=20m -XX:-UseBASE64Intrinsics
 resources:
   limits:
     memory: 8Gi
@@ -158,3 +158,8 @@ securityContexts:
       security_context_profile: persistent_security_context
 
 # TODO(DACH-NY/canton-network-internal#5946) add static guards so that new charts don't forget to add security contexts.
+
+# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
+participantClient:
+  adminApi:
+    disableAuth: true

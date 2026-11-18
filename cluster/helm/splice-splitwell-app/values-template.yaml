@@ -3,7 +3,7 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "splitwell-app"
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -XX:-UseBASE64Intrinsics
 fixedTokens: false
 resources:
   limits:
@@ -59,3 +59,7 @@ enableReloader: true
 
 #TODO(DACH-NY/canton-network-internal#5945): Add missing Helm Chart Security Contexts
 
+# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
+participantClient:
+  adminApi:
+    disableAuth: true
