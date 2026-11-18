@@ -9,6 +9,7 @@ This document provides instructions for AI coding agents (GitHub Copilot, Claude
 * `daml/` holds the Daml packages, one sbt project each. `token-standard/` defines the CIP-0056 token standard APIs, which `daml/splice-amulet` implements.
 * `canton/` is a copy of open-source Canton, not Splice code. Avoid editing it; if you must, record the change in `CANTON_CODE_CHANGES.md` (see "Bumping Our Canton fork" in [MAINTENANCE.md](MAINTENANCE.md)).
 * `cluster/` holds the Helm charts, Pulumi deployment code, and Docker Compose setup.
+* For Canton Network and Daml documentation, prefer the public docs MCP server at `https://docs.canton.network/mcp` (tools `search_canton_network_docs` and `query_docs_filesystem_canton_network_docs`) if it is configured; otherwise read the sources in the `canton-network/cf-docs` repository, e.g. with `gh`.
 
 ## Testing
 
