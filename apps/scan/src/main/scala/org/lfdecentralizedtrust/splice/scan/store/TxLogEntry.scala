@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import org.lfdecentralizedtrust.splice.store.StoreErrors
 
-import org.lfdecentralizedtrust.splice.http.v0.definitions as httpDef
 import com.digitalasset.canton.config.CantonRequireTypes.String3
 
 trait TxLogEntry extends Product with Serializable {
@@ -66,47 +65,5 @@ object TxLogEntry extends StoreErrors {
     } catch {
       case _: RuntimeException => throw txDecodingFailed()
     }
-  }
-
-  object Http {
-
-    object TransferCommandStatus {
-      val Created = "created"
-      val Sent = "sent"
-      val Failed = "failed"
-    }
-
-    def toResponse(
-        status: TransferCommandTxLogEntry.Status
-    ): httpDef.TransferCommandContractStatus =
-      status match {
-        case TransferCommandTxLogEntry.Status.Empty => throw txMissingField()
-        case _: TransferCommandTxLogEntry.Status.Created =>
-          httpDef.TransferCommandCreatedResponse(
-            status = TransferCommandStatus.Created
-          )
-        case _: TransferCommandTxLogEntry.Status.Sent =>
-          httpDef.TransferCommandSentResponse(
-            status = TransferCommandStatus.Sent
-          )
-        case _: TransferCommandTxLogEntry.Status.Withdrawn =>
-          httpDef.TransferCommandFailedResponse(
-            status = TransferCommandStatus.Failed,
-            failureKind = httpDef.TransferCommandFailedResponse.FailureKind.Withdrawn,
-            reason = "The TransferCommand has been withdrawn by the sender",
-          )
-        case _: TransferCommandTxLogEntry.Status.Expired =>
-          httpDef.TransferCommandFailedResponse(
-            status = TransferCommandStatus.Failed,
-            failureKind = httpDef.TransferCommandFailedResponse.FailureKind.Expired,
-            reason = "The TransferCommand has expired",
-          )
-        case status: TransferCommandTxLogEntry.Status.Failed =>
-          httpDef.TransferCommandFailedResponse(
-            status = TransferCommandStatus.Failed,
-            failureKind = httpDef.TransferCommandFailedResponse.FailureKind.Failed,
-            reason = status.value.reason,
-          )
-      }
   }
 }

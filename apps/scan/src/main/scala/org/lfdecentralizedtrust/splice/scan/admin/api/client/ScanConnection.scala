@@ -11,10 +11,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommandCounter,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   IssuingMiningRound,
   OpenMiningRound,
@@ -32,7 +29,6 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
-  LookupTransferCommandStatusResponse,
   MigrationSchedule,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection.*
@@ -297,16 +293,6 @@ trait ScanConnection
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Long]
-
-  def lookupTransferCommandCounterByParty(receiver: PartyId)(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]]]
-
-  def lookupTransferCommandStatus(sender: PartyId, nonce: Long)(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[Option[LookupTransferCommandStatusResponse]]
 
   def lookupTransferPreapprovalByParty(receiver: PartyId)(implicit
       ec: ExecutionContext,

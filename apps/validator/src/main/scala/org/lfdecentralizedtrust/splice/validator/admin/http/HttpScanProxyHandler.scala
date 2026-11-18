@@ -275,58 +275,6 @@ class HttpScanProxyHandler(
     }
   }
 
-  override def lookupTransferCommandCounterByParty(
-      respond: ScanproxyResource.LookupTransferCommandCounterByPartyResponse.type
-  )(party: String)(
-      tUser: AuthenticatedRequest
-  ): Future[ScanproxyResource.LookupTransferCommandCounterByPartyResponse] = {
-    implicit val AuthenticatedRequest(_, traceContext) = tUser
-    withSpan(s"$workflowId.lookupTransferCommandCounterByParty") { implicit traceContext => _ =>
-      for {
-        transferCommandCounterOpt <- scanConnection.lookupTransferCommandCounterByParty(
-          PartyId.tryFromProtoPrimitive(party)
-        )
-      } yield {
-        transferCommandCounterOpt match {
-          case None =>
-            respond.NotFound(
-              definitions.ErrorResponse(
-                s"No TransferCommandCounter found for party: $party, use 0 for the nonce"
-              )
-            )
-          case Some(transferCommandCounter) =>
-            respond.OK(
-              definitions.LookupTransferCommandCounterByPartyResponse(transferCommandCounter.toHttp)
-            )
-        }
-      }
-    }
-  }
-
-  override def lookupTransferCommandStatus(
-      respond: ScanproxyResource.LookupTransferCommandStatusResponse.type
-  )(sender: String, nonce: Long)(
-      tUser: AuthenticatedRequest
-  ): Future[ScanproxyResource.LookupTransferCommandStatusResponse] = {
-    implicit val AuthenticatedRequest(_, traceContext) = tUser
-    withSpan(s"$workflowId.lookupTransferCommandStatus") { implicit traceContext => _ =>
-      val senderParty = PartyId.tryFromProtoPrimitive(sender)
-      for {
-        statusResponseOpt <- scanConnection.lookupTransferCommandStatus(senderParty, nonce)
-      } yield {
-        statusResponseOpt match {
-          case None =>
-            respond.NotFound(
-              definitions.ErrorResponse(
-                s"Couldn't find transfer command for sender $senderParty with nonce $nonce created in the last 24h"
-              )
-            )
-          case Some(response) => respond.OK(response)
-        }
-      }
-    }
-  }
-
   override def listUnclaimedDevelopmentFundCoupons(
       respond: ScanproxyResource.ListUnclaimedDevelopmentFundCouponsResponse.type
   )()(

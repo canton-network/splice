@@ -13,7 +13,6 @@ import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCod
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scanproxy as scanProxy}
 import org.lfdecentralizedtrust.splice.http.v0.scanproxy.{GetDsoPartyIdResponse, ScanproxyClient}
 import org.lfdecentralizedtrust.splice.util.{
-  Codec,
   ContractWithState,
   DsoInfo,
   DsoInfoV1,
@@ -22,7 +21,6 @@ import org.lfdecentralizedtrust.splice.util.{
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.UnclaimedDevelopmentFundCoupon
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferPreapproval
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommandCounter
 
 import scala.concurrent.Future
 
@@ -183,51 +181,6 @@ object HttpScanProxyAppClient {
           .map(Some(_))
           .leftMap(_.toString)
       case scanProxy.LookupTransferPreapprovalByPartyResponse.NotFound(_) =>
-        Right(None)
-    }
-  }
-
-  case class LookupTransferCommandCounterByParty(party: PartyId)
-      extends ScanProxyBaseCommand[scanProxy.LookupTransferCommandCounterByPartyResponse, Option[
-        ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]
-      ]] {
-
-    override def submitRequest(
-        client: Client,
-        headers: List[HttpHeader],
-    ) = client.lookupTransferCommandCounterByParty(party.toProtoPrimitive, headers)
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case scanProxy.LookupTransferCommandCounterByPartyResponse.OK(response) =>
-        ContractWithState
-          .fromHttp(TransferCommandCounter.COMPANION)(response.transferCommandCounter)
-          .map(Some(_))
-          .leftMap(_.toString)
-      case scanProxy.LookupTransferCommandCounterByPartyResponse.NotFound(_) =>
-        Right(None)
-    }
-  }
-
-  case class LookupTransferCommandStatus(
-      sender: PartyId,
-      nonce: Long,
-  ) extends ScanProxyBaseCommand[scanProxy.LookupTransferCommandStatusResponse, Option[
-        definitions.LookupTransferCommandStatusResponse
-      ]] {
-
-    override def submitRequest(
-        client: Client,
-        headers: List[HttpHeader],
-    ) = client.lookupTransferCommandStatus(Codec.encode(sender), nonce, headers)
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case scanProxy.LookupTransferCommandStatusResponse.OK(ev) =>
-        Right(Some(ev))
-      case scanProxy.LookupTransferCommandStatusResponse.NotFound(_) =>
         Right(None)
     }
   }
