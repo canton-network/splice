@@ -19,6 +19,7 @@ import {
   installSpliceHelmChart,
   persistentHeapDumpsPvc,
   ValidatorTopupConfig,
+  getClientId,
   installSplitwellAppSecrets,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
@@ -70,6 +71,7 @@ export async function installSplitwell(
     false,
     decentralizedSynchronizerMigrationConfig.active.version,
     sharedPostgres,
+    [`${getClientId(auth0Client, 'splitwell', xns.logicalName)}@clients`],
     {
       dependsOn: imagePullDeps.concat(loopback),
     }
@@ -120,6 +122,12 @@ export async function installSplitwell(
       apiRequestLogLevel: splitwellConfig.logging?.apiRequestLogLevel,
       logAsyncFlush: splitwellConfig.logging?.async,
       pvc: persistentHeapDumpsPvc(),
+      participantClient: {
+        adminApi: {
+          // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
+          disableAuth: splitwellConfig?.participant?.disableParticipantAdminApiAuth ?? false,
+        },
+      },
     },
     activeVersion,
     { dependsOn: extraDependsOn }
@@ -182,6 +190,9 @@ export async function installSplitwell(
     logLevel: splitwellConfig.logging?.level,
     logAsync: splitwellConfig.logging?.async,
     version: activeVersion,
+    participant: {
+      disableParticipantAdminApiAuth: splitwellConfig?.participant?.disableParticipantAdminApiAuth,
+    },
   });
 }
 

@@ -59,3 +59,7 @@ enableReloader: true
 
 #TODO(DACH-NY/canton-network-internal#5945): Add missing Helm Chart Security Contexts
 
+# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
+participantClient:
+  adminApi:
+    disableAuth: true

@@ -17,3 +17,10 @@ export function getValidatorAppApiAudience(auth0Config: Auth0Config, namespace: 
 export function getLedgerApiAudience(auth0Config: Auth0Config, namespace: string): string {
   return getNamespaceConfig(auth0Config, namespace).audiences.ledgerApi;
 }
+
+export function getParticipantAdminApiAudience(
+  auth0Config: Auth0Config,
+  namespace: string
+): string {
+  return getNamespaceConfig(auth0Config, namespace).audiences.participantAdminApi;
+}
