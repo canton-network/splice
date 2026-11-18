@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   metadatav1,
   transferinstructionv1,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{Reason, Vote}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense_Withdraw
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.store.StoreTestBase
@@ -148,7 +149,8 @@ class ValueJsonCodecTranscodeTest extends StoreTestBase with EitherValues {
     // Differences to ValueJsonCodecCodegen that are not about the formatting of the JSON:
     // - trailing null fields are omitted
     // - numerics with value zero are written as "0.0000000000" instead of "0E-10"
-    // Everything else, in particular Int64 and non-zero Numeric values, is encoded the same way.
+    // Everything else, in particular Int64 and non-zero Numeric values, variants and maps,
+    // is encoded the same way.
     def dropTrailingNulls(json: Json): Json = json.fold(
       json,
       _ => json,
@@ -181,6 +183,51 @@ class ValueJsonCodecTranscodeTest extends StoreTestBase with EitherValues {
         normalizedCodegen(ValueJsonCodecCodegen.serializeChoiceArgument(tapEvent).value)
       parse(ValueJsonCodecTranscode.serializeChoiceResult(tapEvent).value) shouldBe
         normalizedCodegen(ValueJsonCodecCodegen.serializeChoiceResult(tapEvent).value)
+    }
+
+    "encode variants and maps like ValueJsonCodecCodegen" in {
+      // VoteRequest has (nested) variants in `action` and a GenMap in `votes`
+      val voter = mkPartyId("voter")
+      val voteRequestEvent = toCreatedEvent(
+        voteRequest(
+          voter,
+          Seq(new Vote(voter.toProtoPrimitive, true, new Reason("url", "why"), Optional.empty())),
+          expiry = Instant.parse("2026-01-02T03:04:05.123456Z"),
+        )
+      )
+      val json = parse(ValueJsonCodecTranscode.serializableContractPayload(voteRequestEvent).value)
+      json shouldBe
+        normalizedCodegen(ValueJsonCodecCodegen.serializableContractPayload(voteRequestEvent).value)
+      json.hcursor.downField("action").focus.map(_.noSpaces) shouldBe Some(
+        """{"tag":"ARC_DsoRules","value":{"dsoAction":{"tag":"SRARC_AddSv","value":""" +
+          s"""{"newSvParty":"${userParty(666).toProtoPrimitive}","newSvName":"user666",""" +
+          """"newSvRewardWeight":"10000","newSvParticipantId":"user666ParticipantId",""" +
+          """"joinedAsOfRound":{"number":"1"}}}}}"""
+      )
+      json.hcursor.downField("votes").focus.map(_.noSpaces) shouldBe Some(
+        s"""[["${voter.toProtoPrimitive}",{"sv":"${voter.toProtoPrimitive}","accept":true,""" +
+          """"reason":{"url":"url","body":"why"}}]]"""
+      )
+
+      // Metadata has a TextMap in `values`
+      val withdrawEvent = exercisedEvent(
+        nextCid(),
+        AmuletTransferInstruction.TEMPLATE_ID_WITH_PACKAGE_ID,
+        Some(transferinstructionv1.TransferInstruction.INTERFACE_ID_WITH_PACKAGE_ID),
+        "TransferInstruction_Withdraw",
+        consuming = true,
+        new transferinstructionv1.TransferInstruction_Withdraw(
+          new metadatav1.ExtraArgs(
+            new metadatav1.ChoiceContext(java.util.Map.of()),
+            new metadatav1.Metadata(java.util.Map.of("k", "v")),
+          )
+        ).toValue,
+        javaApi.Unit.getInstance(),
+      )
+      val argJson = ValueJsonCodecTranscode.serializeChoiceArgument(withdrawEvent).value
+      argJson shouldBe """{"extraArgs":{"context":{"values":{}},"meta":{"values":{"k":"v"}}}}"""
+      parse(argJson) shouldBe
+        normalizedCodegen(ValueJsonCodecCodegen.serializeChoiceArgument(withdrawEvent).value)
     }
 
     "encode zero numerics differently from ValueJsonCodecCodegen" in {
