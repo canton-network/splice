@@ -28,8 +28,9 @@ uv run --script convert.py output/approved-sv-id-values.DevNet.fields.yaml > out
   keyed by that operator's name, with their summed weight.
 - **Escrow:** entries with role `escrow` or `unassigned` become `escrowedRewardWeight`. No coupons are created for it.
 - **`rightOwnerParty`:** the SV party for owners that run an SV node. For a hosted owner, its only non-escrow party.
-  For a hosted owner with only escrowed weight, the hosting SV's party as a placeholder until it provides its own.
+  `null` for a hosted owner without a non-escrow party, i.e., the 18 owners whose weight is fully escrowed.
 - **`defaultBeneficiary`:** the operator's SV party for an SV's own assignments, otherwise `rightOwnerParty`.
+  It is `null` only where the beneficiaries receive all of the non-escrowed weight.
   A trailing beneficiary that pays the default beneficiary is dropped, as it receives the remainder anyway.
 - **`description`:** the labels, CIPs and URLs of the owner's entries, without duplicates.
 - `<X SV party>` stands for the party of SV node operator `X`, which is not in the config.
@@ -44,8 +45,9 @@ uv run --script convert.py output/approved-sv-id-values.DevNet.fields.yaml > out
 ## Open points
 
 - 18 hosted owners have only escrowed weight and thus no owner party in the config, e.g. DTCC, Nasdaq, Visa.
+  They get one by a DSO vote with `DsoRules_UpdateSvRightOwnerInfo`, e.g., when their first milestone is reached.
 - The `active` parties of Taurus, Talos and BitGo, and the unmarked ones of Fireblocks and Chainlink,
   are ghost parties of the hosting SV, so their `rightOwnerParty` is controlled by that SV.
 - Owners that run an SV node get no `description`, as the config has no comments on the SV entries.
-- The parties `<X SV party>` must be filled in from the on-ledger `DsoRules.svs`,
+- The SV parties `<X SV party>` of the SV node operators must be filled in from the on-ledger `DsoRules.svs`,
   and the total weight must match the on-ledger `svRewardWeight`s, which this does not check.

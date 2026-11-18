@@ -130,10 +130,10 @@
     }
   },
   "Hypernative": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "Hypernative (CIP-0076)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 10000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 10000, "escrowedRewardWeight": 10000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Chainlink": {
@@ -144,17 +144,17 @@
     }
   },
   "Layer-Zero": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "Layer Zero (CIP-0065)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 30000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 30000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Wormhole": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "Wormhole (CIP-0065)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 30000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 30000, "escrowedRewardWeight": 30000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Ledger": {
@@ -172,10 +172,10 @@
     }
   },
   "Zodia": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "Zodia (CIP-0075)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 50000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 50000, "escrowedRewardWeight": 50000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Republic": {
@@ -193,45 +193,45 @@
     }
   },
   "USDT0": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "USDT0 (CIP-0090)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "DTCC": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "DTCC (CIP-0083)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Mesh": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "Mesh (CIP-0095)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Nasdaq": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "Nasdaq (CIP-0097)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "YZi-Labs": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "YZi Labs (CIP-0081)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Societe-Generale": {
-    "rightOwnerParty": "<Global-Synchronizer-Foundation SV party>",
+    "rightOwnerParty": null,
     "description": "Societe Generale (CIP-0115)",
     "operatorAssignments": {
-      "Global-Synchronizer-Foundation": {"rewardWeight": 80000, "escrowedRewardWeight": 80000, "beneficiaries": [], "defaultBeneficiary": "<Global-Synchronizer-Foundation SV party>"}
+      "Global-Synchronizer-Foundation": {"rewardWeight": 80000, "escrowedRewardWeight": 80000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Hex-Trust": {
@@ -256,31 +256,31 @@
     }
   },
   "Visa": {
-    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "rightOwnerParty": null,
     "description": "Visa (CIP-0109)",
     "operatorAssignments": {
-      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Marex": {
-    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "rightOwnerParty": null,
     "description": "Blockdaemon/Marex (CIP-0126)",
     "operatorAssignments": {
-      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "LSEG": {
-    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "rightOwnerParty": null,
     "description": "London Stock Exchange Group (LSEG) (CIP-0124)",
     "operatorAssignments": {
-      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "a16z": {
-    "rightOwnerParty": "<MPC-Holding-Inc SV party>",
+    "rightOwnerParty": null,
     "description": "a16z (CIP-0123)",
     "operatorAssignments": {
-      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": "<MPC-Holding-Inc SV party>"}
+      "MPC-Holding-Inc": {"rewardWeight": 100000, "escrowedRewardWeight": 100000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "MPC-Holding-Inc": {
@@ -312,17 +312,17 @@
     }
   },
   "Bosphorus-SV": {
-    "rightOwnerParty": "<Five-North-1 SV party>",
+    "rightOwnerParty": null,
     "description": "Bosphorus SV (BSV) (CIP-0093)",
     "operatorAssignments": {
-      "Five-North-1": {"rewardWeight": 60000, "escrowedRewardWeight": 60000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+      "Five-North-1": {"rewardWeight": 60000, "escrowedRewardWeight": 60000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "QCP-Group": {
-    "rightOwnerParty": "<Five-North-1 SV party>",
+    "rightOwnerParty": null,
     "description": "QCP Group SV (QCP) (CIP-0106)",
     "operatorAssignments": {
-      "Five-North-1": {"rewardWeight": 50000, "escrowedRewardWeight": 50000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+      "Five-North-1": {"rewardWeight": 50000, "escrowedRewardWeight": 50000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "ChainSafe": {
@@ -333,17 +333,17 @@
     }
   },
   "Further-Asset-Management": {
-    "rightOwnerParty": "<Five-North-1 SV party>",
+    "rightOwnerParty": null,
     "description": "Further Asset Management (Further) (CIP-0113)",
     "operatorAssignments": {
-      "Five-North-1": {"rewardWeight": 80000, "escrowedRewardWeight": 80000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+      "Five-North-1": {"rewardWeight": 80000, "escrowedRewardWeight": 80000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Apollo-Global-Management": {
-    "rightOwnerParty": "<Five-North-1 SV party>",
+    "rightOwnerParty": null,
     "description": "Apollo Global Management (Apollo) (CIP-0110)",
     "operatorAssignments": {
-      "Five-North-1": {"rewardWeight": 70000, "escrowedRewardWeight": 70000, "beneficiaries": [], "defaultBeneficiary": "<Five-North-1 SV party>"}
+      "Five-North-1": {"rewardWeight": 70000, "escrowedRewardWeight": 70000, "beneficiaries": [], "defaultBeneficiary": null}
     }
   },
   "Five-North": {

@@ -3,11 +3,12 @@
 
 module Splice.Amulet.SvRightOwner where
 
-import Prelude hiding (all)
+import Prelude hiding (all, sum)
 
-import DA.Foldable (forA_, all)
+import DA.Foldable (forA_, all, sum)
 import DA.Map (Map)
 import qualified DA.Map as Map
+import DA.Optional (isSome)
 import DA.TextMap (TextMap)
 import Splice.Types (ForDso(..))
 import Splice.Util (HasCheckedFetch(..), Patchable(..), patchListAsScalar, require)
@@ -39,8 +40,10 @@ instance HasCheckedFetch SvRightOwner ForDso where
 -- | Information about a super validator right owner.
 data SvRightOwnerInfo = SvRightOwnerInfo
   with
-    rightOwnerParty : Party
+    rightOwnerParty : Optional Party
       -- ^ The party of the SV right owner; manages the SV right owner controlled information.
+      -- `None` until the owner provides one, e.g., while all its weight is escrowed.
+      -- Without it, only a DSO vote can change the owner's information.
     description : Text
     operatorAssignments : TextMap OperatorAssignment
       -- ^ Keyed by the name of the SV node operator through which the rewards are minted.
@@ -62,8 +65,9 @@ data OperatorAssignment = OperatorAssignment
       -- No coupons are created for it. Changed only by a DSO vote.
     beneficiaries : [BeneficiaryInfo]
       -- ^ At most 20 beneficiaries, paid in order from the non-escrowed weight until no weight remains.
-    defaultBeneficiary : Party
+    defaultBeneficiary : Optional Party
       -- ^ Receives the non-escrowed weight not paid to the beneficiaries.
+      -- May only be `None` if the beneficiaries receive all of the non-escrowed weight.
   deriving (Eq, Show, Serializable)
 
 instance Patchable OperatorAssignment where
@@ -86,7 +90,12 @@ operatorAssignmentChecks =
   [ (\a -> 0 <= a.escrowedRewardWeight && a.escrowedRewardWeight <= a.rewardWeight, "Escrowed reward weight is between zero and the reward weight")
   , (\a -> all (\b -> b.weight > 0) a.beneficiaries, "Beneficiary weights are positive")
   , (\a -> length a.beneficiaries <= 20, "There are at most 20 beneficiaries")
+  , (\a -> isSome a.defaultBeneficiary || unpaidWeight a <= 0, "There is a default beneficiary unless the beneficiaries receive all of the non-escrowed weight")
   ]
+
+-- | The non-escrowed weight that the beneficiaries do not receive.
+unpaidWeight : OperatorAssignment -> Int
+unpaidWeight a = a.rewardWeight - a.escrowedRewardWeight - sum (map (.weight) a.beneficiaries)
 
 svRightOwnerInfoChecks : [(SvRightOwnerInfo -> Bool, Text)]
 svRightOwnerInfoChecks =
@@ -110,8 +119,11 @@ requireValidSvRightOwnerInfo info =
 -- | The coupon weight for each party for this operator assignment; the escrowed weight gets no coupons.
 svRewardCouponWeights : OperatorAssignment -> Map Party Int
 svRewardCouponWeights OperatorAssignment{..} =
-  Map.filter (> 0) $ Map.insertWith (+) defaultBeneficiary remainingWeight $ Map.fromListWithR (+) paidWeights
+  Map.filter (> 0) $ withDefault $ Map.fromListWithR (+) paidWeights
   where
+    withDefault = case defaultBeneficiary of
+      Some party -> Map.insertWith (+) party remainingWeight
+      None -> identity -- `remainingWeight` is zero, see `operatorAssignmentChecks`
     (remainingWeight, paidWeights) = foldl pay (rewardWeight - escrowedRewardWeight, []) beneficiaries
     pay (remaining, paid) BeneficiaryInfo{beneficiary, weight} =
       let paidWeight = min weight remaining

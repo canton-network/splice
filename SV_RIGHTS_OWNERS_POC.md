@@ -20,7 +20,7 @@ classDiagram
         name : Text
     }
     class SvRightOwnerInfo {
-        rightOwnerParty : Party
+        rightOwnerParty : Optional Party
         description : Text
         operatorAssignments : TextMap OperatorAssignment
     }
@@ -28,7 +28,7 @@ classDiagram
         rewardWeight : Int
         escrowedRewardWeight : Int
         beneficiaries : [BeneficiaryInfo]
-        defaultBeneficiary : Party
+        defaultBeneficiary : Optional Party
     }
     class BeneficiaryInfo {
         beneficiary : Party
@@ -150,6 +150,7 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
 
 - One `SvRightOwner` per owner, with key `SvRightsOwnerKey`, a `description` and one `OperatorAssignment` per SV node operator, keyed by the operator's name.
 - Each assignment has its own weight, escrowed weight, ordered beneficiaries with absolute weights, and a default beneficiary for the rest of the non-escrowed weight.
+- `rightOwnerParty` is `None` until the owner provides a party, e.g., for owners whose weight is fully escrowed; then only a DSO vote changes its information. `defaultBeneficiary` may only be `None` if the beneficiaries receive all of the non-escrowed weight.
 - No coupons are created for the escrowed weight. A DSO vote (`DsoRules_UpdateSvRightOwnerInfo`) lowers it once a milestone is reached.
 - The owner can change only `beneficiaries` and `defaultBeneficiary`: `DsoRules_UpdateSvRightOwnerBeneficiaries` requires the operators, reward weights and escrowed weights to be unchanged.
 - One `SvRewardState` per owner and operator, with key `(dso, svRightsOwnerName, svOperatorName)`.

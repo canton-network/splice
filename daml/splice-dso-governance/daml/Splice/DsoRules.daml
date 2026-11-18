@@ -2376,7 +2376,7 @@ template DsoRules with
         requireSvRightOwnerExists this name
         currentSvRightOwner <- fetchAndArchive (ForSv with dso; svName = name) svRightOwnerCid
         require "Beneficiaries are set by the SV right owner itself" $
-          currentSvRightOwner.info.rightOwnerParty == rightOwner
+          currentSvRightOwner.info.rightOwnerParty == Some rightOwner
         require "The SV rights owner does not change operators, reward weights or escrow" $
           dsoControlledWeights newInfo == dsoControlledWeights currentSvRightOwner.info
         let info = currentSvRightOwner.info with beneficiaries
@@ -2391,14 +2391,15 @@ template DsoRules with
         svRightOwnerCid : ContractId SvRightOwner
         newRightOwnerParty : Party -- ^ The new party; must not be one of the beneficiaries.
         currentRightOwnerParty : Party -- ^ The current party of the SV right owner; must own `svRightOwnerCid`.
+          -- An owner without a party gets one by a DSO vote with `DsoRules_UpdateSvRightOwnerInfo`.
       controller currentRightOwnerParty
       do
         requireOnLedgerSvRightOwners this
         requireSvRightOwnerExists this name
         currentSvRightOwner <- fetchAndArchive (ForSv with dso; svName = name) svRightOwnerCid
         require "The party is rotated by the SV right owner itself" $
-          currentSvRightOwner.info.rightOwnerParty == currentRightOwnerParty
-        let info = currentSvRightOwner.info with rightOwnerParty = newRightOwnerParty
+          currentSvRightOwner.info.rightOwnerParty == Some currentRightOwnerParty
+        let info = currentSvRightOwner.info with rightOwnerParty = Some newRightOwnerParty
         requireValidSvRightOwnerInfo info
         svRightOwner <- create currentSvRightOwner with info
         return DsoRules_UpdateSvRightOwnerPartyResult with svRightOwner

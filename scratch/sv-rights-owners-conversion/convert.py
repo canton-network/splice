@@ -61,7 +61,7 @@ for name, rec in owners.items():
     elif len(actives) == 1:
         rop = next(iter(actives))
     else:
-        rop = svp(next(iter(rec['assignments'])))  # placeholder: hosting SV until the owner provides a party
+        rop = None  # the owner has not provided a party yet
     assigns = {}
     for op, x in rec['assignments'].items():
         # Remainder goes to defaultBeneficiary: drop trailing entries paying it.
@@ -69,6 +69,7 @@ for name, rec in owners.items():
         bs = list(x['beneficiaries'])
         while bs and bs[-1]['beneficiary'] == dflt: bs.pop()
         x = {k: v for k, v in x.items() if not k.startswith('_')} | {'beneficiaries': bs, 'defaultBeneficiary': dflt}
+        assert dflt is not None or x['rewardWeight'] - x['escrowedRewardWeight'] - sum(b['weight'] for b in bs) <= 0, (name, op)
         assigns[op] = x
     result[name] = {'rightOwnerParty': rop, 'description': description(rec['parts']), 'operatorAssignments': assigns}
 
@@ -85,7 +86,7 @@ def new(a):
     rem, acc = a['rewardWeight'] - a['escrowedRewardWeight'], collections.Counter()
     for b in a['beneficiaries']:
         w = min(b['weight'], rem); acc[b['beneficiary']] += w; rem -= w
-    if rem > 0: acc[a['defaultBeneficiary']] += rem
+    if rem > 0 and a['defaultBeneficiary'] is not None: acc[a['defaultBeneficiary']] += rem
     return acc
 for sv in d['approvedSvIdentities']:
     got = sum((new(a) for o in result.values() for op, a in o['operatorAssignments'].items() if op == sv['name']), collections.Counter())
