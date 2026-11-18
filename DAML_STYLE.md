@@ -19,6 +19,7 @@ Released Daml can only change in ways that are compatible with smart contract up
 * Treat contracts read from the ledger like untrusted user input: validate that the fields of every contract that a choice looks up, fetches, exercises or archives are as the context expects, e.g. its `owner`, its `dso` party or its `instrumentId`. Its signatories vouch for its contents, but not for it being the contract that the context refers to.
   * Use `fetchChecked`; for templates without a `HasCheckedFetch` instance, add one if the template has a single owning party, otherwise fetch the contract and check the relevant fields. Comment on each `potentiallyUnsafeArchive` why it is safe.
 * Assert the preconditions that a choice relies on with `require`, and the invariants of a template with `ensure`.
+  * To compare two values in `Update` code, use `require'` with a relation such as `isEqualR` or `isGreaterR`, or `requireMatchExpected`, from `Splice.TokenStandard.Utils`: their error messages name and show both values, e.g. `require' ("amount", amount) isGreaterR ("zero", 0.0)`.
 * Fail early: use `require`, `fail` or `error` instead of threading `Optional` or `Either` through `Update` code or falling back to defaults. Guard impossible cases explicitly.
 * New feature flags in Daml config default to off, so that voting in a package does not enable the feature. Name them as described in [Config Parameters](AGENTS.md#config-parameters).
 
