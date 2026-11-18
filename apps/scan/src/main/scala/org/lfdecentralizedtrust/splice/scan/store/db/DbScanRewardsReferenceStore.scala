@@ -162,51 +162,41 @@ class DbScanRewardsReferenceStore private (
       recordTimes: Seq[CantonTimestamp]
   )(implicit
       tc: TraceContext
-  ): Future[Map[CantonTimestamp, ScanRewardsReferenceStore.ActiveRoundInfo]] =
-    recordTimes.maxOption match {
-      case None => Future.successful(Map.empty)
-      case Some(maxRecordTime) =>
-        // Wait before reading the ingestion start, so that an archival up to maxRecordTime
-        // that is not ingested yet cannot make the result depend on the ingestion lag.
-        multiDomainAcsStore.waitUntilRecordTimeReached(key.synchronizerId, maxRecordTime).flatMap {
-          _ =>
-            tcsStore.getEarliestArchivedAt().flatMap {
-              case None =>
-                Future.successful(Map.empty)
-              case Some(ingestionStart) =>
-                val afterIngestionStartTimes = recordTimes.filter(_ >= ingestionStart)
-                if (afterIngestionStartTimes.isEmpty) Future.successful(Map.empty)
-                else {
-                  val (minTime, maxTime) = afterIngestionStartTimes.foldLeft(
-                    (CantonTimestamp.MaxValue, CantonTimestamp.MinValue)
-                  ) { case ((lo, hi), t) => (lo.min(t), hi.max(t)) }
-                  lookupOpenMiningRoundsActiveWithin(minTime, maxTime).map { activeWithinResult =>
-                    afterIngestionStartTimes.flatMap { recordTime =>
-                      val roundsAtTime =
-                        TcsStore.contractsActiveAsOf(activeWithinResult, recordTime)
-                      val openRounds = roundsAtTime.filter { r =>
-                        CantonTimestamp.assertFromInstant(r.contract.payload.opensAt) <= recordTime
-                      }
-                      openRounds
-                        .minByOption(_.contract.payload.round.number)
-                        .flatMap { r =>
-                          val opensAt =
-                            CantonTimestamp.assertFromInstant(r.contract.payload.opensAt)
-                          Option.when(opensAt >= ingestionStart) {
-                            recordTime -> ScanRewardsReferenceStore.ActiveRoundInfo(
-                              roundNumber = r.contract.payload.round.number.toLong,
-                              opensAt = opensAt,
-                              assetActivityParams = AssetActivityParams
-                                .fromRewardConfig(r.contract.payload.rewardConfig.toScala),
-                            )
-                          }
-                        }
-                    }.toMap
+  ): Future[Map[CantonTimestamp, ScanRewardsReferenceStore.ActiveRoundInfo]] = {
+    tcsStore.getEarliestArchivedAt().flatMap {
+      case None =>
+        Future.successful(Map.empty)
+      case Some(ingestionStart) =>
+        val afterIngestionStartTimes = recordTimes.filter(_ >= ingestionStart)
+        if (afterIngestionStartTimes.isEmpty) Future.successful(Map.empty)
+        else {
+          val (minTime, maxTime) = afterIngestionStartTimes.foldLeft(
+            (CantonTimestamp.MaxValue, CantonTimestamp.MinValue)
+          ) { case ((lo, hi), t) => (lo.min(t), hi.max(t)) }
+          lookupOpenMiningRoundsActiveWithin(minTime, maxTime).map { activeWithinResult =>
+            afterIngestionStartTimes.flatMap { recordTime =>
+              val roundsAtTime = TcsStore.contractsActiveAsOf(activeWithinResult, recordTime)
+              val openRounds = roundsAtTime.filter { r =>
+                CantonTimestamp.assertFromInstant(r.contract.payload.opensAt) <= recordTime
+              }
+              openRounds
+                .minByOption(_.contract.payload.round.number)
+                .flatMap { r =>
+                  val opensAt = CantonTimestamp.assertFromInstant(r.contract.payload.opensAt)
+                  Option.when(opensAt >= ingestionStart) {
+                    recordTime -> ScanRewardsReferenceStore.ActiveRoundInfo(
+                      roundNumber = r.contract.payload.round.number.toLong,
+                      opensAt = opensAt,
+                      assetActivityParams = AssetActivityParams
+                        .fromRewardConfig(r.contract.payload.rewardConfig.toScala),
+                    )
                   }
                 }
-            }
+            }.toMap
+          }
         }
     }
+  }
 
   override def lookupFeaturedAppPartiesAsOf(
       asOf: CantonTimestamp
@@ -339,10 +329,9 @@ class DbScanRewardsReferenceStore private (
   override def lookupLatestArchivedOpenMiningRound(
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Option[Long]] =
-    // Wait before reading the ingestion start, for the same reason as in lookupActiveOpenMiningRounds.
-    multiDomainAcsStore.waitUntilRecordTimeReached(key.synchronizerId, asOf).flatMap { _ =>
-      tcsStore.getEarliestArchivedAt().flatMap {
-        case Some(earliestArchivedAt) if asOf >= earliestArchivedAt =>
+    tcsStore.getEarliestArchivedAt().flatMap {
+      case Some(earliestArchivedAt) if asOf >= earliestArchivedAt =>
+        multiDomainAcsStore.waitUntilRecordTimeReached(key.synchronizerId, asOf).flatMap { _ =>
           val storeId = multiDomainAcsStore.acsStoreId
           val migrationId = multiDomainAcsStore.domainMigrationId
           val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
@@ -363,8 +352,8 @@ class DbScanRewardsReferenceStore private (
               "lookupLatestArchivedOpenMiningRound",
             )
           )
-        case _ => Future.successful(None)
-      }
+        }
+      case _ => Future.successful(None)
     }
 
   override def lookupArchivedAtForOpenMiningRound(
