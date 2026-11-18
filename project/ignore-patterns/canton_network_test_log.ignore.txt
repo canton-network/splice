@@ -48,7 +48,7 @@ NoSuchFileException deleting temporal file.*selenium-manager
 # Trying to start a BiDi connection to Firefox repeatedly might fail some attempts with an 405 method not allowed
 Invalid Status code=405 text=Method Not Allowed","logger_name":"o.o.s.remote.http.WebSocket"
 
-# TODO(DACH-NY/canton-network-node#7696) revisit after migration of tests to vitest
+# TODO(canton-network/splice#8539) revisit after migration of tests to vitest
 Trying to re-register template.*
 
 .*GrpcClientError: UNAUTHENTICATED/.*Request: Tap(13.37)
@@ -93,7 +93,7 @@ All scans have responded with 'never'.*BftCallExecutorTest:BftCallExecutorTest.*
 # internal selenium error. Potentially intermittent
 Exception managing firefox: error sending request for url .* http2 error: stream error received: refused stream before processing any application
 
-# TODO(DACH-NY/canton-network-node#18150) - remove this
+# TODO(canton-network/splice#8539) - remove this
 Vetted state contains multiple entries
 
 # TODO(#645) Remove conversion from future with shutdown to future
@@ -137,7 +137,6 @@ Previous channel ManagedChannelImpl.* was garbage collected without being shut d
 # but it doesn't offer a clean way of doing that. Lowering log level also doesn't seem sensible,
 # as we don't want to miss non-shutdown warnings in production.
 Restarting stream due to failure.*Channel shutdown(Now)? invoked
-# TODO(#564) - check what's happening here during shutdown
 Timeout 10 seconds expired, but readers are still active. Shutting down forcibly
 
 # Warnings in s3Mock log (which we redirect to our logs), that we don't care about

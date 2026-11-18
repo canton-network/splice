@@ -74,7 +74,6 @@ trait AppReference extends InstanceReference {
 
   override type Status = SpliceStatus
 
-  // TODO(DACH-NY/canton-network-node#736): remove/cleanup all the uninteresting console commands copied from Canton.
   @Help.Summary("Health and diagnostic related commands")
   @Help.Group("Health")
   // Doesn't make sense for splice
@@ -112,7 +111,6 @@ trait HttpAppReference extends AppReference with HttpCommandRunner {
 
   def basePath: String
 
-  // TODO (DACH-NY/canton-network-node#4606): Refactor so that these two methods don't need to be implemented
   override def keys: KeyAdministrationGroup = noGrpcError()
 
   override def adminCommand[Result](

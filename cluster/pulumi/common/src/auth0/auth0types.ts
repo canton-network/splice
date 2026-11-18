@@ -9,6 +9,7 @@ export type Auth0SecretMap = Map<string, Auth0ClientSecret>;
 
 export type Auth0NamespaceAudiences = {
   ledgerApi: string;
+  participantAdminApi: string;
   validatorApi: string;
   svAppApi?: string; // Empty for validator-only namespaces
 };
@@ -28,6 +29,7 @@ export type Auth0NamespaceUiClientIds = {
 };
 
 export type Auth0NamespaceConfig = {
+  // TODO(#2873): Audiences can be fully determined at preview time so they don't need to be passed through the stack output.
   audiences: Auth0NamespaceAudiences;
   backendClientIds: Auth0NamespaceBackendClientIds;
   uiClientIds: Auth0NamespaceUiClientIds;
@@ -41,20 +43,22 @@ export type Auth0Config = {
   auth0Domain: string;
   auth0MgtClientId: string;
   auth0MgtClientSecret: string;
+  // TODO(#2873): This is no longer read from the stack output.
   fixedTokenCacheName: string;
 };
 
 export interface Auth0ClientAccessToken {
   accessToken: string;
-  expiry: string;
+  expiry: Date;
 }
 
 export interface Auth0Client {
   getSecrets: () => Promise<Auth0SecretMap>;
-  getClientAccessToken: (
+  getClientFixedToken: (
     clientId: string,
     clientSecret: string,
-    audience: string
+    audience: string,
+    api: 'ledgerApi' | 'participantAdminApi'
   ) => Promise<string>;
   getCfg: () => Auth0Config;
 }

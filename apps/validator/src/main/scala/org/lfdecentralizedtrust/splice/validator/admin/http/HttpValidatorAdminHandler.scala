@@ -115,7 +115,6 @@ class HttpValidatorAdminHandler(
   ] = {
     implicit val AdminUserRequest(tracedContext) = tuser
     withSpan(s"$workflowId.listUsers") { _ => _ =>
-      // TODO(DACH-NY/canton-network-node#12550): move away from tracking onboarded users via on-ledger contracts, and create only one WalletAppInstall per user-party
       store.listUsers().map(us => definitions.ListUsersResponse(us.toVector))
     }
   }

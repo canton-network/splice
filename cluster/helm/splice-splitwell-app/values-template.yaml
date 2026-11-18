@@ -3,7 +3,7 @@
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "splitwell-app"
-defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof
+defaultJvmOptions: -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75 -Dscala.concurrent.context.numThreads=8 -XX:ActiveProcessorCount=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/persistent-data/heap-dump-CURRENT_DATE.hprof -XX:-UseBASE64Intrinsics
 fixedTokens: false
 resources:
   limits:
@@ -24,7 +24,7 @@ persistence:
   port: 5432
   user: cnadmin
   secretName: "postgres-secrets"
-  initImageName: "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6"
+  initImageName: "postgres:18.7-trixie@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc"
 #  secretOverrides:
 #    postgresPassword: ""
 
@@ -59,3 +59,7 @@ enableReloader: true
 
 #TODO(DACH-NY/canton-network-internal#5945): Add missing Helm Chart Security Contexts
 
+# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
+participantClient:
+  adminApi:
+    disableAuth: true

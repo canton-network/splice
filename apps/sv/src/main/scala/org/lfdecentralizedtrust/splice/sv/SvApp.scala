@@ -542,6 +542,7 @@ class SvApp(
                 publicHandler,
                 operation =>
                   buildOperation("svPublic", operation)
+                    .tflatMap(_ => withRangeSupport)
                     .tflatMap(_ => provide(traceContext)),
               ),
               SvOperatorResource.routes(
@@ -764,7 +765,6 @@ object SvApp {
       )
   }
 
-  // TODO(DACH-NY/canton-network-node#5364): move this and like functions into appropriate utility namespaces
   def prepareValidatorOnboarding(
       secret: ValidatorOnboardingSecret,
       expiresIn: NonNegativeFiniteDuration,

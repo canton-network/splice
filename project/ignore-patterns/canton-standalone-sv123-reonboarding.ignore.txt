@@ -16,7 +16,7 @@ SYNC_SERVICE_ALARM.*Received a request.*where the view.*has missing recipients.*
 # Caused by svs being off-boarded
 TOPOLOGY_UNAUTHORIZED_TRANSACTION
 
-# TODO(DACH-NY/canton-network-node#13610): Investigate flake and remove once fixed
+# TODO(canton-network/splice#8539): Investigate flake and remove once fixed
 Sequencing result message timed out
 
 Could not send a time-advancing message

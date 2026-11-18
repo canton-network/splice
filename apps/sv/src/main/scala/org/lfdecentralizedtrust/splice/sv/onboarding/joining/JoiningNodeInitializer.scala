@@ -516,6 +516,7 @@ class JoiningNodeInitializer(
             physicalSynchronizerId <-
               currentNode.onboardLocalSequencerIfRequired(
                 svConnection.map(_._2),
+                config.onboardingSnapshots,
                 // Add the new local domain node to the DSO rules with an "onboarding" status
                 // This triggers automation in other SV apps, that's why we make sure the sequencer is known first
                 preInit = () =>
@@ -964,7 +965,6 @@ class JoiningNodeInitializer(
 
     private def startHostingDsoPartyInParticipant(): Future[Unit] = {
       dsoPartyHosting
-        // TODO(DACH-NY/canton-network-node#5364): consider inlining the relevant parts from DsoPartyHosting
         .hostPartyOnOwnParticipant(
           config.domains.global.alias,
           synchronizerId,

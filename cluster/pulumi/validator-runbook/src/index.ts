@@ -5,14 +5,13 @@ import { Auth0Fetch, config, getAuth0ClusterConfig } from '@canton-network/splic
 import { installNode } from './installNode';
 
 async function auth0CacheAndInstallNode(auth0Fetch: Auth0Fetch) {
-  await auth0Fetch.loadAuth0Cache();
+  await auth0Fetch.loadFixedTokensCache();
 
   await installNode(auth0Fetch);
 
-  await auth0Fetch.saveAuth0Cache();
+  await auth0Fetch.persistFixedTokensCache();
 }
 
-// TODO(DACH-NY/canton-network-node#8008): Reduce duplication from sv-runbook stack
 async function main() {
   const auth0ClusterCfg = getAuth0ClusterConfig();
   if (!auth0ClusterCfg.validatorRunbook) {

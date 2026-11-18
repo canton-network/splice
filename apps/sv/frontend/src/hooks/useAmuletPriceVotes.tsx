@@ -1,6 +1,5 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-// TODO(DACH-NY/canton-network-node#7675) - do we need this model?
 import { AmuletPriceVote as CPVModel } from '@canton-network/splice-common-frontend';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';

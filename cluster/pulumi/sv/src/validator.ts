@@ -75,5 +75,8 @@ export async function installValidator(
     additionalJvmOptions: svConfig.validatorApp?.additionalJvmOptions || '',
     resources: svConfig.validatorApp?.resources,
     version: svConfig.version,
+    participant: {
+      disableParticipantAdminApiAuth: svConfig.participant?.disableParticipantAdminApiAuth,
+    },
   });
 }
