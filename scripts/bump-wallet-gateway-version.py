@@ -14,11 +14,13 @@ import sys
 from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 COMPOSE_ENV = Path("cluster/compose/validator/.env")
 PULUMI_CONFIG = Path("cluster/configs/shared/wallet_gateway.yaml")
 UPSTREAM = {"wallet-gateway": "wallet-gateway", "portfolio": "splice-portfolio"}
 DEFAULT_REVIEWERS = "isegall-da,pawelperek-da"
+BRANCH_PREFIX = "wallet-gateway-version-bump-"
 
 # final releases only: v1.2.3 for images, 1.2.3 for charts; backports like v1.11.3-backport.3 are skipped
 RELEASE_TAG_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
@@ -76,6 +78,31 @@ def latest_upstream_version(repo: str) -> str:
     return version
 
 
+def pr_title(wg_version: str, portfolio_version: str) -> str:
+    return f"Bump Wallet Gateway to {wg_version} and Portfolio UI to {portfolio_version} (auto-generated)"
+
+
+def open_bump_prs() -> list[dict[str, Any]]:
+    """Open PRs created by earlier runs of this script (as the user owning GH_TOKEN)."""
+    prs: list[dict[str, Any]] = json.loads(
+        run(
+            "gh", "pr", "list",
+            "--state", "open",
+            "--base", "main",
+            "--author", "@me",
+            "--limit", "1000",
+            "--json", "number,title,headRefName,url",
+            capture=True,
+        )
+    )
+    return [pr for pr in prs if pr["headRefName"].startswith(BRANCH_PREFIX)]
+
+
+def find_duplicate(open_prs: Iterable[dict[str, Any]], title: str) -> dict[str, Any] | None:
+    """An open bump PR that already targets the same versions, if any."""
+    return next((pr for pr in open_prs if pr["title"] == title), None)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wallet-gateway-version", default=os.environ.get("WALLET_GATEWAY_VERSION") or None)
@@ -99,6 +126,12 @@ def main() -> None:
         print("Wallet Gateway and Portfolio UI versions are up to date.")
         return
 
+    title = pr_title(wg_version, portfolio_version)
+    open_prs = [] if args.dry_run else open_bump_prs()
+    if duplicate := find_duplicate(open_prs, title):
+        print(f"An open PR already bumps to these versions, not creating another one: {duplicate['url']}")
+        return
+
     COMPOSE_ENV.write_text(update_compose_env(compose_env, wg_version, portfolio_version))
     PULUMI_CONFIG.write_text(update_pulumi_config(PULUMI_CONFIG.read_text(), wg_version, portfolio_version))
     run("make", "update-expected")
@@ -109,8 +142,10 @@ def main() -> None:
         return
 
     print("Wallet Gateway and Portfolio UI versions are not up to date. Creating a PR...")
-    title = f"Bump Wallet Gateway to {wg_version} and Portfolio UI to {portfolio_version} (auto-generated)"
-    branch = f"wallet-gateway-version-bump-{date.today():%Y-%m-%d}"
+    body = f"Wallet Gateway: {current_wg} -> {wg_version}\nPortfolio UI: {current_portfolio} -> {portfolio_version}"
+    if open_prs:
+        body += "\n\nSupersedes " + ", ".join(f"#{pr['number']}" for pr in open_prs)
+    branch = f"{BRANCH_PREFIX}{date.today():%Y-%m-%d}"
     run("git", "add", str(COMPOSE_ENV), str(PULUMI_CONFIG), "cluster/expected", "cluster/deployment")
     run("git", "switch", "-c", branch)
     run("git", "commit", "-s", "-m", f"[ci] {title[0].lower()}{title[1:]}")
@@ -120,7 +155,7 @@ def main() -> None:
         "--base", "main",
         "--head", branch,
         "--title", title,
-        "--body", f"Wallet Gateway: {current_wg} -> {wg_version}\nPortfolio UI: {current_portfolio} -> {portfolio_version}",
+        "--body", body,
         "--reviewer", args.reviewers,
     )
     print("Done.")
