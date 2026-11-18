@@ -46,8 +46,10 @@ uv run --script convert.py output/approved-sv-id-values.DevNet.fields.yaml > out
 
 - 18 hosted owners have only escrowed weight and thus no owner party in the config, e.g. DTCC, Nasdaq, Visa.
   They get one by a DSO vote with `DsoRules_UpdateSvRightOwnerInfo`, e.g., when their first milestone is reached.
-- The `active` parties of Taurus, Talos and BitGo, and the unmarked ones of Fireblocks and Chainlink,
-  are ghost parties of the hosting SV, so their `rightOwnerParty` is controlled by that SV.
+- For Taurus, Talos, BitGo, Fireblocks, Chainlink and Tharimmune, the only non-escrow party is in the namespace
+  of a ghost validator (GhostSV-validator-1 `1220a9cc…` or MPCH-GHOSTvalidator-1 `1220a816…`).
+  So whoever operates that validator acts as their `rightOwnerParty` and can redirect their non-escrowed weight;
+  it already receives their coupons today.
 - Owners that run an SV node get no `description`, as the config has no comments on the SV entries.
 - The SV parties `<X SV party>` of the SV node operators must be filled in from the on-ledger `DsoRules.svs`,
   and the total weight must match the on-ledger `svRewardWeight`s, which this does not check.
