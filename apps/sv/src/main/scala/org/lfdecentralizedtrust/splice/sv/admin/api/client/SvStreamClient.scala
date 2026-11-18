@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.sv.admin.api.client
 import cats.data.EitherT
 import org.apache.pekko.http.scaladsl.marshalling.{Marshal, ToEntityMarshaller}
 import org.apache.pekko.http.scaladsl.model.*
+import org.apache.pekko.http.scaladsl.model.headers.`Content-Range`
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.apache.pekko.http.scaladsl.util.FastFuture
 import org.apache.pekko.stream.Materializer
@@ -32,7 +33,14 @@ object SvStreamClient {
 
   sealed abstract class OnboardSvDownloadResponse
   object OnboardSvDownloadResponse {
-    case class OK(entity: ResponseEntity) extends OnboardSvDownloadResponse
+    case class OK(entity: ResponseEntity, reprDigest: Option[String])
+        extends OnboardSvDownloadResponse
+    case class PartialContent(
+        entity: ResponseEntity,
+        contentRange: Option[ContentRange],
+        reprDigest: Option[String],
+    ) extends OnboardSvDownloadResponse
+    case object RangeNotSatisfiable extends OnboardSvDownloadResponse
     case class Accepted(value: definitions.OnboardSvDownloadPendingResponse)
         extends OnboardSvDownloadResponse
   }
@@ -98,10 +106,27 @@ class SvStreamClient(host: String = "https://example.com")(implicit
     ).flatMap(req =>
       EitherT(
         httpClient(req)
-          .flatMap[Either[Either[Throwable, HttpResponse], OnboardSvDownloadResponse]](resp =>
+          .flatMap[Either[Either[Throwable, HttpResponse], OnboardSvDownloadResponse]] { resp =>
+            val reprDigests = resp.headers.filter(_.is("repr-digest")).map(_.value)
+            val reprDigest = Option.when(reprDigests.nonEmpty)(reprDigests.mkString(", "))
             resp.status match {
               case StatusCodes.OK =>
-                FastFuture.successful(Right(OnboardSvDownloadResponse.OK(resp.entity)))
+                FastFuture.successful(Right(OnboardSvDownloadResponse.OK(resp.entity, reprDigest)))
+              case StatusCodes.PartialContent =>
+                FastFuture.successful(
+                  Right(
+                    OnboardSvDownloadResponse.PartialContent(
+                      resp.entity,
+                      resp.header[`Content-Range`].map(_.contentRange),
+                      reprDigest,
+                    )
+                  )
+                )
+              case StatusCodes.RangeNotSatisfiable =>
+                resp
+                  .discardEntityBytes()
+                  .future()
+                  .map(_ => Right(OnboardSvDownloadResponse.RangeNotSatisfiable))
               case StatusCodes.Accepted =>
                 Unmarshal(resp.entity)
                   .to[definitions.OnboardSvDownloadPendingResponse](
@@ -112,7 +137,7 @@ class SvStreamClient(host: String = "https://example.com")(implicit
                   .map(x => Right(OnboardSvDownloadResponse.Accepted(x)))
               case _ => FastFuture.successful(Left(Right(resp)))
             }
-          )
+          }
           .recover({ case e: Throwable => Left(Left(e)) })
       )
     )
