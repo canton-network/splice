@@ -4,7 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 
 import { isMainNet } from '../config';
 import { ExactNamespace, fixedTokens } from '../utils';
-import { getClientId, getNamespaceConfig } from './auth0';
+import { getNamespaceConfig } from './auth0';
 import { Auth0Client, Auth0ClientSecret, Auth0SecretMap } from './auth0types';
 
 function lookupClientSecrets(
@@ -30,6 +30,22 @@ function lookupClientSecrets(
   }
 
   return clientSecret;
+}
+
+function getClientId(
+  auth0Client: Auth0Client,
+  clientName: 'sv' | 'validator' | 'splitwell',
+  namespace: string
+): string {
+  const cfg = auth0Client.getCfg();
+  switch (clientName) {
+    case 'sv':
+      return getNamespaceConfig(cfg, namespace).backendClientIds.svApp!;
+    case 'validator':
+      return getNamespaceConfig(cfg, namespace).backendClientIds.validator;
+    case 'splitwell':
+      return getNamespaceConfig(cfg, namespace).backendClientIds.splitwell!;
+  }
 }
 
 function getUiClientId(
@@ -262,7 +278,6 @@ export async function installValidatorSecrets(
 
   return [
     await installLedgerApiSecret(auth0Client, ns, 'validator'),
-    await installParticipantAdminApiSecret(auth0Client, ns, 'validator'),
     installAuth0UiSecretWithClientId(auth0Client, ns, 'wallet', walletUiClientId),
     installAuth0UiSecretWithClientId(auth0Client, ns, 'cns', cnsUiClientId),
   ];
@@ -276,7 +291,6 @@ export async function installSvAppSecrets(
 
   return [
     await installLedgerApiSecret(auth0Client, ns, 'sv'),
-    await installParticipantAdminApiSecret(auth0Client, ns, 'sv'),
     installAuth0UiSecretWithClientId(auth0Client, ns, 'sv', clientId),
   ];
 }
@@ -285,68 +299,5 @@ export async function installSplitwellAppSecrets(
   ns: ExactNamespace,
   auth0Client: Auth0Client
 ): Promise<Array<k8s.core.v1.Secret>> {
-  return [
-    await installLedgerApiSecret(auth0Client, ns, 'splitwell'),
-    await installParticipantAdminApiSecret(auth0Client, ns, 'splitwell'),
-  ];
-}
-
-async function installParticipantAdminApiSecret(
-  auth0Client: Auth0Client,
-  xns: ExactNamespace,
-  clientName: 'sv' | 'validator' | 'splitwell'
-): Promise<k8s.core.v1.Secret> {
-  const secrets = await auth0Client.getSecrets();
-  const secret = await participantAdminApiSecretContent(
-    auth0Client,
-    secrets,
-    clientName,
-    xns.logicalName
-  );
-
-  return new k8s.core.v1.Secret(
-    `splice-participant-admin-api-auth0-secret-${xns.logicalName}-${clientName}`,
-    {
-      metadata: {
-        name: `splice-app-${clientName}-participant-admin-api-auth`,
-        namespace: xns.ns.metadata.name,
-      },
-      stringData: secret,
-    }
-  );
-}
-
-async function participantAdminApiSecretContent(
-  auth0Client: Auth0Client,
-  allSecrets: Auth0SecretMap,
-  clientName: 'sv' | 'validator' | 'splitwell',
-  namespace: string
-): Promise<Record<string, string>> {
-  const cfg = auth0Client.getCfg();
-  const clientId = getClientId(auth0Client, clientName, namespace);
-
-  const clientSecrets = lookupClientSecrets(allSecrets, auth0Client, namespace, clientName);
-  const audience = cfg.namespacedConfigs[namespace]!.audiences.participantAdminApi;
-
-  const clientSecret = clientSecrets.client_secret;
-
-  if (fixedTokens()) {
-    const token = await auth0Client.getClientFixedToken(
-      clientId,
-      clientSecret,
-      audience,
-      'participantAdminApi'
-    );
-    return {
-      audience,
-      token,
-    };
-  } else {
-    return {
-      audience,
-      url: `https://${cfg.auth0Domain}/.well-known/openid-configuration`,
-      'client-id': clientId,
-      'client-secret': clientSecret,
-    };
-  }
+  return [await installLedgerApiSecret(auth0Client, ns, 'splitwell')];
 }

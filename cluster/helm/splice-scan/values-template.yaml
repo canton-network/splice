@@ -116,7 +116,3 @@ securityContexts:
       runAsUser: 101
       runAsGroup: 101
 
-# TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
-participantClient:
-  adminApi:
-    disableAuth: true

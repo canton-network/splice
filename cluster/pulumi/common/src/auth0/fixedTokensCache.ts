@@ -15,13 +15,12 @@ type ClientId = string;
 
 type ClientTokens = {
   ledgerApi?: Auth0ClientAccessToken;
-  participantAdminApi?: Auth0ClientAccessToken;
 };
 
 export async function getOrUpdateToken(
   cache: FixedTokensCache,
   clientId: ClientId,
-  api: 'ledgerApi' | 'participantAdminApi',
+  api: 'ledgerApi',
   renewToken: () => Promise<Auth0ClientAccessToken>
 ): Promise<string> {
   await pulumi.log.debug(`Getting the fixed [${api}] token for client [${clientId}].`);

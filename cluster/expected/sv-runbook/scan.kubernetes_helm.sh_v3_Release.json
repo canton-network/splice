@@ -52,11 +52,6 @@
         "enable": true
       },
       "participantAddress": "participant",
-      "participantClient": {
-        "adminApi": {
-          "disableAuth": false
-        }
-      },
       "persistence": {
         "postgresName": "apps-pg",
         "secretName": "apps-pg-secret"

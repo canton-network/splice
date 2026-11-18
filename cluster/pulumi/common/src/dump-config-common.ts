@@ -40,7 +40,6 @@ export class SecretsFixtureMap extends Map<string, Auth0ClientSecret> {
 const sv1Auth0Config: Auth0NamespaceConfig = {
   audiences: {
     ledgerApi: DEFAULT_AUDIENCE,
-    participantAdminApi: DEFAULT_AUDIENCE,
     svAppApi: DEFAULT_AUDIENCE,
     validatorApi: DEFAULT_AUDIENCE,
   },
@@ -58,7 +57,6 @@ const sv1Auth0Config: Auth0NamespaceConfig = {
 const svDa1Auth0Config: Auth0NamespaceConfig = {
   audiences: {
     ledgerApi: DEFAULT_AUDIENCE,
-    participantAdminApi: DEFAULT_AUDIENCE,
     svAppApi: DEFAULT_AUDIENCE,
     validatorApi: DEFAULT_AUDIENCE,
   },
@@ -76,7 +74,6 @@ const svDa1Auth0Config: Auth0NamespaceConfig = {
 const sv2Auth0Config: Auth0NamespaceConfig = {
   audiences: {
     ledgerApi: DEFAULT_AUDIENCE,
-    participantAdminApi: DEFAULT_AUDIENCE,
     svAppApi: DEFAULT_AUDIENCE,
     validatorApi: DEFAULT_AUDIENCE,
   },
@@ -94,7 +91,6 @@ const sv2Auth0Config: Auth0NamespaceConfig = {
 const sv3Auth0Config: Auth0NamespaceConfig = {
   audiences: {
     ledgerApi: DEFAULT_AUDIENCE,
-    participantAdminApi: DEFAULT_AUDIENCE,
     svAppApi: DEFAULT_AUDIENCE,
     validatorApi: DEFAULT_AUDIENCE,
   },
@@ -112,7 +108,6 @@ const sv3Auth0Config: Auth0NamespaceConfig = {
 const sv4Auth0Config: Auth0NamespaceConfig = {
   audiences: {
     ledgerApi: DEFAULT_AUDIENCE,
-    participantAdminApi: DEFAULT_AUDIENCE,
     svAppApi: DEFAULT_AUDIENCE,
     validatorApi: DEFAULT_AUDIENCE,
   },
@@ -130,7 +125,6 @@ const sv4Auth0Config: Auth0NamespaceConfig = {
 const validator1Auth0Config: Auth0NamespaceConfig = {
   audiences: {
     ledgerApi: DEFAULT_AUDIENCE,
-    participantAdminApi: DEFAULT_AUDIENCE,
     validatorApi: DEFAULT_AUDIENCE,
   },
   backendClientIds: {
@@ -147,7 +141,6 @@ const validator1Auth0Config: Auth0NamespaceConfig = {
 const splitwellAuth0Config: Auth0NamespaceConfig = {
   audiences: {
     ledgerApi: DEFAULT_AUDIENCE,
-    participantAdminApi: DEFAULT_AUDIENCE,
     validatorApi: DEFAULT_AUDIENCE,
   },
   backendClientIds: {
@@ -184,7 +177,6 @@ const svRunbookNamespacedConfigs: NamespacedAuth0Configs = {
   sv: {
     audiences: {
       ledgerApi: 'https://ledger_api.example.com', // The Ledger API in the sv-test tenant
-      participantAdminApi: 'https://participant_admin_api.example.com',
       svAppApi: 'https://sv.example.com/api', // The SV App API in the sv-test tenant
       validatorApi: 'https://validator.example.com/api', // The Validator App API in the sv-test tenant
     },

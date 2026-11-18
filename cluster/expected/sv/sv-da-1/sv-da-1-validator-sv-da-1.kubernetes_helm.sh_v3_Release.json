@@ -72,11 +72,6 @@
         },
         "nodeIdentifier": "Digital-Asset-1",
         "participantAddress": "participant",
-        "participantClient": {
-          "adminApi": {
-            "disableAuth": false
-          }
-        },
         "participantIdentitiesDumpPeriodicBackup": {
           "backupInterval": "10m",
           "location": {
