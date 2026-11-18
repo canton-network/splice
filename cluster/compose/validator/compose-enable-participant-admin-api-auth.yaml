@@ -7,7 +7,7 @@ services:
       - SPLICE_PARTICIPANT_ADMIN_API_USER=${VALIDATOR_AUTH_CLIENT_ID}@clients
       - |
         ADDITIONAL_CONFIG_ENABLE_ADMIN_API_AUTH=
-          canton.participants.participant.admin-api.auth-services=[${_admin_api_auth_service}]
+          canton.participants.participant.admin-api.auth-services=[$${_admin_api_auth_service}]
 
   validator:
     environment:
@@ -18,4 +18,4 @@ services:
       - |
         ADDITIONAL_CONFIG_ENABLE_ADMIN_API_AUTH=
           canton.validator-apps.validator_backend.participant-client.admin-api.auth-config = ""
-          canton.validator-apps.validator_backend.participant-client.admin-api.auth-config = ${_participant_client_admin_api_auth_config}
+          canton.validator-apps.validator_backend.participant-client.admin-api.auth-config = $${_participant_client_admin_api_auth_config}
