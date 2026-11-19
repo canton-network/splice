@@ -49,7 +49,7 @@ import scala.jdk.OptionConverters.*
 /** Historical vote results (exercised DsoRules_CloseVoteRequest choices).
   *
   * Owns table `votes_store_results`, and the keys `votes_store_first_ingested_record_time_<storeId>`,
-  * `votes_store_backfill_progress_<storeId>` and `votes_store_backfill_complete_<storeId>` in the
+  * `votes_store_backfill_cursor_<storeId>` and `votes_store_backfill_complete_<storeId>` in the
   * key value store.
   */
 class DbVotesStore private (
