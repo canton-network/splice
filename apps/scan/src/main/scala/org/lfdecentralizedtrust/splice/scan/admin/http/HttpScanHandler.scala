@@ -2578,6 +2578,12 @@ class HttpScanHandler(
       synchronizerId = row.synchronizerId,
       updateId = row.updateId,
       eventNumber = row.eventNumber,
+      // Failing here makes peers backfill this page from other Scans, instead of spreading the gap.
+      contractId = row.contractId.getOrElse(
+        throw new IllegalStateException(
+          s"The stored vote result at ${row.recordTime} has no contract id"
+        )
+      ),
       choiceResult = io.circe.parser
         .parse(row.choiceResult)
         .fold(

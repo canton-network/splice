@@ -46,6 +46,7 @@ class VotesStoreBackfillingTest
       "synchronizer",
       s"update-$seconds",
       eventNumber,
+      "dso-rules",
       new DsoRules_CloseVoteRequestResult(
         new VoteRequest(
           "requester",
