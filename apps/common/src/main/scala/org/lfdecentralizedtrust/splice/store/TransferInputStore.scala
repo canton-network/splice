@@ -63,7 +63,6 @@ trait TransferInputStore extends AppStore with LimitHelpers {
     } yield applyLimit(
       "listSortedValidatorRewards",
       limit,
-      // TODO(DACH-NY/canton-network-node#6119) Perform filter, sort, and limit in the database query
       rewards.view
         .filter(rw =>
           activeIssuingRoundsO match {
@@ -93,7 +92,6 @@ trait TransferInputStore extends AppStore with LimitHelpers {
       "listSortedAppRewards",
       limit,
       rewards
-        // TODO(DACH-NY/canton-network-node#6119) Perform filter, sort, and limit in the database query
         .flatMap { rw =>
           val issuingO = issuingRoundsMap.get(rw.payload.round)
           issuingO

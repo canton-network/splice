@@ -8,8 +8,8 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.synchronizer.sequencer.SequencerSnapshot as CantonSequencerSnapshot
 import com.digitalasset.canton.topology.store.StoredTopologyTransactions.GenericStoredTopologyTransactions
 import com.digitalasset.canton.topology.{PartyId, SequencerId}
-import com.google.protobuf.ByteString
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
+import org.apache.pekko.http.scaladsl.model.headers.{ByteRange, Range}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingConfirmed,
@@ -242,24 +242,15 @@ object HttpSvPublicAppClient {
     }
   }
 
-  case class OnboardSvSequencer(
+  case class OnboardSvSequencerPrepare(
       sequencerId: SequencerId
-  ) extends HttpCommand[
-        SvStreamClient.OnboardSvSequencerResponse,
-        Seq[ByteString],
-        SvStreamClient,
-      ] {
-    override val createGenClientFn = (fn, host, ec, mat) =>
-      SvStreamClient.httpClient(fn, host)(ec, mat)
+  ) extends BaseCommandPublic[http.OnboardSvSequencerPrepareResponse, SvOnboardingSnapshotId] {
 
     override def submitRequest(
         client: Client,
         headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], SvStreamClient.OnboardSvSequencerResponse] =
-      client.onboardSvSequencer(
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.OnboardSvSequencerPrepareResponse] =
+      client.onboardSvSequencerPrepare(
         body = definitions.OnboardSvSequencerRequest(
           Codec.encode(sequencerId)
         ),
@@ -267,15 +258,14 @@ object HttpSvPublicAppClient {
       )
 
     override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case SvStreamClient.OnboardSvSequencerResponse.OK(onboardingStateChunks) =>
-        Right(onboardingStateChunks.map(chunk => ByteString.copyFrom(chunk.asByteBuffer)))
-      case SvStreamClient.OnboardSvSequencerResponse.BadRequest(response) =>
-        Left(response.error)
+      case http.OnboardSvSequencerPrepareResponse.OK(response) =>
+        Right(SvOnboardingSnapshotId(response.id))
     }
   }
 
   case class OnboardSvDownload(
-      id: SvOnboardingSnapshotId
+      id: SvOnboardingSnapshotId,
+      offset: Long,
   ) extends HttpCommand[
         SvStreamClient.OnboardSvDownloadResponse,
         SvStreamClient.OnboardSvDownloadResponse,
@@ -283,6 +273,8 @@ object HttpSvPublicAppClient {
       ] {
     override val createGenClientFn = (fn, host, ec, mat) =>
       SvStreamClient.httpClient(fn, host)(ec, mat)
+
+    override val nonErrorStatusCodes = Set(StatusCodes.RangeNotSatisfiable)
 
     override def submitRequest(
         client: Client,
@@ -291,7 +283,10 @@ object HttpSvPublicAppClient {
       Throwable,
       HttpResponse,
     ], SvStreamClient.OnboardSvDownloadResponse] =
-      client.onboardSvDownload(id.value, headers = headers)
+      client.onboardSvDownload(
+        id.value,
+        headers = if (offset > 0) Range(ByteRange.fromOffset(offset)) :: headers else headers,
+      )
 
     override def handleOk()(implicit decoder: TemplateJsonDecoder) = { case response =>
       Right(response)

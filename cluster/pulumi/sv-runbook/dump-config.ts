@@ -17,7 +17,7 @@ async function main() {
   const authOClient = {
     getSecrets: () => Promise.resolve(secrets),
 
-    getClientAccessToken: (clientId: string, clientSecret: string, audience: string) =>
+    getClientFixedToken: (clientId: string, clientSecret: string, audience: string) =>
       Promise.resolve('access_token'),
     getCfg: () => svRunbookAuth0Config,
   };

@@ -12,7 +12,7 @@ import {
 } from './utils';
 
 async function auth0CacheAndInstallNode(auth0Fetch: Auth0Fetch) {
-  await auth0Fetch.loadAuth0Cache();
+  await auth0Fetch.loadFixedTokensCache();
 
   const svAppConfig = buildSvAppConfig(DISABLE_ONBOARDING_PARTICIPANT_PROMOTION_DELAY);
 
@@ -30,7 +30,7 @@ async function auth0CacheAndInstallNode(auth0Fetch: Auth0Fetch) {
     resolveValidator1PartyId
   );
 
-  await auth0Fetch.saveAuth0Cache();
+  await auth0Fetch.persistFixedTokensCache();
 }
 
 async function main() {

@@ -6,10 +6,11 @@ package org.lfdecentralizedtrust.splice.sv.onboarding.joining
 import better.files.File
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
-import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.logging.{LogEntry, SuppressionRule}
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.http.scaladsl.model.{
+  ContentRange,
   ContentTypes,
   HttpEntity,
   HttpRequest,
@@ -32,7 +33,10 @@ import org.slf4j.event.Level
 import java.io.IOException
 import java.net.ConnectException
 import java.nio.file.{Files, Path}
+import java.security.MessageDigest
 import java.time.OffsetDateTime
+import java.time.Instant
+import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
@@ -46,14 +50,52 @@ class SvOnboardingSnapshotDownloadTest
 
   private val content = "0123456789".getBytes
 
+  private def reprDigestOf(bytes: Array[Byte]) =
+    Some(
+      s"sha-256=:${Base64.getEncoder.encodeToString(MessageDigest.getInstance("SHA-256").digest(bytes))}:"
+    )
+
+  private val digest = reprDigestOf(content)
+
   private def full() =
-    OnboardSvDownloadResponse.OK(HttpEntity(ContentTypes.`application/octet-stream`, content))
+    OnboardSvDownloadResponse.OK(
+      HttpEntity(ContentTypes.`application/octet-stream`, content),
+      digest,
+    )
+
+  private def partial(
+      from: Int,
+      range: Option[ContentRange] = None,
+      reprDigest: Option[String] = digest,
+  ) =
+    OnboardSvDownloadResponse.PartialContent(
+      HttpEntity(ContentTypes.`application/octet-stream`, content.drop(from)),
+      range.orElse(Some(ContentRange(from.toLong, content.length - 1L, content.length.toLong))),
+      reprDigest,
+    )
+
+  private def corruptFull =
+    OnboardSvDownloadResponse.OK(
+      HttpEntity(ContentTypes.`application/octet-stream`, content),
+      reprDigestOf("other".getBytes),
+    )
+
+  private def corruptTail =
+    OnboardSvDownloadResponse.PartialContent(
+      HttpEntity(
+        ContentTypes.`application/octet-stream`,
+        Array.fill(content.length - 4)('x'.toByte),
+      ),
+      Some(ContentRange(4L, content.length - 1L, content.length.toLong)),
+      digest,
+    )
 
   private class Interrupted(bytes: Int) {
     private val cut = Promise[ByteString]()
     private val data = Source.single(ByteString(content.take(bytes))) ++ Source.future(cut.future)
     val response = OnboardSvDownloadResponse.OK(
-      HttpEntity.Default(ContentTypes.`application/octet-stream`, content.length.toLong, data)
+      HttpEntity.Default(ContentTypes.`application/octet-stream`, content.length.toLong, data),
+      digest,
     )
     def after(snapshotDownload: SvOnboardingSnapshotDownload, result: Future[Path]) = {
       val file = snapshotDownload.directory.resolve("snapshot")
@@ -66,21 +108,44 @@ class SvOnboardingSnapshotDownloadTest
     }
   }
 
+  private class StreamedBody(chunks: Int = 100) {
+    val pulled = new AtomicInteger()
+    private val ended = Promise[Unit]()
+    val entity = HttpEntity.Default(
+      ContentTypes.`application/octet-stream`,
+      chunks.toLong * content.length,
+      Source(1 to chunks)
+        .map { _ =>
+          pulled.incrementAndGet()
+          ByteString(content)
+        }
+        .watchTermination() { (mat, done) =>
+          done.onComplete(_ => ended.trySuccess(()))
+          mat
+        },
+    )
+    def cancelledEarly() = {
+      ended.future.futureValue
+      pulled.get() should be < chunks
+    }
+  }
+
   private class Sponsor(responses: OnboardSvDownloadResponse*) {
     private val remaining = mutable.Queue(responses*)
-    val requests = mutable.ListBuffer.empty[String]
-    def download(id: SvOnboardingSnapshotId): Future[OnboardSvDownloadResponse] = {
-      requests += id.value
+    val requests = mutable.ListBuffer.empty[(String, Long)]
+    def download(id: SvOnboardingSnapshotId, offset: Long): Future[OnboardSvDownloadResponse] = {
+      requests += id.value -> offset
       Future.successful(remaining.dequeue())
     }
   }
 
   private class UnreliableSponsor(responses: Either[Throwable, OnboardSvDownloadResponse]*) {
     private val remaining = mutable.Queue(responses*)
-    val requests = mutable.ListBuffer.empty[String]
-    val download: SvOnboardingSnapshotId => Future[OnboardSvDownloadResponse] = { id =>
-      requests += id.value
-      remaining.dequeue().fold(Future.failed, Future.successful)
+    val requests = mutable.ListBuffer.empty[(String, Long)]
+    val download: (SvOnboardingSnapshotId, Long) => Future[OnboardSvDownloadResponse] = {
+      (id, offset) =>
+        requests += id.value -> offset
+        remaining.dequeue().fold(Future.failed, Future.successful)
     }
   }
 
@@ -112,6 +177,24 @@ class SvOnboardingSnapshotDownloadTest
       retryProvider,
       quickly,
       logger,
+    )
+
+  private def prepareAndDownload(
+      snapshotDownload: SvOnboardingSnapshotDownload,
+      prepare: => Future[SvOnboardingSnapshotId],
+      downloadFrom: (SvOnboardingSnapshotId, Long) => Future[OnboardSvDownloadResponse],
+  ) =
+    retryProvider.retry(
+      quickly,
+      "prepare_and_download",
+      "prepare and download the snapshot",
+      retryProvider
+        .retry(quickly, "prepare", "prepare the snapshot", prepare, logger)
+        .flatMap(
+          snapshotDownload.downloadWithRetries(_, downloadFrom, retryProvider, quickly, logger)
+        ),
+      logger,
+      SvOnboardingSnapshotDownload.RetryOnPrepareAgain(_),
     )
 
   private def httpError(status: StatusCode) = HttpCommandException(
@@ -178,7 +261,7 @@ class SvOnboardingSnapshotDownloadTest
         Files.readAllBytes(
           downloadWithRetries(snapshotDownload, "id", sponsor).futureValue
         ) shouldBe content
-        sponsor.requests shouldBe Seq.fill(6)("id")
+        sponsor.requests shouldBe Seq.fill(6)("id" -> 0L)
     }
 
     "ask to prepare again without retrying the download when the sponsor answers 404 or 410" in withDownload {
@@ -189,7 +272,7 @@ class SvOnboardingSnapshotDownloadTest
             case e: StatusRuntimeException =>
               e.getStatus.getCode shouldBe Status.Code.FAILED_PRECONDITION
           }
-          sponsor.requests shouldBe Seq("id")
+          sponsor.requests shouldBe Seq("id" -> 0L)
         }
     }
 
@@ -201,37 +284,347 @@ class SvOnboardingSnapshotDownloadTest
           downloadWithRetries(snapshotDownload, "id", sponsor).failed.futureValue shouldBe error,
           _.warningMessage should include("non-retryable HTTP error"),
         )
-        sponsor.requests shouldBe Seq("id")
+        sponsor.requests shouldBe Seq("id" -> 0L)
     }
 
-    "prepare again with a new id when the sponsor no longer has the snapshot" in withDownload {
+    "retry prepare on its own and keep the id while the download is pending or fails" in withDownload {
       snapshotDownload =>
         val prepares = new AtomicInteger()
-        val sponsor = new UnreliableSponsor(Left(httpError(StatusCodes.Gone)), Right(full()))
-        val file = retryProvider
-          .retry(
-            quickly,
-            "prepare_and_download",
-            "prepare and download the snapshot",
-            downloadWithRetries(snapshotDownload, s"id${prepares.incrementAndGet()}", sponsor),
-            logger,
-          )
-          .futureValue
+        val sponsor = new UnreliableSponsor(
+          Right(pendingResponse(definitions.OnboardSvDownloadPendingResponse.Status.Queued)),
+          Left(httpError(StatusCodes.ServiceUnavailable)),
+          Left(new ConnectException("connection refused")),
+          Right(full()),
+        )
+        val file = prepareAndDownload(
+          snapshotDownload,
+          if (prepares.incrementAndGet() == 1)
+            Future.failed(httpError(StatusCodes.ServiceUnavailable))
+          else Future.successful(SvOnboardingSnapshotId("id")),
+          sponsor.download,
+        ).futureValue
         Files.readAllBytes(file) shouldBe content
         prepares.get() shouldBe 2
-        sponsor.requests shouldBe Seq("id1", "id2")
+        sponsor.requests shouldBe Seq.fill(4)("id" -> 0L)
     }
 
-    "download again from the start after an interrupted download" in withDownload {
+    "prepare again with a new id when the sponsor answers 404 or 410" in {
+      Seq[StatusCode](StatusCodes.NotFound, StatusCodes.Gone).foreach { status =>
+        withDownload { snapshotDownload =>
+          val prepares = new AtomicInteger()
+          val sponsor = new UnreliableSponsor(Left(httpError(status)), Right(full()))
+          val file = prepareAndDownload(
+            snapshotDownload,
+            Future.successful(SvOnboardingSnapshotId(s"id${prepares.incrementAndGet()}")),
+            sponsor.download,
+          ).futureValue
+          Files.readAllBytes(file) shouldBe content
+          prepares.get() shouldBe 2
+          sponsor.requests shouldBe Seq("id1" -> 0L, "id2" -> 0L)
+        }
+      }
+    }
+
+    "stop without retrying when prepare or download fails with another client error" in withDownload {
+      snapshotDownload =>
+        val error = httpError(StatusCodes.Unauthorized)
+        def nonRetryable(entries: Seq[LogEntry]) = {
+          entries should not be empty
+          forAll(entries)(_.warningMessage should include("non-retryable HTTP error"))
+        }
+        val prepares = new AtomicInteger()
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          prepareAndDownload(
+            snapshotDownload,
+            { prepares.incrementAndGet(); Future.failed(error) },
+            new UnreliableSponsor().download,
+          ).failed.futureValue shouldBe error,
+          nonRetryable,
+        )
+        prepares.get() shouldBe 1
+        val sponsor = new UnreliableSponsor(Left(error), Right(full()))
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          prepareAndDownload(
+            snapshotDownload,
+            { prepares.incrementAndGet(); Future.successful(SvOnboardingSnapshotId("id")) },
+            sponsor.download,
+          ).failed.futureValue shouldBe error,
+          nonRetryable,
+        )
+        prepares.get() shouldBe 2
+        sponsor.requests shouldBe Seq("id" -> 0L)
+    }
+
+    "fail without preparing again once the download retries for an id are exhausted" in withDownload {
+      snapshotDownload =>
+        val prepares = new AtomicInteger()
+        val error = httpError(StatusCodes.ServiceUnavailable)
+        val requests = mutable.ListBuffer.empty[String]
+        prepareAndDownload(
+          snapshotDownload,
+          Future.successful(SvOnboardingSnapshotId(s"id${prepares.incrementAndGet()}")),
+          (id, _) => {
+            requests += id.value
+            Future.failed(error)
+          },
+        ).failed.futureValue shouldBe error
+        prepares.get() shouldBe 1
+        requests shouldBe Seq.fill(quickly.maxRetries + 1)("id1")
+    }
+
+    "fail with the last error once the prepare retries are exhausted" in withDownload {
+      snapshotDownload =>
+        val prepares = new AtomicInteger()
+        val error = httpError(StatusCodes.ServiceUnavailable)
+        prepareAndDownload(
+          snapshotDownload,
+          { prepares.incrementAndGet(); Future.failed(error) },
+          new UnreliableSponsor().download,
+        ).failed.futureValue shouldBe error
+        prepares.get() shouldBe quickly.maxRetries + 1
+    }
+
+    "resume an interrupted download from where it stopped with the same id" in withDownload {
       snapshotDownload =>
         val id = SvOnboardingSnapshotId("id")
         val interrupted = new Interrupted(4)
-        val sponsor = new Sponsor(interrupted.response, full())
+        val sponsor = new Sponsor(interrupted.response, partial(4))
         interrupted.after(snapshotDownload, snapshotDownload.download(id, sponsor.download))
         Files.readAllBytes(
           snapshotDownload.download(id, sponsor.download).futureValue
         ) shouldBe content
-        sponsor.requests shouldBe Seq("id", "id")
+        sponsor.requests shouldBe Seq("id" -> 0L, "id" -> 4L)
+    }
+
+    "accept a full response to a resumed download" in withDownload { snapshotDownload =>
+      val id = SvOnboardingSnapshotId("id")
+      val interrupted = new Interrupted(4)
+      val sponsor = new Sponsor(interrupted.response, full())
+      interrupted.after(snapshotDownload, snapshotDownload.download(id, sponsor.download))
+      Files.readAllBytes(
+        snapshotDownload.download(id, sponsor.download).futureValue
+      ) shouldBe content
+      sponsor.requests shouldBe Seq("id" -> 0L, "id" -> 4L)
+    }
+
+    "restart from zero with the same id when a partial response does not continue the download" in {
+      val otherDigest = reprDigestOf("other".getBytes)
+      Seq(
+        partial(4, range = Some(ContentRange(5L, content.length - 1L, content.length.toLong))),
+        partial(4, range = Some(ContentRange(4L, content.length - 1L, content.length + 1L))),
+        partial(4, reprDigest = otherDigest),
+        OnboardSvDownloadResponse.PartialContent(
+          HttpEntity(ContentTypes.`application/octet-stream`, content.drop(4)),
+          None,
+          digest,
+        ),
+      ).foreach { invalid =>
+        withDownload { snapshotDownload =>
+          val id = SvOnboardingSnapshotId("id")
+          val interrupted = new Interrupted(4)
+          val sponsor = new Sponsor(interrupted.response, invalid, full())
+          interrupted.after(snapshotDownload, snapshotDownload.download(id, sponsor.download))
+          failsUnavailable(snapshotDownload.download(id, sponsor.download))
+          Files.exists(snapshotDownload.directory.resolve("snapshot")) shouldBe false
+          Files.readAllBytes(
+            snapshotDownload.download(id, sponsor.download).futureValue
+          ) shouldBe content
+          sponsor.requests shouldBe Seq("id" -> 0L, "id" -> 4L, "id" -> 0L)
+        }
+      }
+    }
+
+    "treat a range past the end as complete only after verifying the whole local file" in {
+      withDownload { snapshotDownload =>
+        val id = SvOnboardingSnapshotId("id")
+        val interrupted = new Interrupted(content.length)
+        val sponsor =
+          new Sponsor(interrupted.response, OnboardSvDownloadResponse.RangeNotSatisfiable)
+        interrupted.after(snapshotDownload, snapshotDownload.download(id, sponsor.download))
+        Files.readAllBytes(
+          snapshotDownload.download(id, sponsor.download).futureValue
+        ) shouldBe content
+        sponsor.requests shouldBe Seq("id" -> 0L, "id" -> content.length.toLong)
+      }
+      withDownload { snapshotDownload =>
+        val id = SvOnboardingSnapshotId("id")
+        val interrupted = new Interrupted(content.length)
+        val sponsor =
+          new Sponsor(interrupted.response, OnboardSvDownloadResponse.RangeNotSatisfiable, full())
+        interrupted.after(snapshotDownload, snapshotDownload.download(id, sponsor.download))
+        val file = snapshotDownload.directory.resolve("snapshot")
+        Files.write(file, "9876543210".getBytes)
+        failsUnavailable(snapshotDownload.download(id, sponsor.download))
+        Files.exists(file) shouldBe false
+        Files.readAllBytes(
+          snapshotDownload.download(id, sponsor.download).futureValue
+        ) shouldBe content
+        sponsor.requests shouldBe Seq("id" -> 0L, "id" -> content.length.toLong, "id" -> 0L)
+      }
+    }
+
+    "cancel the response bodies it rejects" in {
+      Seq(None, Some("sha-256=:not-a-digest:")).foreach { digest =>
+        withDownload { snapshotDownload =>
+          val body = new StreamedBody()
+          snapshotDownload
+            .download(
+              SvOnboardingSnapshotId("id"),
+              new Sponsor(OnboardSvDownloadResponse.OK(body.entity, digest)).download,
+            )
+            .failed
+            .futureValue shouldBe a[RetryProvider.QuietNonRetryableException]
+          body.cancelledEarly()
+        }
+      }
+      withDownload { snapshotDownload =>
+        val id = SvOnboardingSnapshotId("id")
+        val interrupted = new Interrupted(4)
+        val body = new StreamedBody()
+        val notContinuing = OnboardSvDownloadResponse.PartialContent(
+          body.entity,
+          Some(ContentRange(5L, content.length - 1L, content.length.toLong)),
+          digest,
+        )
+        val sponsor = new Sponsor(interrupted.response, notContinuing)
+        interrupted.after(snapshotDownload, snapshotDownload.download(id, sponsor.download))
+        failsUnavailable(snapshotDownload.download(id, sponsor.download))
+        body.cancelledEarly()
+      }
+    }
+
+    "cancel the response body when its download metadata cannot be written" in {
+      Seq(false, true).foreach { resume =>
+        withDownload { snapshotDownload =>
+          val id = SvOnboardingSnapshotId("id")
+          if (resume) {
+            val interrupted = new Interrupted(4)
+            interrupted.after(
+              snapshotDownload,
+              snapshotDownload.download(id, new Sponsor(interrupted.response).download),
+            )
+          }
+          val body = new StreamedBody()
+          val response: OnboardSvDownloadResponse =
+            if (resume)
+              OnboardSvDownloadResponse.PartialContent(
+                body.entity,
+                Some(ContentRange(4L, content.length - 1L, content.length.toLong)),
+                digest,
+              )
+            else OnboardSvDownloadResponse.OK(body.entity, digest)
+          val failure = snapshotDownload
+            .download(
+              id,
+              (_, _) => {
+                Files.createDirectories(snapshotDownload.directory.resolve("metadata.tmp"))
+                Future.successful(response)
+              },
+            )
+            .failed
+            .futureValue
+          failure shouldBe an[IOException]
+          body.cancelledEarly()
+        }
+      }
+    }
+
+    "stop without retrying when a full download does not match its digest" in withDownload {
+      snapshotDownload =>
+        val sponsor = new UnreliableSponsor(Right(corruptFull), Right(full()))
+        downloadWithRetries(
+          snapshotDownload,
+          "id",
+          sponsor,
+        ).failed.futureValue.getMessage should include(
+          "after a full download"
+        )
+        Files.exists(snapshotDownload.directory.resolve("snapshot")) shouldBe false
+        sponsor.requests shouldBe Seq("id" -> 0L)
+    }
+
+    "download again from the start when a resumed download does not match its digest" in withDownload {
+      snapshotDownload =>
+        val interrupted = new Interrupted(4)
+        interrupted.after(
+          snapshotDownload,
+          snapshotDownload.download(
+            SvOnboardingSnapshotId("id"),
+            new Sponsor(interrupted.response).download,
+          ),
+        )
+        val sponsor = new UnreliableSponsor(Right(corruptTail), Right(full()))
+        Files.readAllBytes(
+          downloadWithRetries(snapshotDownload, "id", sponsor).futureValue
+        ) shouldBe content
+        sponsor.requests shouldBe Seq("id" -> 4L, "id" -> 0L)
+    }
+
+    "stop when the download from the start also does not match its digest" in withDownload {
+      snapshotDownload =>
+        val interrupted = new Interrupted(4)
+        interrupted.after(
+          snapshotDownload,
+          snapshotDownload.download(
+            SvOnboardingSnapshotId("id"),
+            new Sponsor(interrupted.response).download,
+          ),
+        )
+        val sponsor = new UnreliableSponsor(Right(corruptTail), Right(corruptFull), Right(full()))
+        downloadWithRetries(
+          snapshotDownload,
+          "id",
+          sponsor,
+        ).failed.futureValue.getMessage should include(
+          "after a full download"
+        )
+        sponsor.requests shouldBe Seq("id" -> 4L, "id" -> 0L)
+    }
+
+    "accept an unpadded digest and a digest listed with other algorithms" in withDownload {
+      snapshotDownload =>
+        def base64(algorithm: String) =
+          Base64.getEncoder.encodeToString(MessageDigest.getInstance(algorithm).digest(content))
+        Seq(
+          s"sha-256=:${base64("SHA-256").stripSuffix("=")}:",
+          s"sha-512=:${base64("SHA-512")}:, sha-256=:${base64("SHA-256")}:",
+        ).zipWithIndex.foreach { case (header, index) =>
+          val response = OnboardSvDownloadResponse.OK(
+            HttpEntity(ContentTypes.`application/octet-stream`, content),
+            Some(header),
+          )
+          Files.readAllBytes(
+            snapshotDownload
+              .download(SvOnboardingSnapshotId(s"id$index"), new Sponsor(response).download)
+              .futureValue
+          ) shouldBe content
+        }
+    }
+
+    "fail without retrying when the digest is missing or invalid" in withDownload {
+      snapshotDownload =>
+        Seq(
+          None -> "is missing the required Repr-Digest header",
+          Some("sha-256=:not-a-digest:") -> "has an invalid SHA-256 Repr-Digest header",
+        ).foreach { case (header, reason) =>
+          val sponsor = new UnreliableSponsor(
+            Right(
+              OnboardSvDownloadResponse.OK(
+                HttpEntity(ContentTypes.`application/octet-stream`, content),
+                header,
+              )
+            ),
+            Right(full()),
+          )
+          downloadWithRetries(
+            snapshotDownload,
+            "id",
+            sponsor,
+          ).failed.futureValue.getMessage should include(
+            reason
+          )
+          sponsor.requests shouldBe Seq("id" -> 0L)
+        }
     }
 
     "download the whole snapshot" in withDownload { snapshotDownload =>
@@ -239,7 +632,7 @@ class SvOnboardingSnapshotDownloadTest
       val file =
         snapshotDownload.download(SvOnboardingSnapshotId("id"), sponsor.download).futureValue
       Files.readAllBytes(file) shouldBe content
-      sponsor.requests shouldBe Seq("id")
+      sponsor.requests shouldBe Seq("id" -> 0L)
     }
 
     "recreate the download directory if cleanup removes it while waiting" in withDownload {
@@ -291,16 +684,16 @@ class SvOnboardingSnapshotDownloadTest
         val id = SvOnboardingSnapshotId("id")
         val first = downloader.download(id, new Sponsor(full()).download).futureValue
         val reused = downloader
-          .download(id, _ => fail("must not download the completed snapshot again"))
+          .download(id, (_, _) => fail("must not download the completed snapshot again"))
           .futureValue
         reused shouldBe first
         Files.readAllBytes(reused) shouldBe content
         val changed = new Sponsor(full())
         downloader.download(SvOnboardingSnapshotId("new-id"), changed.download).futureValue
-        changed.requests shouldBe Seq("new-id")
+        changed.requests shouldBe Seq("new-id" -> 0L)
       }
 
-    "redownload an incomplete or truncated snapshot after restart" in File
+    "resume an interrupted download after restart and redownload a changed complete file" in File
       .usingTemporaryDirectory() { directory =>
         val config = SvOnboardingSnapshotsConfig(directory.path)
         def downloader = SvOnboardingSnapshotDownload(config, "acs")
@@ -308,12 +701,14 @@ class SvOnboardingSnapshotDownloadTest
         val interrupted = new Interrupted(4)
         val first = downloader
         interrupted.after(first, first.download(id, new Sponsor(interrupted.response).download))
-        val complete = downloader.download(id, new Sponsor(full()).download).futureValue
+        val resumed = new Sponsor(partial(4))
+        val complete = downloader.download(id, resumed.download).futureValue
         Files.readAllBytes(complete) shouldBe content
+        resumed.requests shouldBe Seq("id" -> 4L)
         Files.write(complete, Array[Byte](1))
         val sponsor = new Sponsor(full())
         Files.readAllBytes(downloader.download(id, sponsor.download).futureValue) shouldBe content
-        sponsor.requests shouldBe Seq("id")
+        sponsor.requests shouldBe Seq("id" -> 0L)
       }
 
     "redownload when completion metadata is corrupt or expired" in File.usingTemporaryDirectory() {
@@ -324,33 +719,40 @@ class SvOnboardingSnapshotDownloadTest
         val first = downloader
         first.download(id, new Sponsor(full()).download).futureValue
         val metadata = first.directory.resolve("metadata.json")
-        Seq("not json", """{"id":"id","createdAt":"1970-01-01T00:00:00Z","size":10}""").foreach {
-          invalid =>
-            Files.writeString(metadata, invalid)
-            val sponsor = new Sponsor(full())
-            Files.readAllBytes(
-              downloader.download(id, sponsor.download).futureValue
-            ) shouldBe content
-            sponsor.requests shouldBe Seq("id")
+        Seq(
+          "not json",
+          s"""{"id":"id","createdAt":"1970-01-01T00:00:00Z","state":{"Complete":{"sha256Base64":"${Base64.getEncoder
+              .encodeToString(
+                MessageDigest.getInstance("SHA-256").digest(content)
+              )}","size":10}}}""",
+          s"""{"id":"id","createdAt":"${Instant
+              .now()}","state":{"Receiving":{"sha256Base64":"not-base64!","length":10}}}""",
+        ).foreach { invalid =>
+          Files.writeString(metadata, invalid)
+          val sponsor = new Sponsor(full())
+          Files.readAllBytes(
+            downloader.download(id, sponsor.download).futureValue
+          ) shouldBe content
+          sponsor.requests shouldBe Seq("id" -> 0L)
         }
     }
 
-    "not reuse a response that ended before its declared length" in withDownload {
-      snapshotDownload =>
-        val short = OnboardSvDownloadResponse.OK(
-          HttpEntity.Default(
-            ContentTypes.`application/octet-stream`,
-            content.length.toLong,
-            Source.single(ByteString(content.take(4))),
-          )
-        )
-        val id = SvOnboardingSnapshotId("id")
-        failsUnavailable(snapshotDownload.download(id, new Sponsor(short).download))
-        val sponsor = new Sponsor(full())
-        Files.readAllBytes(
-          snapshotDownload.download(id, sponsor.download).futureValue
-        ) shouldBe content
-        sponsor.requests shouldBe Seq("id")
+    "resume a response that ended before its declared length" in withDownload { snapshotDownload =>
+      val short = OnboardSvDownloadResponse.OK(
+        HttpEntity.Default(
+          ContentTypes.`application/octet-stream`,
+          content.length.toLong,
+          Source.single(ByteString(content.take(4))),
+        ),
+        digest,
+      )
+      val id = SvOnboardingSnapshotId("id")
+      failsUnavailable(snapshotDownload.download(id, new Sponsor(short).download))
+      val sponsor = new Sponsor(partial(4))
+      Files.readAllBytes(
+        snapshotDownload.download(id, sponsor.download).futureValue
+      ) shouldBe content
+      sponsor.requests shouldBe Seq("id" -> 4L)
     }
   }
 }

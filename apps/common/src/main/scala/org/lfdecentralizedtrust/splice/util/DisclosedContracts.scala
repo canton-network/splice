@@ -38,7 +38,6 @@ sealed abstract class DisclosedContracts {
 
   /** Overwrite the domain id with the domain id of the disclosed contracts as those cannot be reassigned.
     */
-  // TODO(DACH-NY/canton-network-node#13713) Remove this once our domain selection logic works properly with soft domain migrations
   private[splice] def overwriteDomain(target: SynchronizerId): SynchronizerId
 
   /** Throw if any contracts with known state are not assigned to `synchronizerId`.

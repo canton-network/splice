@@ -227,7 +227,6 @@ class DbSplitwellStore private (
             splitwellCodegen.Group.COMPANION
           )(_)
         )
-        // TODO(DACH-NY/canton-network-node#9249): filter on the database side
         filteredResult = result.filter(c => groupMembers(c.payload).contains(user.toProtoPrimitive))
       } yield filteredResult
     }
@@ -308,7 +307,6 @@ class DbSplitwellStore private (
           splitwellCodegen.BalanceUpdate.COMPANION
         )(_)
       )
-      // TODO(DACH-NY/canton-network-node#9249): filter on the database side
       filteredResult = result.filter(c =>
         groupMembers(c.payload.group).contains(user.toProtoPrimitive)
       )
@@ -340,7 +338,6 @@ class DbSplitwellStore private (
         splitwellCodegen.SplitwellInstall.COMPANION,
         preferredId,
       )
-      // TODO(DACH-NY/canton-network-node#9249): filter on the database side
       .map(_.filter(co => allGroupMembers(co.payload.user)))
       .map(_.view.map(_.payload.user).toSet)
   } yield othersGroups.collect(Function unlift { case (otherId, groups) =>

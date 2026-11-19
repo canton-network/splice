@@ -8,7 +8,7 @@ function setup(maxLimit: number) {
   const limits: number[] = [];
   const concurrency = new AdaptiveConcurrency(
     maxLimit,
-    30_000,
+    90_000,
     60_000,
     (l) => limits.push(l),
     () => time,
@@ -33,20 +33,23 @@ describe("AdaptiveConcurrency", () => {
     expect(concurrency.limit).toBe(20);
   });
 
-  it("halves on failure and only once per cooldown", () => {
+  it("decreases by at most 10% on failure and only once per cooldown", () => {
     const { concurrency, advance } = setup(20);
     for (let i = 0; i < 19; i++) {
       concurrency.recordSuccess();
     }
     concurrency.recordFailure();
-    expect(concurrency.limit).toBe(10);
+    expect(concurrency.limit).toBe(18);
     concurrency.recordFailure();
-    expect(concurrency.limit).toBe(10);
-    advance(30_000);
+    expect(concurrency.limit).toBe(18);
+    advance(89_999);
     concurrency.recordFailure();
-    expect(concurrency.limit).toBe(5);
-    for (let i = 0; i < 4; i++) {
-      advance(30_000);
+    expect(concurrency.limit).toBe(18);
+    advance(1);
+    concurrency.recordFailure();
+    expect(concurrency.limit).toBe(17);
+    for (let i = 0; i < 20; i++) {
+      advance(90_000);
       concurrency.recordFailure();
     }
     expect(concurrency.limit).toBe(1);
@@ -58,18 +61,18 @@ describe("AdaptiveConcurrency", () => {
       concurrency.recordSuccess();
     }
     concurrency.recordFailure();
-    expect(concurrency.limit).toBe(5);
+    expect(concurrency.limit).toBe(9);
     for (let i = 0; i < 10; i++) {
       concurrency.recordSuccess();
     }
-    expect(concurrency.limit).toBe(5);
+    expect(concurrency.limit).toBe(9);
     advance(60_000);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       concurrency.recordSuccess();
     }
-    expect(concurrency.limit).toBe(5);
+    expect(concurrency.limit).toBe(9);
     concurrency.recordSuccess();
-    expect(concurrency.limit).toBe(6);
+    expect(concurrency.limit).toBe(10);
   });
 
   it("reports every change", () => {
@@ -77,6 +80,6 @@ describe("AdaptiveConcurrency", () => {
     concurrency.recordSuccess();
     concurrency.recordSuccess();
     concurrency.recordFailure();
-    expect(limits).toEqual([1, 2, 3, 1]);
+    expect(limits).toEqual([1, 2, 3, 2]);
   });
 });

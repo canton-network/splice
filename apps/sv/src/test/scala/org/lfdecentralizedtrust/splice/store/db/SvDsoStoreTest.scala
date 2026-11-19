@@ -517,6 +517,27 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
 
+    "lookupFeaturedAppRightWithOffset with several rights for the provider" should {
+      "return the newest one, breaking ties by contract id" in {
+        val t1 = Instant.parse("2024-03-01T10:00:00Z")
+        val t2 = t1.plusSeconds(1)
+        val older = featuredAppRight(userParty(1), validContractId(1)).copy(createdAt = t1)
+        val newerHighCid =
+          featuredAppRight(userParty(1), validContractId(3)).copy(createdAt = t2)
+        val newerLowCid =
+          featuredAppRight(userParty(1), validContractId(2)).copy(createdAt = t2)
+        val otherProvider =
+          featuredAppRight(userParty(2), validContractId(4)).copy(createdAt = t2.plusSeconds(1))
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(newerHighCid, older, newerLowCid, otherProvider))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.lookupFeaturedAppRightWithOffset(userParty(1))
+        } yield result.value.map(_.contract) shouldBe Some(newerLowCid)
+      }
+    }
+
     "findFeaturedAppRightsForParties" should {
       "return empty when the query set is empty" in {
         for {

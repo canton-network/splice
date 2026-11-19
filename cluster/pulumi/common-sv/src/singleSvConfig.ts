@@ -91,7 +91,8 @@ export const ScanBigQueryConfigSchema = z
     silverDataset: z.string().optional(),
     goldDataset: z.string().optional(),
     enableLegacyDatastream: z.boolean().default(true),
-    enableStagProdDatastream: z.boolean().default(false),
+    enableStagProdDatastream: z.boolean().default(true),
+    useProdDataForFunctions: z.boolean().default(false),
     legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     retentionPeriodSeconds: z

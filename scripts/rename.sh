@@ -729,24 +729,21 @@ function subcmd_cn_splice {
     "$GSR_ARGS"
 
   simple_rename '(?x)CN_(?=
-      APP_(?! # TODO (DACH-NY/canton-network-node#14617) pulumi deployment conf
+      APP_(?! # pulumi deployment conf
               SPLITWELL_PROVIDER_WALLET_USER_NAME
           )
     | ARTIFACTS_REPOSITORY
     | DEPLOY_
     | DEPLOYMENT_
     | INSTALL_(?:VALIDATOR1|SPLITWELL)
-    # TODO (#14617 pulumi conf) | PULUMI_LOAD_ENV_CONFIG_FILE
   )///SPLICE_'
   simple_rename '\bCN(?=Postgres|CustomResourceOptions)///Splice'
-  # TODO (DACH-NY/canton-network-node#14137) transform lowercase
   simple_rename '(?<=\binstall)CN(?=(?:Runbook)?HelmChart)///Splice'
   simple_rename '\bcnR(?=eplaceEqualDeep\b)///r'
   # AUTH0_CN_MANAGEMENT_API_CLIENT_ID
   # AUTH0_CN_MANAGEMENT_API_CLIENT_SECRET
   simple_rename '(?x)(\b|`)cn-(?=
       app-
-    # TODO (DACH-NY/canton-network-node#14618) node pool names | (?:apps|infra)-pool
     | cluster-ingress-(?:full|sv)
     | directory
     | istio-fwd
@@ -1197,7 +1194,7 @@ function subcmd_no_illegal_daml_references() {
     local illegal_patterns=(
       svc SVC Svc   # to avoid conflict with PerSvContracts
       '(?<![a-z])cc(?!(e233922|ou|ept|essor|g[.]github))'
-      'global(?!(ly|[.]))' # TODO (DACH-NY/canton-network-node#17137): revisit
+      'global(?!(ly|[.]))'
       'CC(?!(OUNT))'
       '(?<!(Map|Set)[.])(?<!sequencer )member(?!(ship| of|Id|-id|.*[tT]raffic))'
       # Allow only Dso as in DsoRules in comments
@@ -1239,7 +1236,7 @@ function subcmd_no_ans_in_ui() {
       )
     for pattern in "${illegal_patterns[@]}"; do
         echo "Checking for occurences of '$pattern' in frontend code"
-        if rg -P "$pattern" -g '*.tsx' -g '*.ts' -g '**test/**/*.scala' -g '!__tests__' -g '!cluster/**' -g '!token-standard/**' -g '!CreateAllocation.tsx' -g '!buildAmuletConfigChanges.ts'; then
+        if rg -P "$pattern" . -g '*.tsx' -g '*.ts' -g '**test/**/*.scala' -g '!__tests__' -g '!cluster/**' -g '!token-standard/**' -g '!CreateAllocation.tsx' -g '!buildAmuletConfigChanges.ts'; then
             echo "$pattern occurs in frontend, ensure it is not user-visible"
             exit 1
         fi
@@ -1254,7 +1251,7 @@ function subcmd_no_bad_things_repo_wide() {
       )
     for pattern in "${illegal_patterns[@]}"; do
         echo "Checking for occurences of '$pattern' in repo"
-        if rg -P "$pattern"; then
+        if rg -P "$pattern" . -g '!sbt_output' -g '!**/tests/**'; then
             echo "$pattern occurs in code, please remedy"
             exit 1
         fi

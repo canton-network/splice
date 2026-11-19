@@ -117,9 +117,28 @@ function backup_cloudsql() {
       if [[ $output == *"another operation was already in progress"* ]]; then
         _error_msg "Backup failed due to another operation in progress, retrying: $output"
       elif [[ $output == *"is taking longer than expected. You can continue waiting for the operation by running"* ]]; then
+        # The backup is still running server-side; gcloud just stopped waiting for it client-side.
+        # Wait for that same operation rather than creating another backup with the same description
+        # (which would leave duplicate backups and break wait_for_cloudsql_backup).
         _info "Backup is taking longer than expected, awaiting operation completion..."
         op_id=$(echo "$output" | grep -oE 'operations/[a-f0-9-]+' | cut -d/ -f2)
-        gcloud beta sql operations wait "$op_id" --timeout=3000
+        # Keep waiting on this same operation until it is DONE; never start a second backup while it runs
+        local -i waits=0
+        while true; do
+          set +e
+          gcloud beta sql operations wait "$op_id" --timeout=3000
+          op_status=$(gcloud sql operations describe "$op_id" --format='value(status)')
+          op_error=$(gcloud sql operations describe "$op_id" --format='value(error)')
+          set -e
+          [ "$op_status" == "DONE" ] && break
+          (( ++waits >= 3 )) && _error "Backup operation $op_id still ${op_status:-in unknown state} after $waits waits, giving up"
+          _info "Backup operation $op_id still ${op_status:-in unknown state}, waiting again..."
+        done
+        if [ -z "$op_error" ]; then
+          echo "Backup succeeded"
+          return 0
+        fi
+        _error_msg "Backup operation $op_id failed: $op_error, retrying"
       else
         _error_msg "$output"
       fi
@@ -150,10 +169,10 @@ function wait_for_cloudsql_backup() {
   while true; do
     backup=$(gcloud sql backups list --instance "$db_id" --filter="description=\"$RUN_ID\"" --format=json)
     _info "$(date -u --iso-8601=seconds) backups list: $backup"
-    status=$(echo "$backup" | jq -r '.[].status')
-    id=$(echo "$backup" | jq -r '.[].id')
+    # More than one backup can carry this description (e.g. if a create was retried), so look for any successful one
+    id=$(echo "$backup" | jq -r '[.[] | select(.status == "SUCCESSFUL")][0].id // empty')
 
-    if [ "$status" == "SUCCESSFUL" ]; then
+    if [ -n "$id" ]; then
       _info "Backup of $description ready! Backup ID: $id "
       break
     else
@@ -266,7 +285,6 @@ function main() {
   local config
   config=$(get_resolved_config)
 
-  # TODO(#9361): support multiple domains / non-default-ID'd ones
   if [ "$1" == "validator" ]; then
     _info "Backing up validator $namespace"
     backup_component "$namespace" "validator" "$requested_component" "$migration_id"

@@ -48,7 +48,7 @@ async function main() {
   await withDumpConfigStack(validatorName, () =>
     installNode.installNode({
       getSecrets: () => Promise.resolve(secrets),
-      getClientAccessToken: (clientId: string, clientSecret: string, audience: string) =>
+      getClientFixedToken: (clientId: string, clientSecret: string, audience: string) =>
         Promise.resolve('access_token'),
       getCfg: () => auth0Cfg,
     })

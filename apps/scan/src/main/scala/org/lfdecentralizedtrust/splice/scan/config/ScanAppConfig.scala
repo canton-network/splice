@@ -110,6 +110,7 @@ case class ScanAppBackendConfig(
     // Whether each ACS snapshot should be stored in its own table
     perAcsSnapshotTablesEnabled: Boolean = false,
     analyzableTimeWindow: AnalyzableTimeWindowConfig = AnalyzableTimeWindowConfig(),
+    pruning: ScanPruningConfig = ScanPruningConfig(),
     // The migration id is normally read from the DB (the highest known migration id in the
     // update history). It only needs to be resolved from a sponsor to bootstrap a node that does
     // not yet have any migration id in its DB (e.g. a freshly joining scan). In that case, the
@@ -143,8 +144,7 @@ case class ScanAppBackendConfig(
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig
-    with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
-    {
+    with BaseScanAppConfig {
   override val nodeTypeName: String = "scan"
 
   override def clientAdminApi: ClientConfig = adminApi.clientConfig
@@ -164,6 +164,14 @@ object AnalyzableTimeWindowConfig {
     NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf)
 
 }
+
+final case class ScanPruningConfig(
+    snapshots: ScanSnapshotPruningConfig = ScanSnapshotPruningConfig()
+)
+
+final case class ScanSnapshotPruningConfig(
+    enabled: Boolean = false
+)
 
 final case class ScanRollForwardLsuConfig(
     upgradeTime: Option[

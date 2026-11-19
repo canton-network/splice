@@ -31,16 +31,19 @@ import org.scalatest.Succeeded
 
 import java.time.Instant
 import scala.concurrent.Future
+import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 import StoreTestBase.*
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   IncrementalAcsSnapshotTable,
-  PerTableAcsSnapshot,
+  AcsSnapshot,
 }
+import org.lfdecentralizedtrust.splice.scan.automation.PruneAcsSnapshotsTrigger
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
+import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
-trait AcsSnapshotStoreTest
+trait AcsSnapshotStoreTests
     extends StoreTestBase
     with HasExecutionContext
     with StoreErrors
@@ -68,7 +71,7 @@ trait AcsSnapshotStoreTest
       snapshotRecordTime,
     )
     _ <- snapshot match {
-      case Some(snapshot: PerTableAcsSnapshot) =>
+      case Some(snapshot: AcsSnapshot) =>
         store.indexSnapshotStakeholdersTable(snapshot)
       case Some(_) => Future.unit
       case None =>
@@ -1529,7 +1532,7 @@ trait AcsSnapshotStoreTest
   }
 }
 
-class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
+class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTests {
   override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.Next
 
   "same-contract rows have consecutive row_ids" in {
@@ -1575,8 +1578,59 @@ class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
 
 }
 
-class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
+class AcsSnapshotStoreTest extends AcsSnapshotStoreTests {
   override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.NextV2
+
+  "snapshot pruning" should {
+
+    "drop the snapshots before the analyzable time window, except the bulk storage ones" in {
+      val day = CantonTimestamp.Epoch add 1.day
+      val dailyBefore = day
+      val threeHourly = Seq(day add 3.hours, day add 6.hours)
+      val insideAtw = day add 1.day
+      val startAtw = day add 12.hours
+      for {
+        updateHistory <- mkUpdateHistory()
+        store = mkStore(updateHistory)
+        otherHistory <- mkUpdateHistory(participantId = "other")
+        otherStore = mkStore(otherHistory)
+        _ <- MonadUtil.sequentialTraverse(dailyBefore +: threeHourly :+ insideAtw) { timestamp =>
+          for {
+            _ <- ingestCreate(
+              updateHistory,
+              openMiningRound(dsoParty, 0L, 1.0),
+              timestamp.minusSeconds(1L),
+            )
+            _ <- store.insertNewSnapshot(nextTable, DefaultMigrationId, timestamp)
+          } yield ()
+        }
+        _ <- ingestCreate(
+          otherHistory,
+          openMiningRound(dsoParty, 0L, 1.0),
+          threeHourly.head.minusSeconds(1L),
+        )
+        _ <- otherStore.insertNewSnapshot(nextTable, DefaultMigrationId, threeHourly.head)
+        beforeAtw <- store.lookupSnapshotsBefore(startAtw)
+        prunable = PruneAcsSnapshotsTrigger.prunable(beforeAtw, scanStorageConfigV1)
+        _ <- MonadUtil.sequentialTraverse(prunable)(store.deleteSnapshot(_))
+        remaining <- store.lookupSnapshotsBefore(CantonTimestamp.MaxValue)
+        otherRemaining <- otherStore.lookupSnapshotsBefore(CantonTimestamp.MaxValue)
+      } yield {
+        (
+          beforeAtw.map(_.snapshotRecordTime) shouldBe (dailyBefore +: threeHourly)
+        ) withClue "snapshots before the analyzable time window"
+        (
+          prunable.map(_.snapshotRecordTime) shouldBe threeHourly
+        ) withClue "prunable snapshots"
+        (
+          remaining.map(_.snapshotRecordTime) shouldBe Seq(dailyBefore, insideAtw)
+        ) withClue "snapshots left after pruning"
+        (
+          otherRemaining.map(_.snapshotRecordTime) shouldBe Seq(threeHourly.head)
+        ) withClue "snapshots of another history"
+      }
+    }
+  }
 
   "initialize from legacy snapshot" in {
     val c1 = amuletRules()
