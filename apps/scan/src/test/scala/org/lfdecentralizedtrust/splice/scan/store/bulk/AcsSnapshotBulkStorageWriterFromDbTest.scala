@@ -23,7 +23,23 @@ import io.grpc.StatusRuntimeException
 import org.apache.pekko.actor.Cancellable
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
-import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
+import com.daml.ledger.javaapi.data.Identifier
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.LockedAmulet
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.Transfer
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{Reason, Vote, VoteRequest}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.{
+  ValidatorLicense,
+  ValidatorLicenseMetadata,
+}
+import org.lfdecentralizedtrust.splice.environment.{
+  DarResource,
+  DarResources,
+  RetryProvider,
+  SpliceMetrics,
+}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
   LedgerApiJsonScanHttpEncodings,
@@ -49,7 +65,7 @@ import org.lfdecentralizedtrust.splice.store.{
   TimestampWithMigrationId,
   UpdateHistory,
 }
-import org.lfdecentralizedtrust.splice.util.PackageQualifiedName
+import org.lfdecentralizedtrust.splice.util.{Contract, PackageQualifiedName}
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito
 import org.mockito.invocation.InvocationOnMock
@@ -57,7 +73,9 @@ import org.slf4j.event.Level
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
+import scala.collection.immutable.ListMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
@@ -135,7 +153,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                     "NVjKR3wSk4pcjymL65acvvp9Rhhvx+W7Qsp8Ct/YvuA=",
                     "ZPiWc4C64H19fO1Wk06zuyAFu6T7mC9nWcinRarDx1w=",
                     "r2kvpv122uaKVAfCoSxr0vvvQRmRwsNcJZM78dqH2Oo=",
-                    "9t2rduH6EfB9JkGmDMP9MC7mPu82IP4aH3Dfb8mJgNY=",
+                    "ruAsbZ1/4M+9Ik9enNWLMiIaLPCRB7BWO6xjqJqlTSg=",
                   ),
                 )
               case ScanStorageConfig.Encoding.ProtobufJson =>
@@ -154,7 +172,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                     "HLTy9EtFCSxEnGw43IqsnqKijFlpNGw2nTBNFwQK6/Q=",
                     "MVselLUvB3xCmC8ZOMcs2fB1a39VvkFTX3EtXvxg43g=",
                     "VWhtLyuY5SZXpc+G7mYyyOM+iJ/8B1v2r5pWH4C23Ps=",
-                    "nMOuy1YOx7nw6uuT+0CtpEKkdz71ZF7i4Erqlz1OyqI=",
+                    "4ja3jpDqGt+PT5kmlBaExE4O/JfaOcoqXpx6CW4scNg=",
                   ),
                 )
             }
@@ -489,6 +507,97 @@ class AcsSnapshotBulkStorageWriterFromDbTest
       updateHistory
     }
 
+    /** The last contracts of each snapshot. Almost all contracts of a snapshot are amulets, for which
+      * all human-readable encodings of Daml values produce the same JSON. These contracts cover the
+      * cases where the encodings differ or could differ: numeric values that are zero, optional
+      * fields that are null (trailing or followed by other fields), variants, and maps.
+      * All package ids are fixed, such that the digests do not change with new package versions.
+      */
+    private val specialContracts: Seq[String => Contract[?, ?]] = {
+      val alice = mkPartyId("alice")
+      val bob = mkPartyId("bob")
+      val time = Instant.parse("2026-01-01T00:00:00Z")
+      def fixedPackageId(version: DarResource, templateId: Identifier) =
+        new Identifier(version.packageId, templateId.getModuleName, templateId.getEntityName)
+      Seq(
+        // Numeric values that are zero
+        cid =>
+          amulet(
+            alice,
+            BigDecimal(0),
+            0L,
+            BigDecimal(0),
+            contractId = cid,
+            version = DarResources.amulet_0_1_17,
+          ),
+        // A null field followed by other fields (faucetState), and a trailing null field (lastActiveAt)
+        cid =>
+          contract(
+            fixedPackageId(DarResources.amulet_0_1_17, ValidatorLicense.TEMPLATE_ID),
+            new ValidatorLicense.ContractId(cid),
+            new ValidatorLicense(
+              alice.toProtoPrimitive,
+              bob.toProtoPrimitive,
+              dsoParty.toProtoPrimitive,
+              Optional.empty(),
+              Optional.of(new ValidatorLicenseMetadata(time, "0.1.0", "alice@example.com")),
+              Optional.empty(),
+            ),
+          ),
+        // A variant (action), a map with parties as keys (votes), a null field followed by other fields
+        // (trackingCid), and a trailing null field in a nested record (optCastAt)
+        cid =>
+          contract(
+            fixedPackageId(DarResources.dsoGovernance_0_1_29, VoteRequest.TEMPLATE_ID),
+            new VoteRequest.ContractId(cid),
+            new VoteRequest(
+              dsoParty.toProtoPrimitive,
+              alice.toProtoPrimitive,
+              addUser666Action,
+              new Reason("https://www.example.com", ""),
+              time,
+              ListMap(
+                alice.toProtoPrimitive -> new Vote(
+                  alice.toProtoPrimitive,
+                  true,
+                  new Reason("", "yes"),
+                  Optional.empty(),
+                ),
+                bob.toProtoPrimitive -> new Vote(
+                  bob.toProtoPrimitive,
+                  false,
+                  new Reason("", "no"),
+                  Optional.of(time),
+                ),
+              ).asJava,
+              Optional.empty(),
+              Optional.of(time),
+            ),
+          ),
+        // A map with text as keys (meta)
+        cid =>
+          contract(
+            fixedPackageId(DarResources.amulet_0_1_17, AmuletTransferInstruction.TEMPLATE_ID),
+            new AmuletTransferInstruction.ContractId(cid),
+            new AmuletTransferInstruction(
+              new LockedAmulet.ContractId(
+                LfContractId.assertFromString("00" + "f" * 64).coid
+              ),
+              new Transfer(
+                alice.toProtoPrimitive,
+                bob.toProtoPrimitive,
+                numeric(BigDecimal(0)),
+                new InstrumentId(dsoParty.toProtoPrimitive, "Amulet"),
+                time,
+                time.plus(1, ChronoUnit.DAYS),
+                java.util.List.of(),
+                new Metadata(ListMap("key1" -> "value1", "key2" -> "").asJava),
+              ),
+            ),
+          ),
+      )
+    }
+
     def mockAcsSnapshotStore(snapshotSize: Int): AcsSnapshotStore = {
       val store = mock[AcsSnapshotStore]
       val partyId = mkPartyId("alice")
@@ -535,18 +644,23 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                   .range(0, numElems)
                   .map(i => {
                     val idx = i + afterAsLong
-                    val amt = amulet(
-                      partyId,
-                      BigDecimal(idx),
-                      0L,
-                      BigDecimal(0.1),
-                      contractId = LfContractId.assertFromString("00" + f"$idx%064x").coid,
-                      version = DarResources.amulet_0_1_17, // ensure packageid determinism
-                    )
+                    val contractId = LfContractId.assertFromString("00" + f"$idx%064x").coid
+                    val contract = specialContracts
+                      .lift((snapshotSize - 1 - idx).toInt)
+                      .fold[Contract[?, ?]](
+                        amulet(
+                          partyId,
+                          BigDecimal(idx),
+                          0L,
+                          BigDecimal(0.1),
+                          contractId = contractId,
+                          version = DarResources.amulet_0_1_17, // ensure packageid determinism
+                        )
+                      )(_(contractId))
                     SpliceCreatedEvent(
                       s"#event_id_$idx:1",
-                      CantonTimestamp.assertFromInstant(amt.createdAt),
-                      toCreatedEvent(amt),
+                      CantonTimestamp.assertFromInstant(contract.createdAt),
+                      toCreatedEvent(contract),
                     )
                   }),
                 if (numElems < remaining)
