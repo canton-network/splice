@@ -15,6 +15,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   PackageConfig,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_SetConfig
+import org.lfdecentralizedtrust.splice.sv.automation.singlesv.AmuletRulesContractStateMigrationTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyconfigstate.ExternalPartyConfigState
@@ -47,6 +48,7 @@ import org.scalatest.time.{Minute, Span}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import scala.concurrent.duration.DurationInt
+import scala.jdk.OptionConverters.*
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck
 class BootstrapPackageConfigIntegrationTest
@@ -371,6 +373,26 @@ class BootstrapPackageConfigIntegrationTest
       eventually() {
         sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
           .filterJava(ExternalPartyConfigState.COMPANION)(dsoParty) should have size 2
+      }
+    }
+
+    if (
+      DarResources.amulet.latest.metadata.version >= DarResources.amulet_0_1_26.metadata.version
+    ) {
+      clue(
+        "AmuletRules is migrated to the latestContractStateSchemaVersion"
+      ) {
+        eventually() {
+          sv1Backend
+            .getDsoInfo()
+            .amuletRules
+            .payload
+            .contractStateSchemaVersion
+            .toScala
+            .map(_.longValue) shouldBe Some(
+            AmuletRulesContractStateMigrationTrigger.latestContractStateSchemaVersion
+          )
+        }
       }
     }
 

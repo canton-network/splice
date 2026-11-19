@@ -608,6 +608,14 @@ class SvDsoAutomationService(
         dsoStore,
       )
     )
+    registerTrigger(
+      new AmuletRulesContractStateMigrationTrigger(
+        triggerContext,
+        dsoStore,
+        connection(SpliceLedgerConnectionPriority.Low),
+        packageVersionSupport,
+      )
+    )
 
     registerTrigger(
       new PublishScanConfigTrigger(
@@ -769,6 +777,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[AmuletPriceMetricsTrigger],
       aTrigger[VoteRequestMetricsTrigger],
       aTrigger[RewardMetricsTrigger],
+      aTrigger[AmuletRulesContractStateMigrationTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
       aTrigger[LsuTrigger],
       aTrigger[LsuAnnouncementTrigger],
