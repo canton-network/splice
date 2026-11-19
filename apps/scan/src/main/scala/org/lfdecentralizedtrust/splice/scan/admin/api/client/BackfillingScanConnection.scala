@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.{
-  PeerVoteResult,
+  EncodedPeerVoteResult,
   VotesBackfillCursor,
 }
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
@@ -39,5 +39,5 @@ trait BackfillingScanConnection extends FlagCloseableAsync {
   def getVotesBefore(
       before: VotesBackfillCursor,
       count: Int,
-  )(implicit tc: TraceContext): Future[Seq[PeerVoteResult]]
+  )(implicit tc: TraceContext): Future[Seq[EncodedPeerVoteResult]]
 }

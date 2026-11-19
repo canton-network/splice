@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store.votesbackfilling
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import org.apache.pekko.stream.scaladsl.Sink
@@ -17,10 +18,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.{
   PeerVoteResult,
+  UndecodablePeerVoteResult,
   VotesBackfillCursor,
 }
 import org.lfdecentralizedtrust.splice.scan.store.votesbackfilling.VotesStoreBackfilling.*
 import org.scalatest.wordspec.AsyncWordSpec
+import org.slf4j.event.Level
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.Future
@@ -231,6 +234,33 @@ class VotesStoreBackfillingTest
           Vector(cursor(100), cursor(100), cursor(100), cursor(90))
         store.completions.get() shouldBe 1
       }
+    }
+
+    "warn and ask again at the same cursor if a vote result cannot be decoded" in {
+      val store = new FakeStore(Some(ts(100)))
+      def undecodable =
+        Failure(new UndecodablePeerVoteResult("the-update", ts(90), new RuntimeException("boom")))
+      val peers = new ScriptedPeers(undecodable, undecodable, Success(Seq.empty))
+      loggerFactory
+        .assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          service(store, peers).mksrc().runWith(Sink.seq),
+          entries => {
+            entries should have size 2
+            forAll(entries) { entry =>
+              entry.level shouldBe Level.WARN
+              entry.message should (include("stuck") and include("the-update"))
+            }
+          },
+        )
+        .map { steps =>
+          steps shouldBe Seq(
+            Started(cursor(100)),
+            WaitingForPeers(cursor(100)),
+            WaitingForPeers(cursor(100)),
+            Completed,
+          )
+          store.inserted.get() shouldBe empty
+        }
     }
 
     "not complete while the peers cannot serve" in {

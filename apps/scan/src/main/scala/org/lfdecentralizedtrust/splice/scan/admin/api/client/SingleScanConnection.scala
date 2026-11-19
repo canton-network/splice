@@ -94,7 +94,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryReques
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BftSequencer
 import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.{
-  PeerVoteResult,
+  EncodedPeerVoteResult,
   VotesBackfillCursor,
 }
 
@@ -563,7 +563,7 @@ class SingleScanConnection private[client] (
   override def getVotesBefore(
       before: VotesBackfillCursor,
       count: Int,
-  )(implicit tc: TraceContext): Future[Seq[PeerVoteResult]] =
+  )(implicit tc: TraceContext): Future[Seq[EncodedPeerVoteResult]] =
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetVotesBefore(before, count),

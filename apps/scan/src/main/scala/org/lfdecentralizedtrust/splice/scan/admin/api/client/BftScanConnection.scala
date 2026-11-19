@@ -52,7 +52,7 @@ import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.{
-  PeerVoteResult,
+  EncodedPeerVoteResult,
   VotesBackfillCursor,
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
@@ -498,7 +498,7 @@ class BftScanConnection(
   override def getVotesBefore(
       before: VotesBackfillCursor,
       count: Int,
-  )(implicit tc: TraceContext): Future[Seq[PeerVoteResult]] =
+  )(implicit tc: TraceContext): Future[Seq[EncodedPeerVoteResult]] =
     BftCallExecutor
       .bftCallForEventualConsistencyEndpoints(
         scanList.scanConnections,

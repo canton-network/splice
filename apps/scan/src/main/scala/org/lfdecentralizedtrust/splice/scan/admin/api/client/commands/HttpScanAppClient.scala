@@ -1629,7 +1629,7 @@ object HttpScanAppClient {
       count: Int,
   ) extends InternalBaseCommand[
         http.GetVotesBeforeResponse,
-        Seq[DbVotesStore.PeerVoteResult],
+        Seq[DbVotesStore.EncodedPeerVoteResult],
       ] {
     override def submitRequest(
         client: http.ScanClient,
@@ -1656,8 +1656,8 @@ object HttpScanAppClient {
 
   private def decodeVoteResultForBackfilling(
       row: definitions.VoteResultForBackfilling
-  ): DbVotesStore.PeerVoteResult =
-    DbVotesStore.PeerVoteResult.decode(
+  ): DbVotesStore.EncodedPeerVoteResult =
+    DbVotesStore.EncodedPeerVoteResult(
       recordTime = CantonTimestamp.assertFromInstant(row.recordTime.toInstant),
       synchronizerId = row.synchronizerId,
       updateId = row.updateId,

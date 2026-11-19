@@ -348,33 +348,41 @@ object DbVotesStore {
       )
   }
 
-  object PeerVoteResult {
+  /** A vote result as received from a peer scan, with the JSON of its result as the peer stored it.
+    * BFT reads compare these, so that agreeing on a page does not depend on this app being able to
+    * decode it.
+    */
+  final case class EncodedPeerVoteResult(
+      recordTime: CantonTimestamp,
+      synchronizerId: String,
+      updateId: String,
+      eventNumber: Int,
+      contractId: String,
+      choiceResult: String,
+  ) {
 
-    /** Decodes the JSON of a vote result that a peer served.
-      *
-      * Throws if it cannot be decoded, e.g., because it is from a newer Daml model. Unlike for ingestion,
-      * which would block the whole ACS store, this does not store a placeholder: the peer has the
-      * actual vote, and a placeholder would lose it for good. Backfilling stops until the app is updated.
+    /** Throws [[UndecodablePeerVoteResult]] if the result cannot be decoded, e.g., because it is from
+      * a newer Daml model. Unlike for ingestion, which would block the whole ACS store, this does not
+      * store a placeholder: the peer has the actual vote, and a placeholder would lose it for good.
+      * Backfilling stops until the app is updated.
       */
-    def decode(
-        recordTime: CantonTimestamp,
-        synchronizerId: String,
-        updateId: String,
-        eventNumber: Int,
-        contractId: String,
-        choiceResult: String,
-    ): PeerVoteResult =
+    def decode: PeerVoteResult =
       Try(DsoRules_CloseVoteRequestResult.fromJson(choiceResult)) match {
         case Success(result) =>
           PeerVoteResult(recordTime, synchronizerId, updateId, eventNumber, contractId, result)
-        case Failure(e) =>
-          throw new IllegalArgumentException(
-            s"Failed to decode the vote result in update $updateId at record time $recordTime " +
-              "that a peer served, this app might be too old",
-            e,
-          )
+        case Failure(e) => throw new UndecodablePeerVoteResult(updateId, recordTime, e)
       }
   }
+
+  final class UndecodablePeerVoteResult(
+      updateId: String,
+      recordTime: CantonTimestamp,
+      cause: Throwable,
+  ) extends IllegalArgumentException(
+        s"Failed to decode the vote result in update $updateId at record time $recordTime " +
+          "that the peers served, this app might be too old",
+        cause,
+      )
 
   /** Records the record time of the first transaction that the ingestion has seen, unless it is already set.
     * Runs in the same SQL transaction as the ingestion of the votes, so the value is recorded if and only if
