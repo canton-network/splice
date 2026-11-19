@@ -58,7 +58,9 @@ data SvNodeAssignment = SvNodeAssignment
     rewardWeight : Int
       -- ^ The weight of the SV rights owner at this SV node.
     escrowedRewardWeight : Int
-      -- ^ The weight held in escrow; minted as one coupon to the DSO party, which expires into the unclaimed rewards. Changed only by a vote.
+      -- ^ The weight held in escrow; minted as one coupon to `escrowParty`, which is not claimed and expires into the unclaimed rewards. Changed only by a vote.
+    escrowParty : Party
+      -- ^ Receives the coupon for the escrowed weight, e.g., today's ghost party of the owner. Changed only by a vote.
     beneficiaries : [BeneficiaryInfo]
       -- ^ At most 20 beneficiaries, paid in order until no weight remains.
     defaultBeneficiary : Party
@@ -70,6 +72,7 @@ instance Patchable SvNodeAssignment where
     with
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
       escrowedRewardWeight = patch new.escrowedRewardWeight base.escrowedRewardWeight current.escrowedRewardWeight
+      escrowParty = patch new.escrowParty base.escrowParty current.escrowParty
       beneficiaries = patchListAsScalar new.beneficiaries base.beneficiaries current.beneficiaries
       defaultBeneficiary = patch new.defaultBeneficiary base.defaultBeneficiary current.defaultBeneficiary
 

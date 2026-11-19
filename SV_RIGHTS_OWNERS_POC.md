@@ -27,6 +27,7 @@ classDiagram
     class SvNodeAssignment {
         rewardWeight : Int
         escrowedRewardWeight : Int
+        escrowParty : Party
         beneficiaries : [BeneficiaryInfo]
         defaultBeneficiary : Party
     }
@@ -67,8 +68,8 @@ classDiagram
     SvNodeAssignment ..> DsoRules : SV node name is an SV in svs
     SvNodeAssignment ..> SvRightsOwnerRewardState : one per owner and SV node
     SvRightsOwnerRewardState -- SvRightsOwnerRewardStateKey : key
-    SvNodeAssignment ..> SvRewardCoupon : each round, one per beneficiary + one to dso for escrowedRewardWeight
-    SvRewardCoupon ..> UnclaimedReward : expires, dso never claims
+    SvNodeAssignment ..> SvRewardCoupon : each round, one per beneficiary + one to escrowParty for escrowedRewardWeight
+    SvRewardCoupon ..> UnclaimedReward : expires, escrowParty never claims
 ```
 
 Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.com/canton-foundation/configs/blob/f0aa02df12e8ff2332075f796c26f89f828dcaa9/configs/MainNet/approved-sv-id-values.yaml) in the new model. Parties are shortened.
@@ -94,12 +95,14 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
           "Digital-Asset-1": {
             "rewardWeight": 159250,
             "escrowedRewardWeight": 0,
+            "escrowParty": "dso",
             "beneficiaries": [],
             "defaultBeneficiary": "<Digital-Asset-1 SV party>"
           },
           "Digital-Asset-2": {
             "rewardWeight": 159250,
             "escrowedRewardWeight": 0,
+            "escrowParty": "dso",
             "beneficiaries": [],
             "defaultBeneficiary": "<Digital-Asset-2 SV party>"
           }
@@ -115,6 +118,7 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
           "Global-Synchronizer-Foundation": {
             "rewardWeight": 100000,
             "escrowedRewardWeight": 0,
+            "escrowParty": "dso",
             "beneficiaries": [
               { "beneficiary": "Circle-SvRewardsStaking-1::12209d45…", "weight": 70000 }
             ],
@@ -133,6 +137,7 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
           "Liberty-City-Ventures-1": {
             "rewardWeight": 100000,
             "escrowedRewardWeight": 0,
+            "escrowParty": "dso",
             "beneficiaries": [
               { "beneficiary": "auth0_007c69ea…::122078c4…", "weight": 70000 }
             ],
@@ -151,9 +156,10 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
           "Global-Synchronizer-Foundation": {
             "rewardWeight": 10000,
             "escrowedRewardWeight": 40000,
+            "escrowParty": "FranklinTempleton-ghost-1::1220f5cf…",
             "beneficiaries": [],
             "defaultBeneficiary": "ft::12200b55…"
-            // coupons: ft 10000, dso 40000 (expires into UnclaimedReward)
+            // coupons: ft 10000, FranklinTempleton-ghost-1 40000 (not claimed, expires into UnclaimedReward)
           }
         }
       }
@@ -187,19 +193,19 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
 
 Today escrowed weight goes to a ghost party that never mints; its coupons expire into `UnclaimedReward`. Here the escrowed weight sits on the owner's assignment, next to its active weight, and only a vote changes it. The owner's beneficiaries share only `rewardWeight`.
 
-When minting, the operator creates one more `SvRewardCoupon` for the escrowed weight, with `beneficiary = dso`. Nobody claims it, so it expires into `UnclaimedReward` through the existing `DsoRules_ClaimExpiredRewards`, as ghost coupons do today. Releasing escrow stays as today (CIP-0066).
+When minting, the operator creates one more `SvRewardCoupon` for the escrowed weight, with `beneficiary = escrowParty`. Nobody claims it, so it expires into `UnclaimedReward` through the existing `DsoRules_ClaimExpiredRewards`, as ghost coupons do today. At migration `escrowParty` is the owner's ghost party, so coupons and expiry stay exactly as today; without escrow it is unused, as no coupon is created for weight 0 (`dso` above). Releasing escrow stays as today (CIP-0066).
 
 ```mermaid
 flowchart LR
     A["SvNodeAssignment<br/>rewardWeight 10000<br/>escrowedRewardWeight 40000"] -->|"mint, round N"| C1["SvRewardCoupon<br/>beneficiary ft, weight 10000"]
-    A -->|"mint, round N"| C2["SvRewardCoupon<br/>beneficiary dso, weight 40000"]
+    A -->|"mint, round N"| C2["SvRewardCoupon<br/>beneficiary FranklinTempleton-ghost-1, weight 40000"]
     C1 -->|"ft claims"| CC["Amulet"]
     C2 -->|"round closed, not claimed:<br/>DsoRules_ClaimExpiredRewards"| U["UnclaimedReward"]
     U -->|"milestone met: vote (CIP-0066)"| R["UnclaimedActivityRecord<br/>to the company"]
 ```
 
-Why a coupon to `dso` and not an `UnclaimedReward` created when minting:
+Why a coupon to `escrowParty` and not an `UnclaimedReward` created when minting:
 
 - The amount is not known yet. It is set later, when the round is summarized.
 - A round's SV rewards are split by the weight of the coupons created in that round. Escrowed weight without a coupon would not count, and the other SVs would get its part.
-- A coupon to `dso` needs no new template and no Scala change, and only a vote can act as `dso`, so nobody can mint it.
+- A coupon needs no new template and no Scala change. Whoever hosts `escrowParty` could claim it, as with ghost parties today; only a vote sets it, and `dso` is a value nobody can claim for.
