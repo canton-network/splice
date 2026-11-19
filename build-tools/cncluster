@@ -1045,10 +1045,11 @@ function subcmd_cluster_enable_gke_l7_alb() {
     # Subnet range selection:
     # - On size choice: https://docs.cloud.google.com/load-balancing/docs/proxy-only-subnets#proxy-subnet-size
     # - On resizing later: https://docs.cloud.google.com/load-balancing/docs/proxy-only-subnets#proxy_only_subnet_change
-    # - Check existing subnets for overlap: gcloud compute networks subnets list --network=default
-    # - This default based on actual dev/test/main subnets; alter to taste
+    # - Subnet ranges must not overlap across *all* regions of the VPC, so with several clusters
+    #   in one project we pick the first /23 in 10.120.0.0/13 not overlapping any existing
+    #   subnet (primary or secondary range). Override with GKE_L7_PROXY_SUBNET_CIDR.
     # - Avoid the reserved range 10.128.0.0/9 (used by GCP auto-mode networks)
-    local subnet_cidr='10.120.0.0/23'
+    local subnet_cidr="${GKE_L7_PROXY_SUBNET_CIDR:-}"
 
     # Check if Gateway API is already enabled
     local gateway_api_enabled
@@ -1079,6 +1080,25 @@ function subcmd_cluster_enable_gke_l7_alb() {
     if [[ -n $existing_subnet ]]; then
         _info "Proxy-only subnet already exists in $CLOUDSDK_COMPUTE_REGION: $existing_subnet"
     else
+        if [[ -z $subnet_cidr ]]; then
+            subnet_cidr=$(gcloud compute networks subnets list \
+                --network=default \
+                --format=json \
+                | python3 -c '
+import ipaddress, json, sys
+used = []
+for s in json.load(sys.stdin):
+    ranges = [s.get("ipCidrRange")] + [r.get("ipCidrRange") for r in s.get("secondaryIpRanges", [])]
+    used += [ipaddress.ip_network(r) for r in ranges if r]
+for candidate in ipaddress.ip_network("10.120.0.0/13").subnets(new_prefix=23):
+    if not any(candidate.overlaps(u) for u in used):
+        print(candidate)
+        break
+')
+            if [[ -z $subnet_cidr ]]; then
+                _error "No free /23 found in 10.120.0.0/13 for the proxy-only subnet; set GKE_L7_PROXY_SUBNET_CIDR."
+            fi
+        fi
         _info "Creating proxy-only subnet for GKE L7 regional ALB in $CLOUDSDK_COMPUTE_REGION at CIDR $subnet_cidr..."
         $dry_run gcloud compute networks subnets create proxy-only-subnet-for-gkel7 \
             --description='proxy-only subnet required for GKE L7 regional ALB' \
