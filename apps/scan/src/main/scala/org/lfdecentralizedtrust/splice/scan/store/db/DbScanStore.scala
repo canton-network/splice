@@ -44,7 +44,6 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
-  OpenMiningRoundTxLogEntry,
   ScanStore,
   ScanTxLogParser,
   TxLogEntry,
@@ -529,34 +528,6 @@ class DbScanStore private (
         contractWithStateFromRow(FeaturedAppRight.COMPANION)
       )
     }
-
-  override def getAmuletConfigForRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[OpenMiningRoundTxLogEntry] = waitUntilAcsIngested {
-    for {
-      row <- storage
-        .querySingle(
-          selectFromTxLogTable(
-            txLogTableName,
-            txLogStoreId,
-            where = sql"""
-                   entry_type = ${EntryType.OpenMiningRoundTxLogEntry} and
-                   round = $round
-              """,
-            orderLimit = sql"order by entry_number desc limit 1",
-          ).headOption,
-          "getAmuletConfigForRound",
-        )
-        .value
-      entry = row.map(txLogEntryFromRow[OpenMiningRoundTxLogEntry](txLogConfig))
-      result <- entry match {
-        case Some(omr: OpenMiningRoundTxLogEntry) =>
-          Future.successful(omr)
-        case None =>
-          Future.failed(txLogNotFound())
-      }
-    } yield result
-  }
 
   override def listSvNodeStates()(implicit tc: TraceContext): Future[Seq[SvNodeState]] =
     for {
