@@ -30,6 +30,9 @@
     - The Postgres images used by the Docker Compose deployments and by the Helm `pg-init` init containers are bumped
       to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
       Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
+    - App Helm charts and the validator compose now support participant Admin API authentication. For now it is opt-in
+      and requires additional setup in the auth provider. Please see k8s deployment and compose deployment docs for more
+      information on how to set it up.
 
   - Scan App
 
