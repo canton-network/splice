@@ -15,7 +15,7 @@ import qualified Splice.AmuletConfig as Unit
 import Splice.Util
 import Splice.Types
 
--- | `ExternalPartyConfigState` stores the configuration required for transfer, allocations, traffic purchases and taps.
+-- | `ExternalPartyConfigState` stores the configuration required for transfer, allocations, traffic purchases, taps, and the credential registry.
 -- While it exposes a subset of the information also available on `OpenMiningRound`, `ExternalPartyConfigState` contracts
 -- are active much longer allowing for a 24 delay between preparing and executing a transaction.
 --
@@ -34,6 +34,7 @@ template ExternalPartyConfigState
     trafficPrice : Optional Decimal -- ^ USD price per MB for traffic
     supportedSynchronizerIds : Optional [Text] -- ^ Synchronizers traffic can be bought for, at the time the config state was created.
     minTrafficTopupAmount : Optional Int -- ^ Minimum traffic top-up amount at the time the config state was created.
+    credentialRegistryConfig : Optional CredentialRegistryConfig -- ^ Credential registry configuration at the time the config state was created.
   where
     signatory dso
 

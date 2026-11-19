@@ -234,6 +234,7 @@ export function getAmuletRulesConfig(
     developmentFundManagerBlacklist: null,
     minDevelopmentFundMintingDelay: null,
     governanceLockConfig: null,
+    credentialRegistryConfig: null,
   };
 }
 
@@ -468,6 +469,9 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
         class="jsondiffpatch-value"><pre>null</pre></div></li><li
       class="jsondiffpatch-unchanged" data-key="governanceLockConfig"><div
         class="jsondiffpatch-property-name">governanceLockConfig</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="credentialRegistryConfig"><div
+        class="jsondiffpatch-property-name">credentialRegistryConfig</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;

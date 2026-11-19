@@ -14,7 +14,6 @@ import DA.TextMap qualified as TextMap
 
 import Splice.Amulet
 import Splice.AmuletRules
-import Splice.CredentialRegistryConfig
 import Splice.Round
 import Splice.Schedule
 import Splice.DSO.DecentralizedSynchronizer
@@ -22,7 +21,6 @@ import Splice.Fees
 import Splice.Issuance()
 
 
-import Splice.DsoBootstrap
 import Splice.DsoRules
 import Splice.DSO.AmuletPrice
 import Splice.DSO.Instruction
@@ -736,7 +734,7 @@ testAmuletRulesTickDurationChange = do
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
-        newConfig = newConfig
+        newConfig
         baseConfig = amuletRules.configSchedule.initialValue
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
@@ -1409,18 +1407,21 @@ testCredentialRegistryConfigChange : Script ()
 testCredentialRegistryConfigChange = do
   (app, dso, (sv1, sv2, sv3, _)) <- initMainNet
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  [(configCid, config0)] <- query @CredentialRegistryConfig dso
-  config0.freePeriod === initialCredentialRegistryFreePeriod
-  config0.extensionUsdPerYear === initialCredentialRegistryExtensionUsdPerYear
+  [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
+  let initialConfig = amuletRules.configSchedule.initialValue
+  initialConfig.credentialRegistryConfig === None
 
+  let newRegistry = CredentialRegistryConfig with
+        freePeriod = days 30
+        extensionUsdPerYear = 2.0
+      newConfig = initialConfig with credentialRegistryConfig = Some newRegistry
   now <- getTime
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
-    action = ARC_DsoRules with
-      dsoAction = SRARC_SetCredentialRegistryConfig DsoRules_SetCredentialRegistryConfig with
-        configCid
-        newFreePeriod = days 30
-        newExtensionUsdPerYear = 2.0
+    action = ARC_AmuletRules with
+      amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
+        newConfig
+        baseConfig = initialConfig
     reason = Reason with url = ""; body = "shorter free period"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
@@ -1430,7 +1431,7 @@ testCredentialRegistryConfigChange = do
 
   closeResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = request
-    amuletRulesCid = None
+    amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
 
   closeResult.completedAt === now
@@ -1438,8 +1439,5 @@ testCredentialRegistryConfigChange = do
   closeResult.abstainingSvs === ["sv4"]
   closeResult.outcome === VRO_Accepted with effectiveAt = now
 
-  None <- queryContractId dso configCid
-  [(_, config)] <- query @CredentialRegistryConfig dso
-  config.dso === dso
-  config.freePeriod === days 30
-  config.extensionUsdPerYear === 2.0
+  [(_, amuletRules')] <- query @AmuletRules dso
+  amuletRules'.configSchedule.initialValue.credentialRegistryConfig === Some newRegistry

@@ -149,6 +149,7 @@ class SvReconcileSynchronizerConfigIntegrationTest extends SvIntegrationTestBase
     amuletConfig.minDevelopmentFundMintingDelay,
     amuletConfig.amuletSwitchOverTimes,
     amuletConfig.governanceLockConfig,
+    amuletConfig.credentialRegistryConfig,
   )
 
 }
