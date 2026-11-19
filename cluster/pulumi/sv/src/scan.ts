@@ -113,6 +113,12 @@ export function installScan(
       : {}),
     publicUrl: publicScanUrl(config),
     pvc: persistentHeapDumpsPvc(),
+    participantClient: {
+      adminApi: {
+        // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
+        disableAuth: config.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   };
 
   if (svsConfig?.scan?.externalRateLimits) {

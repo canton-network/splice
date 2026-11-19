@@ -77,6 +77,8 @@ function _export_auth0_env_vars {
   # Must equal LEDGER_API_AUTH_AUDIENCE for the portfolio UI to reach the validator API
   VALIDATOR_AUTH_AUDIENCE="https://ledger_api.example.com"
   export VALIDATOR_AUTH_AUDIENCE
+  PARTICIPANT_ADMIN_API_AUTH_AUDIENCE="https://participant_admin_api.example.com"
+  export PARTICIPANT_ADMIN_API_AUTH_AUDIENCE
 }
 
 function _do_start_validator {
@@ -114,11 +116,14 @@ function _start_validator {
   export LEDGER_API_AUTH_AUDIENCE
   VALIDATOR_AUTH_AUDIENCE="$DEFAULT_AUDIENCE"
   export VALIDATOR_AUTH_AUDIENCE
+  PARTICIPANT_ADMIN_API_AUTH_AUDIENCE="$DEFAULT_AUDIENCE"
+  export PARTICIPANT_ADMIN_API_AUTH_AUDIENCE
 
   extra_flags=()
   if [ "$auth" -eq 1 ]; then
     _export_auth0_env_vars
     extra_flags+=("-a")
+    extra_flags+=("--enable-participant-admin-api-auth")
   fi
   if [ -n "$network_name" ]; then
     extra_flags+=("-n" "$network_name")

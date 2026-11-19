@@ -23,6 +23,7 @@ async function main() {
   const namespaceAuth0Cfg: Auth0NamespaceConfig = {
     audiences: {
       ledgerApi: 'https://ledger_api.example.com',
+      participantAdminApi: 'https://participant_admin_api.example.com',
       validatorApi: 'https://validator.example.com/api',
     },
     backendClientIds: {

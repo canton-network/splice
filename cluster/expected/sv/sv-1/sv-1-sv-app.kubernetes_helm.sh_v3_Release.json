@@ -157,6 +157,11 @@
         "onboardingRoundZeroDuration": "2 h",
         "onboardingType": "found-dso",
         "participantAddress": "participant",
+        "participantClient": {
+          "adminApi": {
+            "disableAuth": false
+          }
+        },
         "periodicTopologySnapshotConfig": {
           "backupInterval": "12h",
           "location": {
