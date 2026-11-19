@@ -57,6 +57,8 @@ object Dependencies {
 
   lazy val aws_s3 = "software.amazon.awssdk" % "s3" % CantonDependencies.aws_version
 
+  lazy val circe_yaml = "io.circe" %% "circe-yaml" % "0.15.1"
+
   lazy val s3mock_testcontainers = "com.adobe.testing" % "s3mock-testcontainers" % "4.12.4" % "test"
 
   private lazy val jackson_version = "2.22.4"

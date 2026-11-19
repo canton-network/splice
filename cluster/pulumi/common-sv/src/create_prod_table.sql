@@ -7,7 +7,7 @@ IF NOT EXISTS (
   CREATE TABLE {{prodTable}}
   PARTITION BY record_date AS
   SELECT
-    *,
+    {{stagingColumns}},
     {{recordDateExpr}} AS record_date
   FROM {{stagingTable}} AS staging
   WHERE 1 = 0;
