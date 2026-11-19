@@ -3113,7 +3113,7 @@ class DbSvDsoStoreTest
         store <- mkStore()
         _ <- dummyDomain.create(created)(store.multiDomainAcsStore)
         result <- store.lookupSvOnboardingRequestByCandidateParty(userParty(1))
-      } yield result.map(_.contract) should be(Some(created))
+      } yield result should be(Some(created))
     }
 
     "be ingested from the ACS" in {
@@ -3123,7 +3123,7 @@ class DbSvDsoStoreTest
           Seq(StoreTestBase.AcsImportEntry(created, dummyDomain, 0L))
         )
         result <- store.lookupSvOnboardingRequestByCandidateParty(userParty(1))
-      } yield result.map(_.contract) should be(Some(created))
+      } yield result should be(Some(created))
     }
   }
 
