@@ -105,6 +105,18 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
+  def supportsUnclaimedRewardsBurn(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceDsoGovernance,
+      now,
+      DarResources.dsoGovernance,
+      DarResources.dsoGovernance_0_1_32,
+      ignoreRedundantCheck = true,
+    )
+
   /** The ids of the packages the ledger prefers for the given package requirements, i.e., for each package
     * the newest version vetted by all of its parties.
     */

@@ -829,6 +829,24 @@ trait SvDsoStore
   ] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(UnallocatedUnclaimedActivityRecord.COMPANION)
 
+  final def listUnclaimedRewardsBurnInstructions(
+      limit: Limit
+  )(implicit tc: TraceContext): Future[Seq[Contract[
+    splice.dso.instruction.UnclaimedRewardsBurnInstruction.ContractId,
+    splice.dso.instruction.UnclaimedRewardsBurnInstruction,
+  ]]] =
+    multiDomainAcsStore
+      .listContracts(splice.dso.instruction.UnclaimedRewardsBurnInstruction.COMPANION, limit)
+      .map(_.map(_.contract))
+
+  def listExpiredUnclaimedRewardsBurnInstructions: ListExpiredContracts[
+    splice.dso.instruction.UnclaimedRewardsBurnInstruction.ContractId,
+    splice.dso.instruction.UnclaimedRewardsBurnInstruction,
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(
+      splice.dso.instruction.UnclaimedRewardsBurnInstruction.COMPANION
+    )
+
   def listExpiredUnclaimedActivityRecord: ListExpiredContracts[
     splice.amulet.UnclaimedActivityRecord.ContractId,
     splice.amulet.UnclaimedActivityRecord,
@@ -1653,6 +1671,17 @@ object SvDsoStore {
       },
       mkFilter(splice.dsorules.UnallocatedUnclaimedActivityRecord.COMPANION)(co =>
         co.payload.dso == dso
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(splice.dso.instruction.UnclaimedRewardsBurnInstruction.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsUnclaimedRewardsBurn(Seq(dsoParty), now)(tc)
+        },
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
