@@ -1868,7 +1868,7 @@ function subcmd_participant_console() {
           client_id=$(_get_env_value "$namespace" "$sv_app_pod" sv-app SPLICE_APP_SV_PARTICIPANT_ADMIN_API_AUTH_CLIENT_ID) && \
           client_secret=$(_get_env_value "$namespace" "$sv_app_pod" sv-app SPLICE_APP_SV_PARTICIPANT_ADMIN_API_AUTH_CLIENT_SECRET) && \
           url=$(_get_env_value "$namespace" "$sv_app_pod" sv-app SPLICE_APP_SV_PARTICIPANT_ADMIN_API_AUTH_URL) && \
-          audience=$(_get_env_value "$namespace" "$participant_pod" participant AUTH_TARGET_AUDIENCE)
+          audience=$(_get_env_value "$namespace" "$participant_pod" participant SPLICE_PARTICIPANT_ADMIN_API_TARGET_AUDIENCE)
         then
           _info "Getting Participant Admin API auth token from Auth0 using Participant Admin API Auth0 credentials from '$sv_app_pod'..."
           PARTICIPANT_ADMIN_API_AUTH_TOKEN=$(_get_auth_token_from_auth0 "$client_id" "$client_secret" "$url" "$audience")
@@ -1885,7 +1885,7 @@ function subcmd_participant_console() {
           client_id=$(_get_env_value "$namespace" "$validator_app_pod" validator-app SPLICE_APP_VALIDATOR_PARTICIPANT_ADMIN_API_AUTH_CLIENT_ID) && \
           client_secret=$(_get_env_value "$namespace" "$validator_app_pod" validator-app SPLICE_APP_VALIDATOR_PARTICIPANT_ADMIN_API_AUTH_CLIENT_SECRET) && \
           url=$(_get_env_value "$namespace" "$validator_app_pod" validator-app SPLICE_APP_VALIDATOR_PARTICIPANT_ADMIN_API_AUTH_URL) && \
-          audience=$(_get_env_value "$namespace" "$participant_pod" participant AUTH_TARGET_AUDIENCE)
+          audience=$(_get_env_value "$namespace" "$participant_pod" participant SPLICE_PARTICIPANT_ADMIN_API_TARGET_AUDIENCE)
         then
           _info "Getting Participant Admin API auth token from Auth0 using Participant Admin API Auth0 credentials from '$validator_app_pod'..."
           PARTICIPANT_ADMIN_API_AUTH_TOKEN=$(_get_auth_token_from_auth0 "$client_id" "$client_secret" "$url" "$audience")
