@@ -1331,7 +1331,7 @@ abstract class TopologyAdminConnection(
         ),
       previous => {
         val newSequencers = sequencerChange(previous.active)
-        logger.debug(
+        logger.info(
           s"Applying sequencer change: previous [${previous.active}], wanted [$newSequencers]"
         )
         // The threshold in here is used by Canton traffic control
@@ -1433,7 +1433,7 @@ abstract class TopologyAdminConnection(
         ),
       previous => {
         val newMediators = mediatorChange(previous.active)
-        logger.debug(
+        logger.info(
           s"Applying mediator change: previous [${previous.active}], wanted [$newMediators]"
         )
         // constructor is not exposed so no copy

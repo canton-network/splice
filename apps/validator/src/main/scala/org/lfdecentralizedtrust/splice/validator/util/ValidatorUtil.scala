@@ -51,7 +51,7 @@ private[validator] object ValidatorUtil {
       traceContext: TraceContext,
   ): Future[Unit] = {
     val store = storeWithIngestion.store
-    logger.debug(
+    logger.info(
       s"Installing wallet for endUserName:$endUserName, endUserParty=$endUserParty, validatorServiceParty=$validatorServiceParty, dsoParty=$dsoParty"
     )
     for {
@@ -125,7 +125,7 @@ private[validator] object ValidatorUtil {
                 Seq(),
               )
             } yield {
-              logger.debug(
+              logger.info(
                 s"Creation allowed. Allocated new party ID $allocatedPartyId for user $endUserName"
               )
               allocatedPartyId
@@ -138,7 +138,7 @@ private[validator] object ValidatorUtil {
                 Seq(),
               )
               .map(newParty => {
-                logger.debug(
+                logger.info(
                   s"Creation disallowed. Associating user $endUserName with existing party $newParty"
                 )
                 newParty
@@ -153,7 +153,7 @@ private[validator] object ValidatorUtil {
                 participantAdminConnection,
               )
               .map(allocatedParty => {
-                logger.debug(
+                logger.info(
                   s"No party ID provided and creation allowed. Allocated $allocatedParty for user $endUserName"
                 )
                 allocatedParty
@@ -170,7 +170,7 @@ private[validator] object ValidatorUtil {
               }
               .map {
                 case Some(existingParty) =>
-                  logger.debug(
+                  logger.info(
                     s"No party ID provided, creation disallowed, but user $endUserName has existing party $existingParty."
                   )
                   existingParty

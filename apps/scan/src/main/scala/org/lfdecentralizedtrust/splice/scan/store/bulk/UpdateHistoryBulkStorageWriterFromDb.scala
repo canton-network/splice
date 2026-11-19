@@ -71,7 +71,7 @@ class UpdateHistoryBulkStorageWriterFromDb(
         loggerFactory,
       )
       .map { case (segment, keys) =>
-        logger.debug(
+        logger.info(
           s"Successfully dumped updates segment $segment to bulk storage, with object keys: $keys"
         )
         segment

@@ -85,7 +85,7 @@ trait CachingScanConnection extends ScanConnection {
   }
 
   private def signalOutdatedCache(): Unit = {
-    logger.debug("Invalidating AmuletRules and rounds cache after a failed contract downgrade")(
+    logger.info("Invalidating AmuletRules and rounds cache after a failed contract downgrade")(
       TraceContext.empty
     )
     amuletRulesCache.set(None)
