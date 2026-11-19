@@ -130,12 +130,6 @@ app_activity_record_store:
     - round_number
     - app_provider_parties
     - app_activity_weights
-    - name: submitting_app_provider
-      since: V082__tbar_v1_1_asset_activity_columns.sql
-    - name: asset_activity_provider_parties
-      since: V082__tbar_v1_1_asset_activity_columns.sql
-    - name: asset_activity_weights
-      since: V082__tbar_v1_1_asset_activity_columns.sql
 interned_strings:
   since: V074__string_interning.sql
   primaryKey: id
