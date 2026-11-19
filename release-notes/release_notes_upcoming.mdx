@@ -54,6 +54,9 @@
         will be available only in bulk. The bulk data will not support the `compact_json` encoding.
 
 
+    - Add an optional `daml_value_encoding` field to the requests of `/v2/state/acs` and `/v2/holdings/state`.
+      It defaults to `compact_json`, which is what these endpoints returned so far.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,

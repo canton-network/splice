@@ -33,7 +33,7 @@ import org.lfdecentralizedtrust.splice.util.Contract
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import definitions.DamlValueEncoding.members.CompactJson
+import definitions.DamlValueEncoding.members.LedgerApiJson
 import definitions.GetRewardAccountingBatchResponse
 import definitions.GetRewardAccountingActivityTotalsResponse
 import definitions.GetRewardAccountingRootHashResponse
@@ -354,7 +354,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       clue(s"Fetch event $label") {
         eventually() {
           sv1ScanBackend
-            .getEventById(updateId, Some(CompactJson))
+            .getEventById(updateId, Some(LedgerApiJson))
             .getOrElse(fail(s"Expected event for updateId $updateId"))
         }
       }

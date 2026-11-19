@@ -495,7 +495,7 @@ class ScanTimeBasedIntegrationTest
         acsAtMidnightFromS3
       }
 
-      val acsAtMidnightFromS3 = checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.CompactJson)
+      val acsAtMidnightFromS3 = checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.LedgerApiJson)
       val protobufAcsAtMidnightFromS3 =
         checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.ProtobufJson)
       protobufAcsAtMidnightFromS3.map(_.contractId) shouldBe acsAtMidnightFromS3.map(_.contractId)
@@ -503,7 +503,11 @@ class ScanTimeBasedIntegrationTest
       // Compare bulk storage data to hot storage data from scan
       // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well
       val acsAtMidnightFromScan = sv1ScanBackend
-        .getAcsSnapshotAtV2(CantonTimestamp.assertFromInstant(lastMidnight), 0)
+        .getAcsSnapshotAtV2(
+          CantonTimestamp.assertFromInstant(lastMidnight),
+          0,
+          damlValueEncoding = Some(definitions.DamlValueEncoding.LedgerApiJson),
+        )
         .value
         .createdEvents
       acsAtMidnightFromScan should contain theSameElementsInOrderAs acsAtMidnightFromS3
@@ -548,7 +552,7 @@ class ScanTimeBasedIntegrationTest
         updatesFromScan should contain theSameElementsAs updatesFromS3
       }
 
-      checkUpdateEncoding(ScanStorageConfig.Encoding.CompactJson)
+      checkUpdateEncoding(ScanStorageConfig.Encoding.LedgerApiJson)
       checkUpdateEncoding(ScanStorageConfig.Encoding.ProtobufJson)
 
       compareAcsV2(acsAtMidnightFromScan, acsAtMidnightFromScan)

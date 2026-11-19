@@ -439,6 +439,9 @@ abstract class ScanAppReference(
       pageSize: Int = 100,
       partyIds: Option[Vector[PartyId]] = None,
       templates: Option[Vector[PackageQualifiedName]] = None,
+      damlValueEncoding: Option[definitions.DamlValueEncoding] = Some(
+        definitions.DamlValueEncoding.LedgerApiJson
+      ),
   ) =
     consoleEnvironment.run {
       httpCommand(
@@ -450,6 +453,7 @@ abstract class ScanAppReference(
           pageSize,
           partyIds,
           templates,
+          damlValueEncoding,
         )
       )
     }
@@ -463,6 +467,9 @@ abstract class ScanAppReference(
       ),
       after: Option[String] = None,
       pageSize: Int = 100,
+      damlValueEncoding: Option[definitions.DamlValueEncoding] = Some(
+        definitions.DamlValueEncoding.LedgerApiJson
+      ),
   ) =
     consoleEnvironment.run {
       httpCommand(
@@ -473,6 +480,7 @@ abstract class ScanAppReference(
           recordTimeMatch,
           after,
           pageSize,
+          damlValueEncoding,
         )
       )
     }

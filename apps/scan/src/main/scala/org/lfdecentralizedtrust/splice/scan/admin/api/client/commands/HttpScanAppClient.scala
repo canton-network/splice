@@ -1062,6 +1062,7 @@ object HttpScanAppClient {
       pageSize: Int = 100,
       partyIds: Option[Vector[PartyId]] = None,
       templates: Option[Vector[PackageQualifiedName]] = None,
+      damlValueEncoding: Option[definitions.DamlValueEncoding] = None,
   ) extends InternalBaseCommand[
         http.GetAcsSnapshotAtV2Response,
         Option[definitions.AcsResponseV2],
@@ -1079,6 +1080,7 @@ object HttpScanAppClient {
           pageSize,
           partyIds.map(_.map(_.toProtoPrimitive)),
           templates.map(_.map(_.toString)),
+          damlValueEncoding,
         ),
         headers,
       )
@@ -1103,6 +1105,7 @@ object HttpScanAppClient {
       recordTimeMatch: Option[definitions.HoldingsStateRequestV2.RecordTimeMatch],
       after: Option[String] = None,
       pageSize: Int = 100,
+      damlValueEncoding: Option[definitions.DamlValueEncoding] = None,
   ) extends InternalBaseCommand[
         http.GetHoldingsStateAtV2Response,
         Option[definitions.AcsResponseV2],
@@ -1119,6 +1122,7 @@ object HttpScanAppClient {
           after,
           pageSize,
           partyIds.map(_.toProtoPrimitive),
+          damlValueEncoding,
         ),
         headers,
       )

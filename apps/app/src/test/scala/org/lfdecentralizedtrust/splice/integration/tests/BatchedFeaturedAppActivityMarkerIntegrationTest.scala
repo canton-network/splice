@@ -12,7 +12,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import definitions.DamlValueEncoding.members.CompactJson
+import definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTest,
@@ -232,7 +232,7 @@ class BatchedFeaturedAppActivityMarkerIntegrationTest
               dsoParty
             ) shouldBe empty withClue "FeaturedAppActivityMarkers"
           val events =
-            sv1ScanBackend.getEventHistory(1000, Some(scanCursorBeforeConversion), CompactJson)
+            sv1ScanBackend.getEventHistory(1000, Some(scanCursorBeforeConversion), LedgerApiJson)
           // Note: There may actually be multiple batches in the trigger because we can't easily synchronize on it having ingested all the markers.
           // We don't care all that much about whether the trigger needs to run multiple time for this test.
           val conversionEvents = events.filter {

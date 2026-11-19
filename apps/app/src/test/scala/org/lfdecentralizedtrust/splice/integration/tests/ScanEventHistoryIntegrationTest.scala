@@ -13,7 +13,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestC
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import definitions.DamlValueEncoding.members.{CompactJson, ProtobufJson}
+import definitions.DamlValueEncoding.members.{LedgerApiJson, ProtobufJson}
 import definitions.EventHistoryItem
 import definitions.UpdateHistoryItemV2.members.{
   UpdateHistoryReassignment,
@@ -69,7 +69,7 @@ class ScanEventHistoryIntegrationTest
       val eventHistoryAfterCursor = sv1ScanBackend.getEventHistory(
         count = pageLimit,
         after = Some(cursor),
-        encoding = CompactJson,
+        encoding = LedgerApiJson,
       )
       eventHistoryAfterCursor shouldBe empty withClue "EventHistory after pre-tap cursor"
       cursor
@@ -103,7 +103,7 @@ class ScanEventHistoryIntegrationTest
     val withCompactEncoding = sv1ScanBackend.getEventHistory(
       count = smallerLimit,
       after = Some(cursorBeforeTap),
-      encoding = CompactJson,
+      encoding = LedgerApiJson,
     )
 
     withCompactEncoding.size shouldBe smallerLimit
@@ -119,7 +119,7 @@ class ScanEventHistoryIntegrationTest
     val txIdsCompact = extractTxUpdateIds(withCompactEncoding).toSet
     val txIdsProtobuf = extractTxUpdateIds(withProtobufEncoding).toSet
 
-    withClue("Mismatch between CompactJson and ProtobufJson update ids") {
+    withClue("Mismatch between LedgerApiJson and ProtobufJson update ids") {
       txIdsProtobuf shouldBe txIdsCompact
     }
   }
@@ -195,7 +195,7 @@ class ScanEventHistoryIntegrationTest
       val historyWhileDown = sv1ScanBackend.getEventHistory(
         count = pageLimit,
         after = Some(cursorBefore),
-        encoding = CompactJson,
+        encoding = LedgerApiJson,
       )
       historyWhileDown shouldBe empty withClue "EventHistory while mediator ingestion down"
     }
@@ -219,7 +219,7 @@ class ScanEventHistoryIntegrationTest
       expectedUpdateIds.foreach { id =>
         val res = sv1ScanBackend.getEventById(
           id,
-          Some(CompactJson),
+          Some(LedgerApiJson),
         )
         res shouldBe None
       }
@@ -235,7 +235,7 @@ class ScanEventHistoryIntegrationTest
       expectedUpdateIds.foreach { id =>
         val eventByIdO = sv1ScanBackend.getEventById(
           id,
-          Some(CompactJson),
+          Some(LedgerApiJson),
         )
         eventByIdO match {
           case Some(eventById) =>
@@ -280,7 +280,7 @@ class ScanEventHistoryIntegrationTest
       sv1ScanBackend
         .getEventById(
           updateIdFromTap,
-          Some(CompactJson),
+          Some(LedgerApiJson),
         )
         .getOrElse(fail("Expected event for valid update id"))
     }
@@ -292,7 +292,7 @@ class ScanEventHistoryIntegrationTest
     val missingId = "does-not-exist-12345"
     val res = sv1ScanBackend.getEventById(
       missingId,
-      Some(CompactJson),
+      Some(LedgerApiJson),
     )
     res shouldBe None
   }
@@ -387,7 +387,7 @@ class ScanEventHistoryIntegrationTest
     val eventHistory = sv1ScanBackend.getEventHistory(
       count = pageLimit,
       after = after,
-      encoding = CompactJson,
+      encoding = LedgerApiJson,
     )
 
     val txItems = eventHistory.collect {

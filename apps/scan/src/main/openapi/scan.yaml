@@ -2875,6 +2875,8 @@ components:
           maxItems: 1000
           description: |
             Filters the ACS by contracts with these template IDs, specified as "PACKAGE_NAME:MODULE_NAME:ENTITY_NAME".
+        daml_value_encoding:
+          $ref: "#/components/schemas/DamlValueEncoding"
     HoldingsStateRequestV2: # subset of AcsRequestV2
       type: object
       required:
@@ -2923,6 +2925,8 @@ components:
           maxItems: 1000
           description: |
             Filters by contracts in which these party_ids are the owners of the amulets.
+        daml_value_encoding:
+          $ref: "#/components/schemas/DamlValueEncoding"
 
     HoldingsSummaryRequest:
       type: object
@@ -3038,7 +3042,7 @@ components:
         created_events:
           description: |
             Up to `page_size` contracts in the ACS.
-            `create_arguments` are always encoded as `compact_json`.
+            `create_arguments` are encoded as specified by `daml_value_encoding` in the request.
           type: array
           items:
             $ref: "#/components/schemas/ActiveContract"
@@ -3645,6 +3649,8 @@ components:
         before such an upgrade can be returned with or without the new fields (as null) depending on the
         version of the app that serves the request. This encoding returns the same JSON regardless of the version.
         Optional and defaults to "compact_json".
+        Not all endpoints support all encodings.
+        Requests for an encoding that an endpoint does not support are rejected.
       enum:
         - "compact_json"
         - "protobuf_json"

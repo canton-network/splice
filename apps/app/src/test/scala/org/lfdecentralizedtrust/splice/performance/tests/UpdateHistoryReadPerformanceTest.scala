@@ -138,7 +138,7 @@ class UpdateHistoryReadPerformanceTest(
           txs.foreach { tx =>
             val _ = ScanHttpEncodings.encodeUpdate(
               tx,
-              encoding = DamlValueEncoding.members.CompactJson,
+              encoding = DamlValueEncoding.members.LedgerApiJson,
               version = ScanHttpEncodings.V1,
               hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
               externalTransactionHashThresholdTime =
@@ -165,7 +165,7 @@ class UpdateHistoryReadPerformanceTest(
       encodeCount.incrementAndGet()
       ScanHttpEncodings.encodeUpdate(
         tx,
-        encoding = DamlValueEncoding.members.CompactJson,
+        encoding = DamlValueEncoding.members.LedgerApiJson,
         version = ScanHttpEncodings.V1,
         hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
         externalTransactionHashThresholdTime =
