@@ -231,10 +231,6 @@ pulumiStacks:
       requests:
         memory: '6Gi'
 splitwell:
-  participant:
-    additionalEnvVars:
-      - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-        value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
   walletGateway:
     enabled: false
     portfolioVersion: '1.14.0'
@@ -263,6 +259,9 @@ sv:
           tokensPerFill: 10000
 svs:
   sv:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -277,9 +276,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -303,6 +299,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -329,6 +327,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-1:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -343,9 +344,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -369,6 +367,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -398,6 +398,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-10:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -412,9 +415,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -438,6 +438,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -464,6 +466,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-11:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -478,9 +483,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -504,6 +506,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -530,6 +534,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-12:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -544,9 +551,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -570,6 +574,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -596,6 +602,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-13:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -610,9 +619,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -636,6 +642,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -662,6 +670,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-14:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -676,9 +687,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -702,6 +710,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -728,6 +738,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-15:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -742,9 +755,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -768,6 +778,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -794,6 +806,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-16:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -808,9 +823,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -834,6 +846,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -860,6 +874,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-2:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -874,9 +891,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -900,6 +914,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -926,6 +942,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-3:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -940,9 +959,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -966,6 +982,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -992,6 +1010,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-4:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1006,9 +1027,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1032,6 +1050,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1058,6 +1078,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-5:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1072,9 +1095,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1098,6 +1118,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1124,6 +1146,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-6:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1138,9 +1163,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1164,6 +1186,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1190,6 +1214,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-7:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1204,9 +1231,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1230,6 +1254,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1256,6 +1282,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-8:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1270,9 +1299,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1296,6 +1322,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1322,6 +1350,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-9:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1336,9 +1367,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1362,6 +1390,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1388,6 +1418,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-da-1:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1402,9 +1435,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1429,6 +1459,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1478,10 +1510,6 @@ validator1:
   deduplicationDuration: '30m'
   logging:
     level: 'DEBUG'
-  participant:
-    additionalEnvVars:
-      - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-        value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
   participantPruningSchedule:
     cron: '0 /10 * * * ?'
     maxDuration: '5m'

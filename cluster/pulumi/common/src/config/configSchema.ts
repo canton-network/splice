@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from 'zod';
 
-import { CloudSqlConfigSchema, SplicePostgresSchema } from './database';
+import { CloudSqlConfigSchema, defaultPostgresImage, SplicePostgresSchema } from './database';
 import { defaultActiveMigration, SynchronizerMigrationSchema } from './migrationSchema';
 
 // This is a config that's relevant for all (most) pulumi projects. For project-specific configuration,
@@ -15,7 +15,7 @@ const PulumiProjectConfigSchema = z.object({
   cloudSql: CloudSqlConfigSchema,
   defaultSplicePostgresConfig: SplicePostgresSchema.default({
     deployment: 'docker-image',
-    postgresImage: 'postgres:18-trixie',
+    postgresImage: defaultPostgresImage,
   }),
   allowDowngrade: z.boolean(),
   replacePostgresStatefulSetOnChanges: z.boolean().default(false),

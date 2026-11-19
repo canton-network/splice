@@ -15,31 +15,45 @@
 
   - Scan App
 
-    - `/v0/events` responses now include two new per-event fields:
+    - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true` (Helm
+      value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
+      per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
+      releases extend this setting to the daily snapshots once they are in bulk storage.
+      ACS snapshot queries with `record_time_match=exact` for a time whose snapshot was pruned then return not found.
 
-      - `asset_activity_records`: asset-side activity records (CIP-104). Omitted from JSON when there is no asset activity.
-      - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app. Omitted from JSON when absent.
+  - SV App
 
-    - CIP-104 v1.1 populates four optional fields on `OpenMiningRoundSummary`:
-      `optIssuancePerFeaturedAppRewardCoupon`, `optUnclaimedAppRewards`,
-      `optIssuancePerFeaturedAssetRewardCoupon`, and
-      `optTotalFeaturedAssetRewardCoupons`. The two `*Asset*` fields carry
-      the asset-side issuance ratio and the total featured-asset reward
-      coupons.
+    - Joining SVs now download the DSO party ACS and sequencer onboarding state from their sponsor as files
+      instead of keeping the responses in the SV app's memory, reducing SV app memory usage for large
+      snapshots. SVs that restrict SV app ingress must allow other SVs to reach the new
+      `/v0/onboard/sv/party-migration/prepare`, `/v0/onboard/sv/sequencer/prepare` and
+      `/v0/onboard/sv/download/{id}` endpoints, which are tagged `x-external-audience: svs`.
+      Interrupted downloads resume where they stopped. Proxies between SVs must pass through the
+      `Repr-Digest` response header, which the joining SV uses to verify the snapshot. They should also
+      pass through the `Range` and `Content-Range` headers; otherwise interrupted downloads start again
+      from the beginning.
 
-    - Explorer operators:
+  - Deployment
 
-      Because featured-app and featured-asset activity now have separate
-      issuance ratios, explorers should ingest the new `*Asset*` fields
-      alongside the existing app-activity ones; explorers that only read the
-      app-activity fields will under-report total app rewards minted.
+    - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
+      that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
+      `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
+    - The Postgres images used by the Docker Compose deployments and by the Helm `pg-init` init containers are bumped
+      to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
+      Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
 
-    - changed `/v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals` to include additional fields
+  - Scan App
 
-  - Helm charts and Docker images
-
-    - Removed the remaining CometBFT support including the cometbft helm
-      charts, docker images and unused `splice-info` values.
+    - Add the `ledger_api_json` option to the `DamlValueEncoding` enum, used by the `daml_value_encoding`
+      parameter of the update history and event history endpoints.
+      It encodes Daml values like the JSON Ledger API (v2) does. The encoding is identical to the existing
+      `compact_json`, with two differences: numeric values are encoded differently ("0E-10" vs "0.0000000000"),
+      and it omits trailing `null` fields of Daml records. The latter is important: with `compact_json`,
+      a daml upgrade that added new optional fields to templates caused old values to be returned with those
+      fields included in the JSON object (as `null`), so the returned JSON depends on the Scan version.
+      The new `ledger_api_json` encoding returns the same JSON regardless of the Scan version.
+      `compact_json` remains the default for now. Clients that compare responses across Scan instances should switch to
+      the new encoding.
 
 
 

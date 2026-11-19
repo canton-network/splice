@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
-import cats.implicits.{showInterpolator, toTraverseOps}
+import cats.implicits.showInterpolator
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -28,7 +28,6 @@ import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.lsu.LsuTrigger.LsuTransferTask
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.SynchronizerNodeState.OnboardedImmediately
-import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import java.nio.file.Path
 import scala.concurrent.{ExecutionContext, Future}
@@ -39,7 +38,6 @@ class LsuTrigger(
     localSynchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
     successorSynchronizerNode: LocalSynchronizerNode,
     participantAdminConnection: ParticipantAdminConnection,
-    store: SvDsoStore,
     dumpPath: Path,
     hasBftSequencerConnections: Boolean,
 )(implicit
@@ -118,14 +116,6 @@ class LsuTrigger(
       tc: TraceContext
   ): Future[TaskOutcome] = {
     for {
-      rulesAndState <- store.getDsoRulesWithSvNodeStates()
-      owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
-      _ <- successorSynchronizerNode.cometbftNode.traverse(
-        _.rotateGenesisGovernanceKeyForSV1(owningNodeSvName)
-      )
-      _ <- successorSynchronizerNode.cometbftNode.traverse(
-        _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
-      )
       state <- exporter.exportLSUState(
         topologyExportTime = None
       )

@@ -36,6 +36,8 @@ import java.time.Duration
 import java.util.UUID
 import scala.concurrent.Future
 import scala.util.Try
+import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
 import com.digitalasset.canton.util.MonadUtil
 
@@ -349,6 +351,46 @@ class WalletIntegrationTest
           }
         },
       )
+    }
+
+    "support self-granting featured app rights with a custom config" taggedAs (org.lfdecentralizedtrust.splice.util.Tags.SpliceAmulet_0_1_25) in {
+      implicit env =>
+        onboardWalletUser(splitwellWalletClient, splitwellValidatorBackend)
+        val alice = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+
+        actAndCheck(
+          "splitwell cancels any existing featured app right",
+          splitwellWalletClient.cancelFeaturedAppRight(),
+        )(
+          "splitwell provider is not featured",
+          _ => splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe false,
+        )
+
+        actAndCheck(
+          "Splitwell provider grants itself an asset-moving featured app right",
+          retryCommandSubmission(
+            splitwellWalletClient.selfGrantFeaturedAppRight(
+              appKind = Some(amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING),
+              activityWeight = Some(BigDecimal("2.5")),
+              opsParties = Some(Seq(alice)),
+            )
+          ),
+        )(
+          "splitwell provider is featured with the requested config",
+          { featuredAppRight =>
+            inside(sv1ScanBackend.listFeaturedAppRights()) { case Seq(r) =>
+              r.contractId shouldBe featuredAppRight
+              r.payload.appKind.toScala shouldBe Some(
+                amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING
+              )
+              r.payload.activityWeight.toScala.map(BigDecimal(_)) shouldBe Some(BigDecimal("2.5"))
+              r.payload.opsParties.toScala.map(_.asScala.toSeq) shouldBe Some(
+                Seq(alice.toProtoPrimitive)
+              )
+            }
+            splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe true
+          },
+        )
     }
 
     "automation and offboarding work even if the recipient user does not exist" in { implicit env =>

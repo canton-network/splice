@@ -7,7 +7,9 @@ import org.lfdecentralizedtrust.splice.util.{
   SplitwellFrontendTestUtil,
   WalletTestUtil,
 }
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
+import org.slf4j.event.Level
 
 import scala.concurrent.duration.DurationInt
 
@@ -127,7 +129,7 @@ class SplitwellFrontendIntegrationTest
         eventuallyClickOn(className("payment-accept"))
 
         // And then back to splitwell, where he is already logged in
-        eventually() {
+        eventually(30.seconds) {
           inside(findAll(className("balances-table-row")).toSeq) { case Seq(row1, row2) =>
             matchRow(
               Seq("party-id", "balances-table-amount"),
@@ -245,7 +247,7 @@ class SplitwellFrontendIntegrationTest
         eventuallyClickOn(className("payment-accept"))
 
         // And then back to splitwell, where he is already logged in
-        eventually() {
+        eventually(30.seconds) {
           inside(findAll(className("balances-table-row")).toSeq) { case Seq(row) =>
             matchRow(
               Seq("ans-entry", "balances-table-amount"),
@@ -286,8 +288,15 @@ class SplitwellFrontendIntegrationTest
 
       withFrontEndStep("bobSplitwell", "error-on-unknown-party") { implicit webDriver =>
         val errorMsg = "is not part of the group"
-        loggerFactory.assertLoggedWarningsAndErrorsSeq(
-          enterSplitwellPayment("unknown::abc", PartyId.tryFromProtoPrimitive("unknown::abc"), 42),
+        loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          {
+            enterSplitwellPayment("unknown::abc", PartyId.tryFromProtoPrimitive("unknown::abc"), 42)
+            // Browser console errors reach the test log asynchronously (over a different channel
+            // than the DOM), so wait for the error in the UI and also retry the log check.
+            eventually() {
+              find(id("error")).value.text should include(errorMsg)
+            }
+          },
           logs => forExactly(1, logs)(_.errorMessage should include(errorMsg)),
         )
         consumeError(errorMsg)

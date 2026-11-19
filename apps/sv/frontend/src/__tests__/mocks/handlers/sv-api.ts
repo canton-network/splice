@@ -10,7 +10,6 @@ import { FeatureSupportResponse, SuccessStatusResponse } from '@canton-network/s
 import {
   CountVoteResultsRequest,
   CountVoteResultsResponse,
-  ErrorResponse,
   ListDsoRulesVoteRequestsResponse,
   ListDsoRulesVoteResultsResponse,
   ListFeaturedAppRightsByProviderResponse,
@@ -186,15 +185,6 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
 
   http.post(`${svUrl}/v0/admin/sv/votes`, () => {
     return new HttpResponse(null, { status: 201 });
-  }),
-
-  http.get(`${svUrl}/v0/admin/domain/cometbft/debug`, () => {
-    return HttpResponse.json<ErrorResponse>(
-      {
-        error: `No domain nodes in this test.`,
-      },
-      { status: 404 }
-    );
   }),
 
   http.get(`${svUrl}/v0/admin/domain/sequencer/status`, () => {

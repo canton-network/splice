@@ -107,4 +107,8 @@ object DsoPartyHosting {
   final case class RequiredProposalNotFound(
       partyToParticipantSerial: PositiveInt
   ) extends DsoPartyMigrationFailure
+
+  final case class AcceptedStateNotFound(
+      participantId: ParticipantId
+  ) extends DsoPartyMigrationFailure
 }

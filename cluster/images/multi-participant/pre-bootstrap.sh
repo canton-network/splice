@@ -121,7 +121,6 @@ canton.participants.participant_$index = {
         }
     }
 
-    # TODO(DACH-NY/canton-network-node#8331) Tune cache sizes
     # from https://docs.daml.com/2.8.0/canton/usermanual/performance.html#configuration
     # tune caching configs of the ledger api server
     ledger-api {

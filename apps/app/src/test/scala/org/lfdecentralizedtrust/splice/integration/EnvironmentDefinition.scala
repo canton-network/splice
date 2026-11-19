@@ -566,6 +566,7 @@ case class EnvironmentDefinition(
           )(conf)
       )
       .withSequencerConnectionsFromScanDisabled(10_000)
+      .addConfigTransform((_, conf) => ConfigTransforms.disableBftBlacklisting()(conf))
 
   override def createTestConsole(
       environment: SpliceEnvironment,

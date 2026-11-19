@@ -554,6 +554,33 @@ class HttpScanHandler(
     }
   }
 
+  override def getRewardCouponsV2Disclosures(
+      respond: ScanResource.GetRewardCouponsV2DisclosuresResponse.type
+  )(
+      body: definitions.GetRewardCouponsV2DisclosuresRequest
+  )(extracted: TraceContext): Future[ScanResource.GetRewardCouponsV2DisclosuresResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getRewardCouponsV2Disclosures") { _ => _ =>
+      store.multiDomainAcsStore
+        .lookupContractsById(amulet.RewardCouponV2.COMPANION)(
+          maxSizeOrFail("contract_ids", body.contractIds, 100)
+            .map(new amulet.RewardCouponV2.ContractId(_))
+        )
+        .map { contracts =>
+          ScanResource.GetRewardCouponsV2DisclosuresResponseOK(
+            definitions.GetRewardCouponsV2DisclosuresResponse(
+              createdEventBlobs = contracts.view
+                .map(c =>
+                  c.contract.contractId.contractId -> Base64.getEncoder
+                    .encodeToString(c.contract.createdEventBlob.toByteArray)
+                )
+                .toMap
+            )
+          )
+        }
+    }
+  }
+
   def getAmuletConfigForRound(
       response: v0.ScanResource.GetAmuletConfigForRoundResponse.type
   )(
@@ -2636,11 +2663,17 @@ class HttpScanHandler(
 
   private def getStorageEncodings(
       damlValueEncoding: Option[DamlValueEncoding]
-  ): NonEmptyList[ScanStorageConfig.Encoding] =
-    NonEmptyList.one(
-      ScanStorageConfig.Encoding
-        .fromDamlValueEncoding(damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson))
-    )
+  ): NonEmptyList[ScanStorageConfig.Encoding] = {
+    val requested = damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson)
+    val encoding = ScanStorageConfig.Encoding
+      .fromDamlValueEncoding(requested)
+      .getOrElse(
+        throw io.grpc.Status.INVALID_ARGUMENT
+          .withDescription(s"Encoding '${requested.value}' is not available in bulk storage")
+          .asRuntimeException()
+      )
+    NonEmptyList.one(encoding)
+  }
 
   private def encodeBulkStorageObjects(objects: Seq[ObjectKeyAndChecksum], publicUrl: Uri) =
     objects.map { case ObjectKeyAndChecksum(key, digest) =>

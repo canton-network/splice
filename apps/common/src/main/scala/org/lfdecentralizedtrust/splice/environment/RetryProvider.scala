@@ -64,7 +64,6 @@ final class RetryProvider(
 
   // Keep track of promises directly to avoid the promise accumulating references to stale futures that it should complete.
   // For more details check https://github.com/DACH-NY/canton-network-node/issues/9178
-  // TODO(DACH-NY/canton-network-node#4405) Derive from FlagCloseable isClosing state.
   private val promisesRunningThatAreShutdownAware: java.util.Set[Promise[UnlessShutdown[?]]] =
     Collections.synchronizedSet(
       Collections.newSetFromMap(

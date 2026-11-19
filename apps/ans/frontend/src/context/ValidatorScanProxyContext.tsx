@@ -15,7 +15,6 @@ import {
   ResponseContext,
 } from '@canton-network/scan-proxy-openapi';
 
-//TODO(DACH-NY/canton-network-node#8571) deduplicate this and reuse from specific libraries instead of all on common frontend
 const ValidatorScanProxyContext = React.createContext<ScanProxyApi | undefined>(undefined);
 
 export interface ValidatorScanProxyProps {

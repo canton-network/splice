@@ -31,7 +31,6 @@ class PackageVetting(
     participantAdminConnection: ParticipantAdminConnection,
     override val loggerFactory: NamedLoggerFactory,
     latestPackagesOnly: Boolean,
-    enableUnsupportedDarsUnvetting: Boolean,
 )(implicit ec: ExecutionContext, tracer: Tracer)
     extends NamedLogging
     with Spanning {
@@ -58,7 +57,6 @@ class PackageVetting(
         .getRequiredPackageVersions(
           pkg.packageName,
           packageVersion,
-          enableUnsupportedDarsUnvetting,
           additionalPackagesToUnvet = additionalPackagesToUnvet,
         )
         .map(versionToVet => pkg -> versionToVet.metadata.version)
@@ -91,7 +89,6 @@ class PackageVetting(
           .getRequiredPackageVersions(
             pkg.packageName,
             PackageIdResolver.readPackageVersion(currentPackageConfig, pkg),
-            enableUnsupportedDarsUnvetting,
             additionalPackagesToUnvet = additionalPackagesToUnvet,
           )
           .map(versionToVet => pkg -> versionToVet.metadata.version)
@@ -170,7 +167,6 @@ class PackageVetting(
       vettedPackageIds = vettedPackages.flatMap(_.mapping.packages).map(_.packageId)
       unsupportedPackages = DarResourcesUtil.filterUnsupportedPackageVersions(
         vettedPackageIds,
-        enableUnsupportedDarsUnvetting,
         latestPackagesOnly,
         additionalPackagesToUnvet,
         (currentPackageConfig +: pendingPackageConfigs).map(PackageIdResolver.toPackageConfigMap),
@@ -299,7 +295,6 @@ class PackageVetting(
               .getRequiredPackageVersions(
                 pkg.packageName,
                 configPackageVersion,
-                enableUnsupportedDarsUnvetting,
                 additionalPackagesToUnvet = additionalPackagesToUnvet,
               )
               .map(_.metadata.version)

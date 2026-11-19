@@ -16,10 +16,10 @@ import {
   ExactNamespace,
   failOnAppVersionMismatch,
   imagePullSecret,
-  installLedgerApiSecret,
   installSpliceHelmChart,
   persistentHeapDumpsPvc,
   ValidatorTopupConfig,
+  installSplitwellAppSecrets,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
@@ -93,6 +93,9 @@ export async function installSplitwell(
   const splitwellDbName = 'app_splitwell';
 
   const scanAddress = `http://scan-app.sv-1:5012`;
+
+  const extraDependsOn = imagePullDeps.concat(await installSplitwellAppSecrets(xns, auth0Client));
+
   installSpliceHelmChart(
     xns,
     'splitwell-app',
@@ -123,7 +126,7 @@ export async function installSplitwell(
       pvc: persistentHeapDumpsPvc(),
     },
     activeVersion,
-    { dependsOn: imagePullDeps }
+    { dependsOn: extraDependsOn }
   );
 
   const validatorPostgres =
@@ -138,10 +141,6 @@ export async function installSplitwell(
       true
     ));
   const validatorDbName = 'val_splitwell';
-
-  const extraDependsOn = imagePullDeps.concat(
-    await installLedgerApiSecret(auth0Client, xns, 'splitwell')
-  );
 
   const participantPruningConfig = splitwellConfig?.participantPruningSchedule;
 

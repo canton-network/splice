@@ -55,8 +55,10 @@ import {
 import {
   type CloudArmorAlertConfig,
   cloudArmorConfig,
+  grafanaMuteTimeIntervals,
   monitoringConfig,
   prometheusConfig,
+  prometheusMuteTimeIntervals,
 } from './config';
 import { createGrafanaGcpDatasources, grafanaGcpLoggingPlugin } from './gcpGrafanaDatasources';
 import { createGrafanaDashboards } from './grafana-dashboards';
@@ -230,8 +232,31 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                   matchers: ['alertname=~"Watchdog|InfoInhibitor"'],
                   continue: false,
                 },
+                ...prometheusMuteTimeIntervals.map(interval => ({
+                  receiver: enableAlerts && enablePrometheusAlerts ? 'slack' : 'null',
+                  matchers: interval.objectMatchers.map(
+                    ([label, op, value]) => `${label}${op}${JSON.stringify(value)}`
+                  ),
+                  mute_time_intervals: [interval.name],
+                  continue: false,
+                })),
               ],
             },
+            ...(prometheusMuteTimeIntervals.length > 0
+              ? {
+                  time_intervals: prometheusMuteTimeIntervals.map(interval => ({
+                    name: interval.name,
+                    time_intervals: interval.timeWindows.map(window => ({
+                      times: window.times.map(t => ({
+                        start_time: t.startTime,
+                        end_time: t.endTime,
+                      })),
+                      ...(window.weekdays ? { weekdays: window.weekdays } : {}),
+                      location: 'UTC',
+                    })),
+                  })),
+                }
+              : {}),
             receivers: [
               {
                 name: 'null',
@@ -960,11 +985,11 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 'notification_policies.yaml': grafanaAlertNotificationPolicies(),
               }
             : {}),
-          ...(enableAlerts && monitoringConfig.alerting.muteTimeIntervals.length > 0
+          ...(enableAlerts && grafanaMuteTimeIntervals.length > 0
             ? {
                 'mute_time_intervals.yaml': yaml.dump({
                   apiVersion: 1,
-                  muteTimes: monitoringConfig.alerting.muteTimeIntervals.map(interval => ({
+                  muteTimes: grafanaMuteTimeIntervals.map(interval => ({
                     orgId: 1,
                     name: interval.name,
                     time_intervals: interval.timeWindows.map(window => ({
@@ -1215,7 +1240,7 @@ function grafanaAlertNotificationPolicies() {
   const defaultPolicy = yaml.load(
     readGrafanaAlertingFile('notification_policies/default_slack.yaml')
   ) as Record<string, unknown>;
-  for (const interval of monitoringConfig.alerting.muteTimeIntervals) {
+  for (const interval of grafanaMuteTimeIntervals) {
     notificationPolicies.push({
       receiver: 'cn-ci-channel-notification',
       object_matchers: interval.objectMatchers,

@@ -1,0 +1,28 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "arguments": [
+      {
+        "dataType": "{\"typeKind\":\"STRING\"}",
+        "name": "staging_table_name"
+      },
+      {
+        "dataType": "{\"typeKind\":\"STRING\"}",
+        "name": "prod_table_name"
+      },
+      {
+        "dataType": "{\"typeKind\":\"ARRAY\",\"arrayElementType\":{\"typeKind\":\"STRING\"}}",
+        "name": "columns"
+      }
+    ],
+    "datasetId": "mock_da2_scan_prod",
+    "definitionBody": "BEGIN\n  DECLARE added ARRAY<STRING>;\n  DECLARE add_columns STRING;\n\n  SET added = [];\n  -- the append creates production with every listed column\n  IF EXISTS (\n    SELECT 1 FROM `test-project.mock_da2_scan_prod.INFORMATION_SCHEMA.TABLES`\n    WHERE table_name = prod_table_name\n  ) THEN\n    SET added = ARRAY(\n      SELECT column_name FROM `test-project.mock_da2_scan_staging.INFORMATION_SCHEMA.COLUMNS`\n      WHERE table_name = staging_table_name\n        AND column_name IN UNNEST(columns)\n        AND column_name NOT IN (\n          SELECT column_name FROM `test-project.mock_da2_scan_prod.INFORMATION_SCHEMA.COLUMNS`\n          WHERE table_name = prod_table_name\n        )\n      ORDER BY ordinal_position\n    );\n    SET add_columns = (\n      SELECT STRING_AGG(\n        FORMAT('ADD COLUMN IF NOT EXISTS `%s` %s', column_name, data_type),\n        ', ' ORDER BY ordinal_position)\n      FROM `test-project.mock_da2_scan_staging.INFORMATION_SCHEMA.COLUMNS`\n      WHERE table_name = staging_table_name\n        AND column_name IN UNNEST(added)\n    );\n    IF add_columns IS NOT NULL THEN\n      EXECUTE IMMEDIATE FORMAT(\n        'ALTER TABLE `%s.%s.%s` %s',\n        'test-project', 'mock_da2_scan_prod', prod_table_name, add_columns);\n    END IF;\n  END IF;\nEND",
+    "language": "SQL",
+    "routineId": "sp_fix_prod_schema",
+    "routineType": "PROCEDURE"
+  },
+  "name": "prod-schema-fix-routine",
+  "provider": "",
+  "type": "gcp:bigquery/routine:Routine"
+}

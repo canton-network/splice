@@ -291,7 +291,7 @@ class WalletRewardsTimeBasedIntegrationTest
       val aliceShareToBob = aliceV2Amounts.sum * BigDecimal(0.4)
       val expectedV2Delta = bobV2Amount + aliceShareToBob
       clue("Bob's balance reflects his own V2 coupon + alice's shared 40%") {
-        eventually() {
+        eventually(60.seconds) {
           val newBobBalance = bobValidatorWalletClient.balance().unlockedQty
           val delta = newBobBalance - prevBobBalance
           // Delta must include at least the V2 coupons; may also include

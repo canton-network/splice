@@ -12,7 +12,7 @@ import { UseQueryResult } from '@tanstack/react-query';
 import React from 'react';
 import JSONPretty from 'react-json-pretty';
 import 'react-json-pretty/themes/monikai.css';
-import { CometBftNodeDumpOrErrorResponse, NodeStatus } from '@canton-network/sv-openapi';
+import { NodeStatus } from '@canton-network/sv-openapi';
 
 import { Box, Tab, Table, TableBody, TableRow, Tabs, Typography } from '@mui/material';
 import TableCell from '@mui/material/TableCell';
@@ -121,38 +121,6 @@ const TabPanel = (props: TabPanelProps) => {
   );
 };
 
-function getCometBftDebugData(
-  cometBftNodeDebugQuery: UseQueryResult<CometBftNodeDumpOrErrorResponse>
-) {
-  if (cometBftNodeDebugQuery.isPending) {
-    return <Loading />;
-  }
-
-  if (cometBftNodeDebugQuery.isError) {
-    console.error(cometBftNodeDebugQuery.error);
-    return <p>Error encountered in cometBFT node: {cometBftNodeDebugQuery.error.message} </p>;
-  }
-
-  const data = cometBftNodeDebugQuery.data!;
-
-  return (
-    <div>
-      <JSONPretty id="comet-bft-debug-abci" style={{ fontSize: '10pt' }} data={data.abci_info} />
-      <JSONPretty
-        id="comet-bft-debug-validators"
-        style={{ fontSize: '10pt' }}
-        data={data.validators}
-      />
-      <JSONPretty id="comet-bft-debug-status" style={{ fontSize: '10pt' }} data={data.status} />
-      <JSONPretty
-        id="comet-bft-debug-network"
-        style={{ fontSize: '10pt' }}
-        data={data.network_info}
-      />
-    </div>
-  );
-}
-
 const StatusDisplay: React.FC<{ status: UseQueryResult<NodeStatus> }> = ({ status }) => {
   if (status.isPending) {
     return <Loading />;
@@ -224,14 +192,12 @@ function tabProps(info: string) {
 interface DsoViewPrettyJSONProps {
   dsoInfoQuery: UseQueryResult<DsoInfo>;
   svInfoQuery: UseQueryResult<SvInfo>;
-  cometBftNodeDebugQuery?: UseQueryResult<CometBftNodeDumpOrErrorResponse>;
   sequencerStatusQuery?: UseQueryResult<NodeStatus>;
   mediatorStatusQuery?: UseQueryResult<NodeStatus>;
 }
 const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
   dsoInfoQuery,
   svInfoQuery,
-  cometBftNodeDebugQuery,
   sequencerStatusQuery,
   mediatorStatusQuery,
 }) => {
@@ -252,8 +218,6 @@ const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
   }
   const dsoInfoData = dsoInfoQuery.data;
 
-  const cometBftDebugTab = cometBftNodeDebugQuery && getCometBftDebugData(cometBftNodeDebugQuery);
-
   const updatedAmuletRules: AmuletRules = {
     dso: dsoInfoData?.amuletRules.payload.dso!,
     isDevNet: dsoInfoData?.amuletRules.payload.isDevNet!,
@@ -271,7 +235,6 @@ const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
             label={`${window.splice_config.spliceInstanceNames?.amuletName} Info`}
             {...tabProps('amulet-info')}
           />
-          {cometBftDebugTab && <Tab label="CometBFT Debug Info" {...tabProps('cometBft-debug')} />}
           {sequencerStatusQuery && mediatorStatusQuery && (
             <Tab label="Domain Node Status" {...tabProps('canton-domain-status')} />
           )}
@@ -294,13 +257,8 @@ const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
           data={AmuletRules.encode(updatedAmuletRules)}
         />
       </TabPanel>
-      {cometBftDebugTab && (
-        <TabPanel value={value} index={3}>
-          {cometBftDebugTab}
-        </TabPanel>
-      )}
       {sequencerStatusQuery && mediatorStatusQuery && (
-        <TabPanel value={value} index={4}>
+        <TabPanel value={value} index={3}>
           {cantonDomainTab(sequencerStatusQuery, mediatorStatusQuery)}
         </TabPanel>
       )}
