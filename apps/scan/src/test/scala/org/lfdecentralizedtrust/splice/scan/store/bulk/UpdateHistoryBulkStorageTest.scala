@@ -27,7 +27,6 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider,
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
-  CompactJsonScanHttpEncodings,
   ProtobufJsonScanHttpEncodings,
   ScanHttpEncodings,
 }
@@ -144,7 +143,7 @@ class UpdateHistoryBulkStorageTest
             )
             .value
             .get()
-        numObjectsFromMetric(ScanStorageConfig.Encoding.CompactJson) shouldBe 3
+        numObjectsFromMetric(ScanStorageConfig.Encoding.LedgerApiJson) shouldBe 3
         numObjectsFromMetric(ScanStorageConfig.Encoding.ProtobufJson) shouldBe 3
       }
 
@@ -164,24 +163,18 @@ class UpdateHistoryBulkStorageTest
             /* We hard-code the expected digests to enforce that the persisted data format does not change.
                These values must not be modified unless there is a conscious decision to change the persisted format,
                with a migration plan for how to apply it consistently across SVs. */
-            val (encodings, expectedDigests): (ScanHttpEncodings, Seq[String]) = encoding match {
-              case ScanStorageConfig.Encoding.CompactJson =>
-                (
-                  new CompactJsonScanHttpEncodings(identity, identity),
-                  Seq(
-                    "0eImmIjyazFOwY+FTTPTTz3OhIO17/M6lDLHAtIEsK4=",
-                    "7w/7yx+uWqZK8TlolFRUnvEVjNsQNv1LXfS576d4UqA=",
-                    "ZTMI/VrXRZzbrm022fpd42lazU+GW6j/7czNHorI0h8=",
-                  ),
+            val expectedDigests: Seq[String] = encoding match {
+              case ScanStorageConfig.Encoding.LedgerApiJson =>
+                Seq(
+                  "0eImmIjyazFOwY+FTTPTTz3OhIO17/M6lDLHAtIEsK4=",
+                  "7w/7yx+uWqZK8TlolFRUnvEVjNsQNv1LXfS576d4UqA=",
+                  "ZTMI/VrXRZzbrm022fpd42lazU+GW6j/7czNHorI0h8=",
                 )
               case ScanStorageConfig.Encoding.ProtobufJson =>
-                (
-                  ProtobufJsonScanHttpEncodings,
-                  Seq(
-                    "+MeeOS/qMeEWaqaf0SXscROnVNmCEac2OIcv2z+k6hc=",
-                    "Y9IX/Ku0drtxoYGAdV6t63c+Szpjuz9v0q0/Z9ybWNs=",
-                    "P/Y+o2eY+nl8p5bgxsqsRd6E6fIrZ5H7z4FZNwSRewM=",
-                  ),
+                Seq(
+                  "+MeeOS/qMeEWaqaf0SXscROnVNmCEac2OIcv2z+k6hc=",
+                  "Y9IX/Ku0drtxoYGAdV6t63c+Szpjuz9v0q0/Z9ybWNs=",
+                  "P/Y+o2eY+nl8p5bgxsqsRd6E6fIrZ5H7z4FZNwSRewM=",
                 )
             }
 
@@ -194,17 +187,23 @@ class UpdateHistoryBulkStorageTest
               readUncompressAndDecode(bucketConnection, io.circe.parser.decode[UpdateHistoryItemV2])
             )
             allUpdatesFromS3.length shouldBe segmentUpdates.length
-            allUpdatesFromS3
-              .map(
-                encodings.httpToLapiUpdate
-              ) should contain theSameElementsInOrderAs segmentUpdates
+            allUpdatesFromS3 should contain theSameElementsInOrderAs segmentUpdates.map(
+              ScanHttpEncodings.encodeUpdateV2(_, encoding.damlValueEncoding, ScanHttpEncodings.V1)
+            )
+            // Only protobuf_json is lossless
+            if (encoding == ScanStorageConfig.Encoding.ProtobufJson) {
+              allUpdatesFromS3
+                .map(
+                  ProtobufJsonScanHttpEncodings.httpToLapiUpdate
+                ) should contain theSameElementsInOrderAs segmentUpdates
+            }
             bucketConnection
               .getChecksums(objectKeys.toSeq)
               .futureValue
               .map(_.checksum) should contain theSameElementsInOrderAs expectedDigests
           }
 
-          checkEncoding(ScanStorageConfig.Encoding.CompactJson)
+          checkEncoding(ScanStorageConfig.Encoding.LedgerApiJson)
           checkEncoding(ScanStorageConfig.Encoding.ProtobufJson)
         }
       }

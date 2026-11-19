@@ -153,17 +153,21 @@ object ScanStorageConfig {
       (".*" + Regex.quote(prefix) + "_" + Regex.quote(key) + "_\\d+\\.zstd").r
   }
   object Encoding {
-    case object CompactJson
-        extends Encoding("compact_json", definitions.DamlValueEncoding.CompactJson)
+    case object LedgerApiJson
+        extends Encoding("ledger_api_json", definitions.DamlValueEncoding.LedgerApiJson)
     case object ProtobufJson
         extends Encoding("protobuf_json", definitions.DamlValueEncoding.ProtobufJson)
 
-    lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](CompactJson, ProtobufJson)
+    lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](LedgerApiJson, ProtobufJson)
 
-    def fromDamlValueEncoding(damlValueEncoding: definitions.DamlValueEncoding): Encoding =
+    /** None for encodings that are not available in bulk storage */
+    def fromDamlValueEncoding(
+        damlValueEncoding: definitions.DamlValueEncoding
+    ): Option[Encoding] =
       damlValueEncoding match {
-        case definitions.DamlValueEncoding.members.CompactJson => CompactJson
-        case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJson
+        case definitions.DamlValueEncoding.members.LedgerApiJson => Some(LedgerApiJson)
+        case definitions.DamlValueEncoding.members.ProtobufJson => Some(ProtobufJson)
+        case definitions.DamlValueEncoding.members.CompactJson => None
       }
   }
 }

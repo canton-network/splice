@@ -62,7 +62,7 @@ class ZstdTest extends StoreTestBase {
         updates.map(update =>
           ScanHttpEncodings.encodeUpdate(
             update,
-            definitions.DamlValueEncoding.CompactJson,
+            definitions.DamlValueEncoding.LedgerApiJson,
             ScanHttpEncodings.V1,
           )
         )

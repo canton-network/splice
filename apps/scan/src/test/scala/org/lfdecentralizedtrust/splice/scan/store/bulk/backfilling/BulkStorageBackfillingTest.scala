@@ -51,10 +51,12 @@ class BulkStorageBackfillingTest
     UpdatesSegment(ts(fromDay), ts(toDay))
 
   private def objects(folderName: String, n: Int): Seq[ObjectKeyAndChecksum] =
-    (0 until n).map(i => ObjectKeyAndChecksum(s"$folderName/updates_compact_json_$i.zstd", s"d-$i"))
+    (0 until n).map(i =>
+      ObjectKeyAndChecksum(s"$folderName/updates_ledger_api_json_$i.zstd", s"d-$i")
+    )
 
   private def snapshotAt(day: Int): (CantonTimestamp, Seq[ObjectKeyAndChecksum]) =
-    ts(day) -> Seq(ObjectKeyAndChecksum(s"${ts(day)}/ACS_compact_json_0.zstd", s"s-$day"))
+    ts(day) -> Seq(ObjectKeyAndChecksum(s"${ts(day)}/ACS_ledger_api_json_0.zstd", s"s-$day"))
 
   private class InMemoryProgress extends BackfillingProgress {
     val updates = new AtomicReference[Option[UpdatesSegment]](None)
@@ -272,21 +274,21 @@ class BulkStorageBackfillingTest
     }
 
     "copy each encoding only from the peers that agreed on that encoding" in {
-      val compactJsonPeers = Seq(Uri("http://compact-json-peer"))
+      val ledgerApiJsonPeers = Seq(Uri("http://ledger-api-json-peer"))
       val protobufJsonPeers = Seq(Uri("http://protobuf-json-peer"))
       val copier = new RecordingCopier
       val listing = new FakeListing(
         () => folders,
         () => snapshots,
-        peersPerEncoding = NonEmptyList.of(compactJsonPeers, protobufJsonPeers),
+        peersPerEncoding = NonEmptyList.of(ledgerApiJsonPeers, protobufJsonPeers),
       )
       backfilling(new InMemoryProgress, copier, listing).map { _ =>
         val peersPerCopy = copier.copiesWithPeers.get().map(_._2)
         peersPerCopy.distinct should contain theSameElementsAs Seq(
-          compactJsonPeers,
+          ledgerApiJsonPeers,
           protobufJsonPeers,
         )
-        peersPerCopy.count(_ == compactJsonPeers) shouldBe
+        peersPerCopy.count(_ == ledgerApiJsonPeers) shouldBe
           peersPerCopy.count(_ == protobufJsonPeers)
       }
     }

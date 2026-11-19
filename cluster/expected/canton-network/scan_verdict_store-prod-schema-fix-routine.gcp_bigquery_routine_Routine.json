@@ -1,0 +1,14 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "datasetId": "mock_da2_scan_prod",
+    "definitionBody": "BEGIN\n  DECLARE oldest_record_date DATE;\n\n  -- 1. Add the listed columns that production lacks\n  CALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema`('scan_sv_1_scan_verdict_store', 'scan_verdict_store', ['row_id', 'ingested_at', 'migration_id', 'domain_id', 'record_time', 'finalization_time', 'submitting_participant_uid', 'verdict_result', 'mediator_group', 'update_id', 'submitting_parties', 'transaction_root_views', 'history_id', 'total_traffic_cost', 'envelope_traffic_costs', 'datastream_metadata']);\n\nEND;\n",
+    "language": "SQL",
+    "routineId": "sp_fix_prod_schema_scan_verdict_store",
+    "routineType": "PROCEDURE"
+  },
+  "name": "scan_verdict_store-prod-schema-fix-routine",
+  "provider": "",
+  "type": "gcp:bigquery/routine:Routine"
+}

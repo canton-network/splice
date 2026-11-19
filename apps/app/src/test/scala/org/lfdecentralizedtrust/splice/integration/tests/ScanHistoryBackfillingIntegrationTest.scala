@@ -12,7 +12,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
@@ -502,11 +502,11 @@ class ScanHistoryBackfillingIntegrationTest
       // The v1 endpoint is deprecated, but we still have users using it
       @nowarn("cat=deprecation")
       val sv1HttpUpdates =
-        sv1ScanBackend.getUpdateHistoryV1(1000, None, encoding = CompactJson)
+        sv1ScanBackend.getUpdateHistoryV1(1000, None, encoding = LedgerApiJson)
 
       @nowarn("cat=deprecation")
       val sv2HttpUpdates =
-        sv2ScanBackend.getUpdateHistoryV1(1000, None, encoding = CompactJson)
+        sv2ScanBackend.getUpdateHistoryV1(1000, None, encoding = LedgerApiJson)
 
       // Compare common prefix, as there might be concurrent activity
       val commonLength = sv1HttpUpdates.length min sv2HttpUpdates.length
@@ -615,7 +615,7 @@ class ScanHistoryBackfillingIntegrationTest
 
   private def readUpdateHistoryFromScan(backend: ScanAppBackendReference) = {
     backend
-      .getUpdateHistory(1000, None, encoding = CompactJson)
+      .getUpdateHistory(1000, None, encoding = LedgerApiJson)
   }
 
   private def sv1BackfillTrigger(implicit env: SpliceTestConsoleEnvironment) =

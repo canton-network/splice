@@ -4,7 +4,7 @@ import cats.data.Chain
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllScanAppConfigs_
 import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV2, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryReassignment.Event.members as reassignmentMembers
@@ -98,7 +98,7 @@ class UpdateHistorySanityCheckPlugin(
       after: Option[(Long, String)],
       acc: Chain[UpdateHistoryItemV2],
   ): Chain[UpdateHistoryItemV2] = {
-    val result = scan.getUpdateHistory(10, after, encoding = CompactJson)
+    val result = scan.getUpdateHistory(10, after, encoding = LedgerApiJson)
     val newAcc = acc ++ Chain.fromSeq(result)
     result.lastOption match {
       case None => acc // done

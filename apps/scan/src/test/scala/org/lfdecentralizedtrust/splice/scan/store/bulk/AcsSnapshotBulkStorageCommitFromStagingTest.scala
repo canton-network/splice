@@ -215,7 +215,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       committedConnection
         .copyObject(
           "staging",
-          s"${bulkStorageTestConfig.getSegmentFolder(ts(4), None)}/${ScanStorageConfig.Encoding.CompactJson
+          s"${bulkStorageTestConfig.getSegmentFolder(ts(4), None)}/${ScanStorageConfig.Encoding.LedgerApiJson
               .storageKey("ACS", 0)}",
         )
         .futureValue
@@ -236,13 +236,15 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           .copyObject(
             "staging",
             s"${bulkStorageTestConfig
-                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}",
+                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.LedgerApiJson
+                .storageKey("ACS", i)}",
           )
           .futureValue
         stagingConnection
           .deleteObject(
             s"${bulkStorageTestConfig
-                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}"
+                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.LedgerApiJson
+                .storageKey("ACS", i)}"
           )
           .futureValue
       }

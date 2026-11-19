@@ -1054,7 +1054,7 @@ class BftScanConnectionTest
   "BftScanConnection for bulk storage listing" should {
     val availableAt = ctime(2)
     val page = BulkStorageObjects.UpdateObjectsPage(
-      Seq(ObjectKeyAndChecksum("s/updates_compact_json_0.zstd", "checksum-0")),
+      Seq(ObjectKeyAndChecksum("s/updates_ledger_api_json_0.zstd", "checksum-0")),
       None,
     )
 
@@ -1090,7 +1090,7 @@ class BftScanConnectionTest
         availableAt,
         10,
         availableAt,
-        ScanStorageConfig.Encoding.CompactJson,
+        ScanStorageConfig.Encoding.LedgerApiJson,
       )
 
     "list from the scans that committed the objects up to the given time, and return them" in {

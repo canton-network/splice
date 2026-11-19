@@ -1,0 +1,14 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "datasetId": "mock_da2_scan_prod",
+    "definitionBody": "BEGIN\n  DECLARE oldest_record_date DATE;\n\n  -- 1. Add the listed columns that production lacks\n  CALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema`('scan_sv_1_app_activity_record_store', 'app_activity_record_store', ['history_id', 'verdict_row_id', 'round_number', 'app_provider_parties', 'app_activity_weights', 'datastream_metadata']);\n\nEND;\n",
+    "language": "SQL",
+    "routineId": "sp_fix_prod_schema_app_activity_record_store",
+    "routineType": "PROCEDURE"
+  },
+  "name": "app_activity_record_store-prod-schema-fix-routine",
+  "provider": "",
+  "type": "gcp:bigquery/routine:Routine"
+}

@@ -625,6 +625,42 @@ jsonPayload.message:"Topology change has triggered sequencer registration of mem
   });
 }
 
+export function installSequencerForkDetectedAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  const displayName = `Sequencer fork detected in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('sequencerForkDetectedAlert', {
+    alertStrategy: {
+      autoClose: '1800s',
+      notificationRateLimit: { period: '7200s' }, //2h
+    },
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    userLabels: { cluster: CLUSTER_BASENAME },
+    displayName,
+    documentation: {
+      subject: `Sequencer fork detected in ${CLUSTER_BASENAME}`,
+      content: `A sequencer fork (\`SEQUENCER_FORK_DETECTED\`) was reported by \`\${log.extracted_label.container}\` in namespace \`\${log.extracted_label.namespace}\` (pod \`\${log.extracted_label.pod}\`) in ${CLUSTER_BASENAME}. This should never happen in normal operation; restoring from a correctly ordered backup is likely required. See the Canton \`SEQUENCER_FORK_DETECTED\` error documentation for details.`,
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName,
+        conditionMatchedLog: {
+          filter: `resource.type="k8s_container"
+resource.labels.cluster_name="${CLUSTER_NAME}"
+jsonPayload."error-code"="SEQUENCER_FORK_DETECTED"`,
+          labelExtractors: {
+            namespace: 'EXTRACT(resource.labels.namespace_name)',
+            container: 'EXTRACT(resource.labels.container_name)',
+            pod: 'EXTRACT(resource.labels.pod_name)',
+          },
+        },
+      },
+    ],
+  });
+}
+
 export function installCloudSqlTxIdUtilizationAlert(
   notificationChannel: gcp.monitoring.NotificationChannel
 ): void {
