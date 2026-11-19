@@ -8,6 +8,40 @@ let
   # No macOS support for firefox
   linuxOnly = if stdenv.hostPlatform.isDarwin then [ ] else with pkgs; [ firefox iproute2 rust-parallel util-linux ];
 
+  pythonTypecheckPackages = with pkgs; [
+    # Dependencies and stubs for the covered Splice and CNI Python code.
+    python3Packages.aiohttp
+    python3Packages.auth0-python
+    python3Packages.colorlog
+    python3Packages.dockerfile-parse
+    python3Packages.gitpython
+    python3Packages.google-cloud-bigquery
+    python3Packages.gql
+    python3Packages.humanize
+    python3Packages.jsonpickle
+    python3Packages.kubernetes
+    python3Packages.marshmallow-dataclass
+    python3Packages.mypy
+    python3Packages.openapi-schema-validator
+    python3Packages.prometheus-client
+    python3Packages.pulumi
+    python3Packages.pycryptodome
+    python3Packages.pydantic
+    python3Packages.pygithub
+    python3Packages.pyjwt
+    python3Packages.pytest
+    python3Packages.pyyaml
+    python3Packages.requests
+    python3Packages.rich
+    python3Packages.semver
+    python3Packages.types-docutils
+    python3Packages.types-jsonschema
+    python3Packages.types-pyyaml
+    python3Packages.types-requests
+    python3Packages.typing-extensions
+    sphinx
+  ];
+
   standard_packages = with pkgs; [
 
     # NOTE: please keep this list sorted for an easy overview and to avoid merge noise.
@@ -52,49 +86,22 @@ let
     ps
     pulumi-bin
     python3
-    python3Packages.aiohttp
-    python3Packages.auth0-python
-    python3Packages.colorlog
-    python3Packages.pycryptodome
     (python3Packages.datadog.overrideAttrs (old: {
                                              doCheck = false;
                                              doInstallCheck = false;
                                      }))
-    python3Packages.dockerfile-parse
     python3Packages.flask
-    python3Packages.gitpython
     python3Packages.junit2html
-    python3Packages.google-cloud-bigquery
     python3Packages.google-cloud-storage
-    python3Packages.gql
-    python3Packages.humanize
     python3Packages.json-logging
-    python3Packages.jsonpickle
-    python3Packages.kubernetes
-    python3Packages.marshmallow-dataclass
-    python3Packages.mypy
     python3Packages.polib
-    python3Packages.prometheus-client
-    python3Packages.pydantic
-    python3Packages.pygithub
-    python3Packages.pyjwt
-    python3Packages.openapi-schema-validator
-    python3Packages.pyyaml
     python3Packages.regex
-    python3Packages.requests
-    python3Packages.rich
-    python3Packages.pulumi
     python3Packages.google-cloud-storage
     python3Packages.requests-toolbelt
-    python3Packages.semver
     python3Packages.sphinx-rtd-theme
     python3Packages.sphinx-copybutton
     python3Packages.sphinxcontrib-openapi
     python3Packages.sphinx-autobuild
-    python3Packages.types-docutils
-    python3Packages.types-jsonschema
-    python3Packages.types-pyyaml
-    python3Packages.types-requests
     python3Packages.waitress
     python3.pkgs.pip  # TODO(DACH-NY/canton-network-internal#565): Remove this once we switch to poetry
     python3.pkgs.sphinx-reredirects
@@ -107,7 +114,6 @@ let
     selenium-server-standalone
     shellcheck
     skopeo
-    sphinx
     sphinx-lint
     syft
     tinyproxy
@@ -122,7 +128,7 @@ let
 
     # Package required to install daml studio
     yq-go
-  ] ++ linuxOnly;
+  ] ++ linuxOnly ++ pythonTypecheckPackages;
 
   packages_for_static_tests = with pkgs; [
     # NOTE: please keep this list sorted for an easy overview and to avoid merge noise.
@@ -139,7 +145,6 @@ let
     pigz
     pre-commit
     python3
-    python3Packages.dockerfile-parse
     ripgrep
     sbt
     scala_2_13
@@ -147,7 +152,7 @@ let
     skopeo
     which
     zizmor
-  ] ++ linuxOnly;
+  ] ++ linuxOnly ++ pythonTypecheckPackages;
 
 in pkgs.mkShell {
   PULUMI_SKIP_UPDATE_CHECK = 1;
