@@ -15,8 +15,8 @@ This document provides instructions for AI coding agents (GitHub Copilot, Claude
 
 Every contribution must be tested in an automated test. For further details see the [Testing README](TESTING.md).
 
-For Python, use `direnv exec . python scripts/python_checks.py check` and
-`direnv exec . python scripts/python_checks.py test` from the repository root.
+For Python, use `scripts/python_checks.py check` and
+`scripts/python_checks.py test` in direnv from the repository root.
 Both accept an optional caller-relative path and select tracked files only.
 Coverage exclusions, additional import directories, and justified stricter-rule
 exceptions live in `scripts/python-checks.json`; see [Python checks](CONTRIBUTING.md#python-checks).

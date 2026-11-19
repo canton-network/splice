@@ -1319,7 +1319,7 @@ def page_size(value: str) -> int:
 class DeprecatedAlias(argparse.Action):
     """A former name of the option with the same dest; warns and stores into that dest."""
 
-    # TODO(#8340): use @override once the stdlib-only script no longer supports Python 3.9.
+    # typing.override is unavailable on Python 3.9; keep this script stdlib-only.
     def __call__(  # type: ignore[explicit-override]
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: Optional[str] = None
     ) -> None:

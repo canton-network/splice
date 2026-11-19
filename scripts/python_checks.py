@@ -15,6 +15,9 @@ import subprocess
 import sys
 from collections.abc import Sequence
 
+from git import Repo
+from git.exc import GitError
+
 
 RULES = {
     "warn-unreachable": ("--warn-unreachable",),
@@ -99,25 +102,24 @@ def load_config(root: Path, path: Path) -> Config:
 
 
 def repository_root(start: Path) -> Path:
-    result = subprocess.run(
-        ["git", "-C", str(start), "rev-parse", "--show-toplevel"],
-        check=True, capture_output=True, text=True,
-    )
-    return Path(result.stdout.rstrip("\n")).resolve()
+    with Repo(start, search_parent_directories=True) as repo:
+        if repo.working_tree_dir is None:
+            raise ValueError(f"{start} has no Git working tree")
+        return Path(repo.working_tree_dir).resolve()
 
 
 def python_files(root: Path, config: Config, target: Path | None) -> list[str]:
     selected = target.resolve() if target is not None else root
     if not selected.is_relative_to(root):
         raise ValueError(f"{target} is outside the repository")
-    result = subprocess.run(
-        ["git", "ls-files", "-z", "--", ":(top,glob)**/*.py",
-         *(f":(top,exclude){pattern}" for pattern in config.exclusions)],
-        cwd=root, check=True, capture_output=True,
-    )
+    with Repo(root) as repo:
+        output: str = repo.git.ls_files(
+            "-z", "--", ":(top,glob)**/*.py",
+            *(f":(top,exclude){pattern}" for pattern in config.exclusions),
+        )
     files = sorted({
-        os.fsdecode(name) for name in result.stdout.split(b"\0")
-        if name and (root / os.fsdecode(name)).is_relative_to(selected)
+        name for name in output.split("\0")
+        if name and (root / name).is_relative_to(selected)
     })
     if not files:
         raise ValueError(f"no covered Python files found under {selected}")
@@ -186,9 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "check":
             return check(root, config, files)
         return test(root, files)
-    except subprocess.CalledProcessError as error:
-        print(f"error: Git command failed: {error.stderr!s}", file=sys.stderr)
-    except (OSError, ValueError) as error:
+    except (GitError, OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
     return 1
 

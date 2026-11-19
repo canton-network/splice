@@ -12,6 +12,8 @@ import unittest
 from unittest.mock import patch
 from typing import override
 
+from git import Repo
+
 import python_checks as checks
 
 
@@ -21,7 +23,8 @@ class PythonChecksTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        self.repo = Repo.init(self.root)
+        self.addCleanup(self.repo.close)
         self.config = checks.Config((), {}, {})
 
     def write(self, name: str, content: str, *, tracked: bool = True) -> Path:
@@ -29,7 +32,7 @@ class PythonChecksTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
         if tracked:
-            subprocess.run(["git", "add", "--", name], cwd=self.root, check=True)
+            self.repo.index.add([name])
         return path
 
     def test_selection_tracks_exclusions_and_literal_target_paths(self) -> None:
@@ -70,7 +73,7 @@ class PythonChecksTest(unittest.TestCase):
         self.write("lib/helper.py", "")
         path = self.write("config.json", json.dumps({
             "extra_mypypath": {"scripts": ["lib"]},
-            "disabled_rules": {"warn-unreachable": "TODO: third-party narrowing issue"},
+            "disabled_rules": {"warn-unreachable": "Known third-party narrowing issue"},
         }))
         config = checks.load_config(self.root, path)
         self.assertEqual(config.extra_mypypath, {"scripts": ("lib",)})
@@ -92,7 +95,7 @@ class PythonChecksTest(unittest.TestCase):
                     checks.load_config(self.root, path)
 
     def test_check_isolates_directories_and_aggregates_failures(self) -> None:
-        config = checks.Config((), {"first": ("lib",)}, {"warn-unreachable": "TODO: example"})
+        config = checks.Config((), {"first": ("lib",)}, {"warn-unreachable": "Example exception"})
         with patch("python_checks.subprocess.run", side_effect=[
             subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0),
         ]) as run, redirect_stdout(StringIO()):
@@ -148,9 +151,10 @@ class PythonChecksTest(unittest.TestCase):
         original = Path.cwd()
         os.chdir(self.root / "nested")
         try:
-            with patch("python_checks.check", return_value=0) as check:
-                self.assertEqual(checks.main(["--root", str(self.root), "check", "."]), 0)
-            self.assertEqual(check.call_args.args[2], ["nested/target.py"])
+            for root_args in ([], ["--root", str(self.root)]):
+                with patch("python_checks.check", return_value=0) as check:
+                    self.assertEqual(checks.main([*root_args, "check", "."]), 0)
+                self.assertEqual(check.call_args.args[2], ["nested/target.py"])
         finally:
             os.chdir(original)
 
@@ -160,6 +164,13 @@ class PythonChecksTest(unittest.TestCase):
         with redirect_stderr(error):
             self.assertEqual(checks.main(["--root", str(self.root), "check"]), 1)
         self.assertIn("no covered Python files", error.getvalue())
+
+    def test_cli_reports_missing_repository(self) -> None:
+        missing = self.root / "missing"
+        error = StringIO()
+        with redirect_stderr(error):
+            self.assertEqual(checks.main(["--root", str(missing), "check"]), 1)
+        self.assertIn(str(missing), error.getvalue())
 
 
 if __name__ == "__main__":
