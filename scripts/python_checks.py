@@ -54,6 +54,7 @@ def strings(value: object, name: str) -> tuple[str, ...]:
 
 
 def relative_path(root: Path, value: str) -> Path:
+    """Resolve a repository-relative path, rejecting paths that escape the repository."""
     path = Path(value)
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"expected a repository-relative path: {value}")
@@ -109,6 +110,7 @@ def repository_root(start: Path) -> Path:
 
 
 def python_files(root: Path, config: Config, target: Path | None) -> list[str]:
+    """Return sorted tracked Python files selected by the coverage policy and optional target."""
     selected = target.resolve() if target is not None else root
     if not selected.is_relative_to(root):
         raise ValueError(f"{target} is outside the repository")
@@ -127,6 +129,7 @@ def python_files(root: Path, config: Config, target: Path | None) -> list[str]:
 
 
 def grouped(files: Sequence[str]) -> dict[str, list[str]]:
+    """Group repository-relative file paths by their parent directory."""
     directories: dict[str, list[str]] = {}
     for file in files:
         directories.setdefault(Path(file).parent.as_posix(), []).append(file)
@@ -134,6 +137,7 @@ def grouped(files: Sequence[str]) -> dict[str, list[str]]:
 
 
 def check(root: Path, config: Config, files: Sequence[str]) -> int:
+    """Run mypy separately for each directory and return a nonzero status if any check fails."""
     failed = False
     for directory, targets in grouped(files).items():
         print(f"mypy: {directory}", flush=True)
@@ -155,6 +159,7 @@ def check(root: Path, config: Config, files: Sequence[str]) -> int:
 
 
 def test(root: Path, files: Sequence[str]) -> int:
+    """Run selected test modules in isolated processes and return a nonzero status if any test fails."""
     tests = [file for file in files if Path(file).name.startswith("test_")]
     if not tests:
         raise ValueError("no tests found in the selected covered files")
