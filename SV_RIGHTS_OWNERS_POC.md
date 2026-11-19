@@ -22,9 +22,9 @@ classDiagram
     class SvRightOwnerInfo {
         rightOwnerParty : Party
         description : Text
-        operatorAssignments : TextMap OperatorAssignment
+        svNodeAssignments : TextMap SvNodeAssignment
     }
-    class OperatorAssignment {
+    class SvNodeAssignment {
         rewardWeight : Int
         escrowedRewardWeight : Int
         beneficiaries : [BeneficiaryInfo]
@@ -51,29 +51,29 @@ classDiagram
         <<template>>
         dso : Party
         svRightsOwnerName : Text
-        svOperatorName : Text
+        svNodeName : Text
         state : RewardState
     }
     class SvRightsOwnerRewardStateKey {
         dso : Party
         svRightsOwnerName : Text
-        svOperatorName : Text
+        svNodeName : Text
     }
     DsoRules ..> SvRightOwner : owner names
     SvRightOwner -- SvRightsOwnerKey : key
     SvRightOwner *-- SvRightOwnerInfo
-    SvRightOwnerInfo *-- "1..n" OperatorAssignment : keyed by operator name
-    OperatorAssignment *-- "0..20" BeneficiaryInfo : paid in order
-    OperatorAssignment ..> DsoRules : operator name is an SV in svs
-    OperatorAssignment ..> SvRightsOwnerRewardState : one per owner and operator
+    SvRightOwnerInfo *-- "1..n" SvNodeAssignment : keyed by SV node name
+    SvNodeAssignment *-- "0..20" BeneficiaryInfo : paid in order
+    SvNodeAssignment ..> DsoRules : SV node name is an SV in svs
+    SvNodeAssignment ..> SvRightsOwnerRewardState : one per owner and SV node
     SvRightsOwnerRewardState -- SvRightsOwnerRewardStateKey : key
-    OperatorAssignment ..> SvRewardCoupon : each round, one per beneficiary + one to dso for escrowedRewardWeight
+    SvNodeAssignment ..> SvRewardCoupon : each round, one per beneficiary + one to dso for escrowedRewardWeight
     SvRewardCoupon ..> UnclaimedReward : expires, dso never claims
 ```
 
 Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.com/canton-foundation/configs/blob/f0aa02df12e8ff2332075f796c26f89f828dcaa9/configs/MainNet/approved-sv-id-values.yaml) in the new model. Parties are shortened.
 
-- `Digital-Asset`: one owner with two assignments at two operators.
+- `Digital-Asset`: one owner with two assignments at two SV nodes.
 - `Circle`: hosted by GSF, 70000 to a staking party, the rest to the default beneficiary.
 - `Liberty-City-Ventures-1`: runs its own SV node, 70000 to one party, the rest to the owner party.
 - `Franklin-Templeton`: one owner with active and escrowed weight; no ghost party, no ghost owner (today `ft` and `FranklinTempleton-ghost-1`).
@@ -90,7 +90,7 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
       "info": {
         "rightOwnerParty": "<Digital-Asset-1 SV party>",
         "description": "",
-        "operatorAssignments": {
+        "svNodeAssignments": {
           "Digital-Asset-1": {
             "rewardWeight": 159250,
             "escrowedRewardWeight": 0,
@@ -111,7 +111,7 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
       "info": {
         "rightOwnerParty": "Circle-SvRewardsActive-1::12209d45…",
         "description": "CIP-0041",
-        "operatorAssignments": {
+        "svNodeAssignments": {
           "Global-Synchronizer-Foundation": {
             "rewardWeight": 100000,
             "escrowedRewardWeight": 0,
@@ -129,7 +129,7 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
       "info": {
         "rightOwnerParty": "auth0_007c684b…::122078c4…",
         "description": "",
-        "operatorAssignments": {
+        "svNodeAssignments": {
           "Liberty-City-Ventures-1": {
             "rewardWeight": 100000,
             "escrowedRewardWeight": 0,
@@ -147,7 +147,7 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
       "info": {
         "rightOwnerParty": "ft::12200b55…",
         "description": "CIP-0118",
-        "operatorAssignments": {
+        "svNodeAssignments": {
           "Global-Synchronizer-Foundation": {
             "rewardWeight": 10000,
             "escrowedRewardWeight": 40000,
@@ -159,25 +159,25 @@ Example: a subset of the MainNet [`approved-sv-id-values.yaml`](https://github.c
       }
     }
   ],
-  // key: (dso, svRightsOwnerName, svOperatorName)
+  // key: (dso, svRightsOwnerName, svNodeName)
   "SvRightsOwnerRewardState": [
-    { "svRightsOwnerName": "Digital-Asset", "svOperatorName": "Digital-Asset-1", "state": "…" },
+    { "svRightsOwnerName": "Digital-Asset", "svNodeName": "Digital-Asset-1", "state": "…" },
     {
       "svRightsOwnerName": "Digital-Asset",
-      "svOperatorName": "Digital-Asset-2",
+      "svNodeName": "Digital-Asset-2",
       "state": { "lastRoundCollected": 51234, "numRoundsCollected": "…", "numRoundsMissed": "…", "numCouponsIssued": "…" }
       // created at migration; state copied from the operator's SvRewardState "Digital-Asset-2", so no round is minted twice or lost
     },
-    { "svRightsOwnerName": "Circle", "svOperatorName": "Global-Synchronizer-Foundation", "state": "…" },
-    { "svRightsOwnerName": "Liberty-City-Ventures-1", "svOperatorName": "Liberty-City-Ventures-1", "state": "…" },
-    { "svRightsOwnerName": "Franklin-Templeton", "svOperatorName": "Global-Synchronizer-Foundation", "state": "…" }
+    { "svRightsOwnerName": "Circle", "svNodeName": "Global-Synchronizer-Foundation", "state": "…" },
+    { "svRightsOwnerName": "Liberty-City-Ventures-1", "svNodeName": "Liberty-City-Ventures-1", "state": "…" },
+    { "svRightsOwnerName": "Franklin-Templeton", "svNodeName": "Global-Synchronizer-Foundation", "state": "…" }
   ]
 }
 ```
 
-- One `SvRightOwner` per owner, with key `SvRightsOwnerKey`, a `description` and one `OperatorAssignment` per SV node operator.
-- Each assignment is keyed by its operator name and has its own weight, ordered beneficiaries with absolute weights, and a default beneficiary for the rest.
-- One `SvRightsOwnerRewardState` per owner and operator, with key `(dso, svRightsOwnerName, svOperatorName)`. It is a new template, as the existing `SvRewardState` cannot get a key or rename `svName` in an upgrade; `SvRewardState` stays for minting before the migration, which creates the new states and carries over `lastRoundCollected`.
+- One `SvRightOwner` per owner, with key `SvRightsOwnerKey`, a `description` and one `SvNodeAssignment` per SV node.
+- Each assignment is keyed by its SV node name and has its own weight, ordered beneficiaries with absolute weights, and a default beneficiary for the rest.
+- One `SvRightsOwnerRewardState` per owner and SV node, with key `(dso, svRightsOwnerName, svNodeName)`. It is a new template, as the existing `SvRewardState` cannot get a key or rename `svName` in an upgrade; `SvRewardState` stays for minting before the migration, which creates the new states and carries over `lastRoundCollected`.
 - `DsoRules.svRightOwners` holds the owner names.
 - The owner updates its beneficiaries with `baseInfo` and `newInfo`, like `DsoRules_UpdateSvRightOwnerInfo`.
 - `escrowedRewardWeight` replaces the ghost parties, see below.
@@ -191,7 +191,7 @@ When minting, the operator creates one more `SvRewardCoupon` for the escrowed we
 
 ```mermaid
 flowchart LR
-    A["OperatorAssignment<br/>rewardWeight 10000<br/>escrowedRewardWeight 40000"] -->|"mint, round N"| C1["SvRewardCoupon<br/>beneficiary ft, weight 10000"]
+    A["SvNodeAssignment<br/>rewardWeight 10000<br/>escrowedRewardWeight 40000"] -->|"mint, round N"| C1["SvRewardCoupon<br/>beneficiary ft, weight 10000"]
     A -->|"mint, round N"| C2["SvRewardCoupon<br/>beneficiary dso, weight 40000"]
     C1 -->|"ft claims"| CC["Amulet"]
     C2 -->|"round closed, not claimed:<br/>DsoRules_ClaimExpiredRewards"| U["UnclaimedReward"]

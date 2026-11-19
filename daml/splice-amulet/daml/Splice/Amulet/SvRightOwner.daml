@@ -42,8 +42,8 @@ data SvRightOwnerInfo = SvRightOwnerInfo
     rightOwnerParty : Party
       -- ^ The party of the SV right owner; manages the SV right owner controlled information.
     description : Text
-    operatorAssignments : TextMap OperatorAssignment
-      -- ^ Keyed by the name of the SV node operator through which rewards are minted.
+    svNodeAssignments : TextMap SvNodeAssignment
+      -- ^ Keyed by the name of the SV node through which rewards are minted.
   deriving (Eq, Show, Serializable)
 
 instance Patchable SvRightOwnerInfo where
@@ -51,9 +51,9 @@ instance Patchable SvRightOwnerInfo where
     with
       rightOwnerParty = patch new.rightOwnerParty base.rightOwnerParty current.rightOwnerParty
       description = patch new.description base.description current.description
-      operatorAssignments = patch new.operatorAssignments base.operatorAssignments current.operatorAssignments
+      svNodeAssignments = patch new.svNodeAssignments base.svNodeAssignments current.svNodeAssignments
 
-data OperatorAssignment = OperatorAssignment
+data SvNodeAssignment = SvNodeAssignment
   with
     rewardWeight : Int
       -- ^ The weight of the SV rights owner at this SV node.
@@ -65,8 +65,8 @@ data OperatorAssignment = OperatorAssignment
       -- ^ Receives the weight not paid to the beneficiaries.
   deriving (Eq, Show, Serializable)
 
-instance Patchable OperatorAssignment where
-  patch new base current = OperatorAssignment
+instance Patchable SvNodeAssignment where
+  patch new base current = SvNodeAssignment
     with
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
       escrowedRewardWeight = patch new.escrowedRewardWeight base.escrowedRewardWeight current.escrowedRewardWeight
@@ -82,9 +82,9 @@ data BeneficiaryInfo = BeneficiaryInfo
 
 svRightOwnerInfoChecks : [(SvRightOwnerInfo -> Bool, Text)]
 svRightOwnerInfoChecks =
-  [ (all ((>= 0) . (.rewardWeight)) . (.operatorAssignments), "SV right owner's reward weight is non-negative")
-  , (all (all ((> 0) . (.weight)) . (.beneficiaries)) . (.operatorAssignments), "Beneficiary weights are positive")
-  , (all ((<= 20) . length . (.beneficiaries)) . (.operatorAssignments), "There are at most 20 beneficiaries")
+  [ (all ((>= 0) . (.rewardWeight)) . (.svNodeAssignments), "SV right owner's reward weight is non-negative")
+  , (all (all ((> 0) . (.weight)) . (.beneficiaries)) . (.svNodeAssignments), "Beneficiary weights are positive")
+  , (all ((<= 20) . length . (.beneficiaries)) . (.svNodeAssignments), "There are at most 20 beneficiaries")
   ]
 
 validSvRightOwnerInfo : SvRightOwnerInfo -> Bool
@@ -94,9 +94,9 @@ requireValidSvRightOwnerInfo : SvRightOwnerInfo -> Update ()
 requireValidSvRightOwnerInfo info =
   forA_ svRightOwnerInfoChecks $ \(check, message) -> require message (check info)
 
--- | The absolute reward weight for each party that receives rewards in the context of this SV rights operator assignment.
-svRewardCouponWeights : OperatorAssignment -> Map Party Int
-svRewardCouponWeights OperatorAssignment{..} =
+-- | The absolute reward weight for each party that receives rewards in the context of this SV node assignment.
+svRewardCouponWeights : SvNodeAssignment -> Map Party Int
+svRewardCouponWeights SvNodeAssignment{..} =
   Map.filter (> 0) $ Map.insertWith (+) defaultBeneficiary remainingWeight $ Map.fromListWithR (+) paidWeights
   where
     (remainingWeight, paidWeights) = foldl pay (rewardWeight, []) beneficiaries
