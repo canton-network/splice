@@ -1602,6 +1602,7 @@ object HttpScanAppClient {
       synchronizerId = row.synchronizerId,
       updateId = row.updateId,
       eventNumber = row.eventNumber,
+      contractId = row.contractId,
       choiceResult = row.choiceResult.noSpaces,
     )
 

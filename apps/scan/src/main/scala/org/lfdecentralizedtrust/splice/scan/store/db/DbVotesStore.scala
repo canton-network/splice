@@ -134,7 +134,7 @@ class DbVotesStore private (
       limit: PageLimit,
   )(implicit tc: TraceContext): Future[Seq[ServedVoteResult]] =
     storage.query(
-      sql"""select record_time, synchronizer_id, update_id, event_number, choice_result
+      sql"""select record_time, synchronizer_id, update_id, event_number, contract_id, choice_result
             from #$table
             where store_id = $storeId
               and (record_time, event_number) < (${before.recordTime.toMicros}, ${before.eventNumber})
@@ -308,6 +308,8 @@ object DbVotesStore {
       synchronizerId: String,
       updateId: String,
       eventNumber: Int,
+      // Only empty for rows that the migration adding the column could not fill, see #8157.
+      contractId: Option[String],
       choiceResult: String,
   )
 
@@ -318,6 +320,7 @@ object DbVotesStore {
       synchronizerId = <<[String],
       updateId = <<[String],
       eventNumber = <<[Int],
+      contractId = <<[Option[String]],
       choiceResult = <<[String],
     )
   }
@@ -330,11 +333,13 @@ object DbVotesStore {
       synchronizerId: String,
       updateId: String,
       eventNumber: Int,
+      contractId: String,
       result: DsoRules_CloseVoteRequestResult,
   ) {
     def toInsert(storeId: Int): InsertVoteResult =
       DbVotesStore.toInsert(
         result,
+        contractId,
         storeId,
         recordTime.toMicros,
         synchronizerId,
@@ -356,11 +361,12 @@ object DbVotesStore {
         synchronizerId: String,
         updateId: String,
         eventNumber: Int,
+        contractId: String,
         choiceResult: String,
     ): PeerVoteResult =
       Try(DsoRules_CloseVoteRequestResult.fromJson(choiceResult)) match {
         case Success(result) =>
-          PeerVoteResult(recordTime, synchronizerId, updateId, eventNumber, result)
+          PeerVoteResult(recordTime, synchronizerId, updateId, eventNumber, contractId, result)
         case Failure(e) =>
           throw new IllegalArgumentException(
             s"Failed to decode the vote result in update $updateId at record time $recordTime " +

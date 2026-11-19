@@ -3700,6 +3700,7 @@ components:
         - synchronizer_id
         - update_id
         - event_number
+        - contract_id
         - choice_result
       properties:
         record_time:
@@ -3712,6 +3713,10 @@ components:
         event_number:
           type: integer
           format: int32
+        contract_id:
+          description: |
+            The contract id of the DsoRules on which the `DsoRules_CloseVoteRequest` choice was exercised.
+          type: string
         choice_result:
           description: |
             The JSON-encoded `DsoRules_CloseVoteRequestResult`, as stored by the Scan that serves it.

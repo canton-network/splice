@@ -47,6 +47,29 @@ where t.entry_type = 'vot'
   and t.entry_data -> 'result' is not null
 on conflict do nothing;
 
+-- The txlog does not have the contract id of the DsoRules on which the choice was exercised.
+-- Fill it from the update history, the same way as V081__votes_store_contract_id.sql did for the
+-- rows that were in votes_store_results at the time.
+update votes_store_results v
+set contract_id = e.contract_id
+from store_descriptors s
+         join update_history_descriptors h
+              on h.store_name = s.descriptor ->> 'name'
+                  and h.party = s.descriptor ->> 'party'
+                  and h.participant_id = s.descriptor ->> 'participant'
+         join update_history_transactions u
+              on u.history_id = h.id
+         join update_history_exercises e
+              on e.update_row_id = u.row_id
+where v.contract_id is null
+  and s.id = v.store_id
+  and u.update_id = v.update_id
+  and u.domain_id = v.synchronizer_id
+  and e.choice = 'DsoRules_CloseVoteRequest'
+  and e.template_id_module_name = 'Splice.DsoRules'
+  and e.template_id_entity_name = 'DsoRules'
+  and e.consuming = false;
+
 -- Set the backfilling cursor to the earliest record time ingested by the txlog.
 with stores as (select txlog.id as txlog_store_id, kv.id as kv_store_id
                 from store_descriptors txlog
