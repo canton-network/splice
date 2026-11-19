@@ -106,14 +106,13 @@ export class Auth0Fetch implements Auth0Client {
     clientId: string,
     clientSecret: string,
     audience: string,
-    api: 'ledgerApi'
+    api: 'ledgerApi' | 'participantAdminApi'
   ): Promise<string> {
     if (this.fixedTokensCache === undefined) {
       throw new Error(
         `${this.getClientFixedToken.name} was called but fixed tokens are not enabled. This is probably a bug in IaC.`
       );
     }
-
     return await getOrUpdateToken(this.fixedTokensCache, clientId, api, async () => {
       await pulumi.log.debug(
         `Requesting a new fixed [${api}] token (audience: [${audience}]) for [${clientId}] from Auth0.`
@@ -223,6 +222,22 @@ export function getNamespaceConfig(
     throw new Error(`No Auth0 configuration for namespace ${namespace}`);
   }
   return nsConfig;
+}
+
+export function getClientId(
+  auth0: Auth0Client | Auth0Config,
+  clientName: 'sv' | 'validator' | 'splitwell',
+  namespace: string
+): string {
+  const config = 'getCfg' in auth0 ? auth0.getCfg() : auth0;
+  switch (clientName) {
+    case 'sv':
+      return getNamespaceConfig(config, namespace).backendClientIds.svApp!;
+    case 'validator':
+      return getNamespaceConfig(config, namespace).backendClientIds.validator;
+    case 'splitwell':
+      return getNamespaceConfig(config, namespace).backendClientIds.splitwell!;
+  }
 }
 
 export const svUserIds = (auth0Cfg: Auth0Config): Output<string[]> => {
