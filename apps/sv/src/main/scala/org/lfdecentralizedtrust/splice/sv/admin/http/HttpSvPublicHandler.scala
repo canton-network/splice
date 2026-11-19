@@ -197,6 +197,7 @@ class HttpSvPublicHandler(
         case Right(token) =>
           for {
             dsoRules <- dsoStore.getDsoRules()
+            maxTextLength = dsoRules.payload.config.maxTextLength.longValue
             isCandidatePartyHostedOnParticipant <- participantAdminConnection
               .listPartyToParticipant(
                 TopologyStoreId.Synchronizer(dsoRules.domain).some,
@@ -205,7 +206,18 @@ class HttpSvPublicHandler(
               )
               .map(_.nonEmpty)
             res <-
-              if (!SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)) {
+              if (
+                body.token.length > maxTextLength ||
+                token.candidateName.length > maxTextLength
+              ) {
+                Future.failed(
+                  HttpErrorHandler.badRequest(
+                    s"Onboarding token or candidate name is longer than the maximum of $maxTextLength characters."
+                  )
+                )
+              } else if (
+                !SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)
+              ) {
                 Future.failed(
                   HttpErrorHandler.badRequest(
                     s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."

@@ -16,8 +16,9 @@ trait JdbcTypes {
 
   /** The DB may truncate strings of unbounded length, so it's advised to use a LengthLimitedString instead.
     * We use String2066 because it's the max length of an [[com.digitalasset.canton.protocol.LfTemplateId]].
+    * Truncates instead of failing, as ingestion must not stop on an over-long value.
     */
-  protected def lengthLimited(s: String): String2066 = String2066.tryCreate(s)
+  protected def lengthLimited(s: String): String2066 = String2066.createWithTruncation(s)
 
   protected implicit def partyIdGetResult[T]: GetResult[PartyId] =
     GetResult.GetString.andThen(PartyId.tryFromProtoPrimitive)

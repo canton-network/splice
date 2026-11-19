@@ -7,6 +7,7 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional (fromSome)
 import qualified DA.Map as Map
+import qualified DA.Text as T
 import Daml.Script
 import DA.Time
 import DA.List
@@ -267,6 +268,25 @@ testSvOnboarding = do
   actualConfig === Some newNodeConfig
 
   pure ()
+
+
+testSvOnboardingTextTooLong : Script ()
+testSvOnboardingTextTooLong = do
+  (_, dso, (_, sv2, _, _)) <- initMainNet
+
+  svX <- allocateParty "svX"
+
+  [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
+  let tooLongText = T.replicate (dsoRules.config.maxTextLength + 1) "x"
+
+  -- the sponsor cannot start an onboarding whose text fields exceed the configured maximum
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding "svX" svX "svX-participant-id" tooLongText sv2
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding tooLongText svX "svX-participant-id" "mock-token" sv2
+
+  requests <- query @SvOnboardingRequest dso
+  requests === []
 
 
 testSvOnboardingRequestExpiry : Script ()
