@@ -277,7 +277,7 @@ testSvOnboardingTextTooLong = do
   svX <- allocateParty "svX"
 
   [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
-  let tooLongText = T.replicate (dsoRules.config.maxTextLength + 1) "x"
+  let tooLongText = T.implode (replicate (dsoRules.config.maxTextLength + 1) "x")
 
   -- the sponsor cannot start an onboarding whose text fields exceed the configured maximum
   submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
