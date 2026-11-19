@@ -1,4 +1,4 @@
--- Drops all round_number values ingested so far, as they may differ across SVs.
+-- Drops all round_number values ingested so far.
 -- Verdicts ingested before this migration are served without a round_number.
 alter table scan_verdict_store
     drop column round_number;
