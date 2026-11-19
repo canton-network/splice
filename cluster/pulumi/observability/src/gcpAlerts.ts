@@ -632,7 +632,7 @@ export function installSequencerForkDetectedAlert(
   new gcp.monitoring.AlertPolicy('sequencerForkDetectedAlert', {
     alertStrategy: {
       autoClose: '1800s',
-      notificationRateLimit: { period: '7200s' },
+      notificationRateLimit: { period: '7200s' }, //2h
     },
     combiner: 'OR',
     notificationChannels: [notificationChannel.name],
