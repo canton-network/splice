@@ -122,7 +122,6 @@ describe('configureScanBigQuery', () => {
     'V068__app_activity_record_meta.sql',
     'V074__string_interning.sql',
     'V077__verdict_add_round_number.sql',
-    'V082__tbar_v1_1_asset_activity_columns.sql',
   ] as const)('both publication and slot commands wait for %s', async migration => {
     const resources = await installBigQuery(true, true, migration);
     const commands = resources.filter(command.local.Command.isInstance);
@@ -190,18 +189,14 @@ describe('configureScanBigQuery', () => {
   });
 
   test('appends copy the listed columns by name, checking production first if they change', async () => {
-    const resources = await installBigQuery(
-      true,
-      true,
-      'V082__tbar_v1_1_asset_activity_columns.sql'
-    );
+    const resources = await installBigQuery(true, true, 'V077__verdict_add_round_number.sql');
     const bodies = new Map<string, string>();
     for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
       bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
     }
     const appends = [...bodies].filter(([routineId]) => routineId.startsWith('sp_append_'));
     expect(appends).toHaveLength(6);
-    const checking = new Set(['scan_verdict_store', 'app_activity_record_store']);
+    const checking = new Set(['scan_verdict_store']);
     for (const [routineId, body] of appends) {
       const tableName = routineId.replace('sp_append_', '');
       expect(body).not.toContain('{{');
@@ -222,15 +217,11 @@ describe('configureScanBigQuery', () => {
       }
     }
     expect(bodies.get('sp_append_scan_verdict_store')).toContain('`round_number`');
-    expect(bodies.get('sp_append_app_activity_record_store')).toContain('`asset_activity_weights`');
+    expect(bodies.get('sp_append_app_activity_record_store')).toContain('`app_activity_weights`');
   });
 
   test('a routine fixes and another checks the schemas of production tables', async () => {
-    const resources = await installBigQuery(
-      true,
-      true,
-      'V082__tbar_v1_1_asset_activity_columns.sql'
-    );
+    const resources = await installBigQuery(true, true, 'V077__verdict_add_round_number.sql');
     const routines = new Map<string, gcp.bigquery.Routine>();
     for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
       routines.set(await outputValue(routine.routineId), routine);
@@ -271,10 +262,10 @@ describe('configureScanBigQuery', () => {
         .split('\n')
         .map(call => /^ {2}CALL `[\w.-]+\.sp_fix_prod_schema_(\w+)`\(\);$/.exec(call)?.[1])
         .filter(tableName => tableName)
-    ).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    ).toEqual(['scan_verdict_store']);
     // each CALL in its own block, so that a failing one doesn't skip
     // the others
-    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(2);
+    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(1);
     expect(fixQuery).toContain("RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');");
     const [, appendSchedule] = queries.get('mock_scan_verdict_store Hourly Append Pipeline')!;
     expect(fixSchedule).not.toBe(appendSchedule);
@@ -355,7 +346,7 @@ describe('configureScanBigQuery', () => {
 });
 
 describe('flywayMigrationToWaitFor', () => {
-  test('waits for V068 by default and allows V074, V077 and V082', async () => {
+  test('waits for V068 by default and allows V074 and V077', async () => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.parse(undefined)).toBe(
       'V068__app_activity_record_meta.sql'
@@ -363,7 +354,6 @@ describe('flywayMigrationToWaitFor', () => {
     for (const migration of [
       'V074__string_interning.sql',
       'V077__verdict_add_round_number.sql',
-      'V082__tbar_v1_1_asset_activity_columns.sql',
     ] as const) {
       expect(FlywayMigrationToWaitForSchema.parse(migration)).toBe(migration);
     }
@@ -373,6 +363,8 @@ describe('flywayMigrationToWaitFor', () => {
     'V076__dso_unavailable_parties_store_id_pk.sql',
     'V074__string_interning',
     'V082__partition_update_history.sql',
+    // not on this release line
+    'V082__tbar_v1_1_asset_activity_columns.sql',
   ])('rejects %s', async migration => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.safeParse(migration).success).toBe(false);
@@ -407,10 +399,9 @@ describe('replicatedTablesFor', () => {
     const v068 = replicatedTablesFor('V068__app_activity_record_meta.sql');
     const v074 = replicatedTablesFor('V074__string_interning.sql');
     const v077 = replicatedTablesFor('V077__verdict_add_round_number.sql');
-    const v082 = replicatedTablesFor('V082__tbar_v1_1_asset_activity_columns.sql');
     expect(Object.keys(v068)).not.toContain('interned_strings');
     expect(v074.interned_strings?.columns).toEqual(['id', 'value', 'datastream_metadata']);
-    for (const tables of [v074, v077, v082]) {
+    for (const tables of [v074, v077]) {
       expect(Object.keys(tables)).toEqual([...Object.keys(v068), 'interned_strings']);
     }
     const verdicts = (tables: typeof v068) => tables.scan_verdict_store?.columns ?? [];
@@ -419,9 +410,6 @@ describe('replicatedTablesFor', () => {
     // added by V077, and in scan's database on 0.10.0 already
     expect(verdicts(v077)).toContain('round_number');
     expect(verdicts(v077).slice(-1)).toEqual(['datastream_metadata']);
-    const activity = (tables: typeof v068) => tables.app_activity_record_store?.columns ?? [];
-    expect(activity(v077)).not.toContain('asset_activity_weights');
-    expect(activity(v082)).toContain('asset_activity_weights');
   });
 
   test('only tables whose columns have a `since` migrate their schema', async () => {
@@ -429,7 +417,7 @@ describe('replicatedTablesFor', () => {
     const migrating = Object.entries(replicatedTablesFor('V074__string_interning.sql'))
       .filter(([, table]) => table.migratesSchema)
       .map(([tableName]) => tableName);
-    expect(migrating).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    expect(migrating).toEqual(['scan_verdict_store']);
   });
 
   // Production tables keep the columns they were created with, and

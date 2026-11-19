@@ -8,7 +8,6 @@ const flywayMigrationsToWaitFor = [
   'V068__app_activity_record_meta.sql',
   'V074__string_interning.sql',
   'V077__verdict_add_round_number.sql',
-  'V082__tbar_v1_1_asset_activity_columns.sql',
 ] as const;
 
 export function checkFlywayMigrationsExist(dir: string, migrations: readonly string[]): void {
