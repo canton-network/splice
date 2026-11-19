@@ -1300,6 +1300,8 @@ lazy val `apps-common` =
         aws_s3,
         s3mock_testcontainers,
       ),
+      // Needed to use transcode, which is written in Scala 3
+      scalacOptions += "-Ytasty-reader",
       BuildCommon.sharedAppSettings,
       buildInfoKeys := Seq[BuildInfoKey](
         BuildInfoKey(
@@ -1413,9 +1415,6 @@ lazy val `apps-sv` =
         pekko_http_cors,
         scalapb_runtime,
       ),
-      // TODO (#8263): remove together with the CometBFT code in the SV app
-      Compile / unmanagedJars := Attributed
-        .blankSeq(Seq(file(s"${sys.env("COMETBFT_PROTO")}/canton-drivers-proto.jar"))),
       BuildCommon.sharedAppSettings,
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,
       BuildCommon.TS.openApiSettings(
@@ -1455,6 +1454,7 @@ lazy val `apps-scan` =
         pekko_http_cors,
         scalapb_runtime_grpc,
         scalapb_runtime,
+        circe_yaml % Test,
       ),
       BuildCommon.sharedAppSettings,
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,

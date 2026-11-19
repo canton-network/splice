@@ -210,6 +210,22 @@
           "type": "string",
           "description": "Duration for which update history remains analyzable, e.g. \"30 days\"."
         },
+        "pruning": {
+          "type": "object",
+          "properties": {
+            "snapshots": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Drop ACS snapshots stored in per-snapshot tables that are older than the analyzable time window, except the daily bulk storage ones."
+                }
+              },
+              "required": ["enabled"]
+            }
+          },
+          "required": ["snapshots"]
+        },
         "cluster": {
           "type": "object",
           "properties": {

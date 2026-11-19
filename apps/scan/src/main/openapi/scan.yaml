@@ -1584,6 +1584,36 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
+  /v0/reward-coupons-v2-disclosures:
+    post:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getRewardCouponsV2Disclosures"
+      description: |
+        Retrieve created event blobs for active contracts of the Daml template
+        `Splice.Amulet:RewardCouponV2` by contract ID.
+        Requests are limited to 100 contract IDs; larger requests return 400.
+        Missing or archived contracts, and contracts of other templates, are omitted
+        from the response. If no matching active contracts are found, the response
+        contains an empty map.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/GetRewardCouponsV2DisclosuresRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetRewardCouponsV2DisclosuresResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/internal/reward-accounting-process/rounds/earliest-available:
     get:
       tags: [internal, scan]
@@ -3608,10 +3638,17 @@ components:
         "protobuf_json" is a verbose JSON encoding that is more difficult to parse,
         but contains type information, i.e., the values can be parsed losslessly
         without having access to the Daml source code.
+        "ledger_api_json" is the JSON encoding of the JSON Ledger API (v2). It is identical to "compact_json",
+        with two differences: numeric values can be written in a different notation
+        (e.g., "0.0000000000" instead of "0E-10"), and trailing fields of Daml records that are null are omitted.
+        Daml upgrades can add optional fields at the end of a record. With "compact_json", values created
+        before such an upgrade can be returned with or without the new fields (as null) depending on the
+        version of the app that serves the request. This encoding returns the same JSON regardless of the version.
         Optional and defaults to "compact_json".
       enum:
         - "compact_json"
         - "protobuf_json"
+        - "ledger_api_json"
     GetMemberTrafficStatusResponse:
       type: object
       required: [ "traffic_status" ]
@@ -4047,6 +4084,33 @@ components:
           type: array
           items:
             "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ContractWithState"
+
+    GetRewardCouponsV2DisclosuresRequest:
+      type: object
+      required: ["contract_ids"]
+      properties:
+        contract_ids:
+          description: |
+            Contract IDs of the `Splice.Amulet:RewardCouponV2` contracts to retrieve.
+            At most 100 contract IDs may be supplied per request.
+          type: array
+          maxItems: 100
+          items:
+            $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ContractId"
+
+    GetRewardCouponsV2DisclosuresResponse:
+      type: object
+      required: ["created_event_blobs"]
+      properties:
+        created_event_blobs:
+          description: |
+            A map from contract ID to base64-encoded created event blob for the
+            requested active `Splice.Amulet:RewardCouponV2` contracts.
+            Missing or archived contracts, and contracts of other templates,
+            are omitted. No contract payloads or other metadata are returned.
+          type: object
+          additionalProperties:
+            type: string
 
     ListBulkAcsSnapshotObjectsResponse:
       type: object

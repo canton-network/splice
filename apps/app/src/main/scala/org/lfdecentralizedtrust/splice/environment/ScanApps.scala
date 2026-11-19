@@ -20,8 +20,7 @@ class ScanApps(
     _loggerFactory: NamedLoggerFactory,
 )(implicit
     protected val executionContext: ExecutionContextIdlenessExecutorService
-) extends ManagedNodes[ // TODO(DACH-NY/canton-network-node#736): We should remove the CantonNode/CantonNodeBootstrap type requirements from
-      // this trait.
+) extends ManagedNodes[
       ScanApp,
       ScanAppBackendConfig,
       SharedSpliceAppParameters,

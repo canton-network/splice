@@ -6,7 +6,6 @@ import { AnsEntry } from '@canton-network/scan-openapi';
 
 import { useValidatorScanProxyClient } from '../../context/ValidatorScanProxyContext';
 
-//TODO(DACH-NY/canton-network-node#8571) deduplicate this and reuse from specific libraries instead of all on common frontend
 const useLookupAnsEntryByName = (
   name: string,
   enabled: boolean = true,

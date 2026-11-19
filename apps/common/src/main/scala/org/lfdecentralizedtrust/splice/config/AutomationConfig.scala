@@ -73,7 +73,6 @@ case class AutomationConfig(
     enableAutomaticRewardsCollectionAndAmuletMerging: Boolean = true,
     /** Allows disabling expiration of validator faucets. This is currently required
       * as this does not work with unavailable validators.
-      * TODO(DACH-NY/canton-network-node#11828) Remove this option
       */
     enableExpireValidatorFaucet: Boolean = false,
     /** Only intended for testing. Allows disabling governance automation.
@@ -82,11 +81,6 @@ case class AutomationConfig(
     /** Only intended for testing. Allows disabling archival of closed rounds.
       */
     enableClosedRoundArchival: Boolean = true,
-    // TODO (#8263): remove together with the CometBFT triggers
-    /** Only intended for testing. Allows disabling cometbft config
-      * publish/reconcile automation.
-      */
-    enableCometbftReconciliation: Boolean = true,
     /** List of triggers (identified by the name of the corresponding scala
       * class) that start in a paused state. Unless such a trigger is resumed manually, it is
       * guaranteed to never perform any work.

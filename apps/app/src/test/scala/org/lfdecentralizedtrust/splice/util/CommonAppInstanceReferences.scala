@@ -19,8 +19,6 @@ import org.lfdecentralizedtrust.splice.validator.config.ValidatorCantonIdentifie
 import com.digitalasset.canton.topology.{PartyId, PhysicalSynchronizerId, SynchronizerId}
 import com.digitalasset.canton.SynchronizerAlias
 
-// TODO(DACH-NY/canton-network-node#736): these should eventually be defined analogue to Canton's `participant1` references etc
-// however, this is likely only possible once we depend on Canton as a library
 trait CommonAppInstanceReferences {
 
   /** The Canton node identifier a validator app expects its participant to have.

@@ -61,8 +61,8 @@ class SvExpiredRewardsCollectionTimeBasedIntegrationTest
     bobValidatorWalletClient.selfGrantFeaturedAppRight()
 
     val (aliceParty, bobParty) = onboardAliceAndBob()
-    aliceWalletClient.createTransferPreapproval()
-    bobWalletClient.createTransferPreapproval()
+    createTransferPreapprovalEnsuringItExists(aliceWalletClient, aliceValidatorBackend)
+    createTransferPreapprovalEnsuringItExists(bobWalletClient, bobValidatorBackend)
     aliceWalletClient.tap(100.0)
     bobWalletClient.tap(100.0)
 

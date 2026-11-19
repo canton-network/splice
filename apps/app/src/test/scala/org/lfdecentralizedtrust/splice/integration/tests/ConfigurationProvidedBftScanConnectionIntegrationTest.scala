@@ -14,6 +14,8 @@ import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
 import org.slf4j.event.Level
 
+import scala.concurrent.duration.*
+
 class ConfigurationProvidedBftScanConnectionIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
@@ -125,7 +127,7 @@ class ConfigurationProvidedBftScanConnectionIntegrationTest
     )
 
     withClue("Alice's validator should be able to onboard a user after establishing connections.") {
-      eventuallySucceeds() {
+      eventuallySucceeds(timeUntilSuccess = 2.minutes) {
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
       }
     }
@@ -178,7 +180,7 @@ class ConfigurationProvidedBftScanConnectionIntegrationTest
     withClue(
       "The validator should successfully onboard a user after connecting to the recovered scan."
     ) {
-      eventuallySucceeds() {
+      eventuallySucceeds(timeUntilSuccess = 2.minutes) {
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
       }
     }

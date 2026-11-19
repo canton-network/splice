@@ -66,7 +66,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.{
   SvDsoAutomationService,
   SvSvAutomationService,
 }
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
 import org.lfdecentralizedtrust.splice.sv.config.{
   SvAppBackendConfig,
   SvCantonIdentifierConfig,
@@ -150,12 +149,7 @@ class SvApp(
     val participantAdminConnection = createParticipantAdminConnection()
 
     def localSyncNodeFromConfig(svSynchronizerConfig: SvSynchronizerNodeConfig) = {
-      CometBftNode(
-        svSynchronizerConfig.cometBftConfig,
-        participantAdminConnection,
-        loggerFactory,
-        retryProvider,
-      ).map(
+      Future(
         new LocalSynchronizerNode(
           participantAdminConnection,
           new SequencerAdminConnection(
@@ -175,11 +169,9 @@ class SvApp(
           loggerFactory,
           retryProvider,
           SequencerConfig.fromConfig(
-            svSynchronizerConfig.sequencer,
-            svSynchronizerConfig.cometBftConfig,
+            svSynchronizerConfig.sequencer
           ),
           svSynchronizerConfig,
-          _,
         )
       )
     }
@@ -473,6 +465,7 @@ class SvApp(
           dsoPartyHosting,
           loggerFactory,
         ),
+        svAutomation.onboardingSnapshotService,
         loggerFactory,
       )
 
@@ -549,6 +542,7 @@ class SvApp(
                 publicHandler,
                 operation =>
                   buildOperation("svPublic", operation)
+                    .tflatMap(_ => withRangeSupport)
                     .tflatMap(_ => provide(traceContext)),
               ),
               SvOperatorResource.routes(
@@ -771,7 +765,6 @@ object SvApp {
       )
   }
 
-  // TODO(DACH-NY/canton-network-node#5364): move this and like functions into appropriate utility namespaces
   def prepareValidatorOnboarding(
       secret: ValidatorOnboardingSecret,
       expiresIn: NonNegativeFiniteDuration,

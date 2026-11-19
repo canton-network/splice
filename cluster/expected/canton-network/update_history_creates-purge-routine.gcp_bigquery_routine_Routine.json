@@ -1,0 +1,14 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "datasetId": "mock_da2_scan_staging",
+    "definitionBody": "\n          DELETE FROM `test-project.mock_da2_scan_staging.scan_sv_1_update_history_creates`\n          WHERE TIMESTAMP_MICROS(record_time) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 604800 SECOND);\n        ",
+    "language": "SQL",
+    "routineId": "sp_purge_old_records_update_history_creates",
+    "routineType": "PROCEDURE"
+  },
+  "name": "update_history_creates-purge-routine",
+  "provider": "",
+  "type": "gcp:bigquery/routine:Routine"
+}

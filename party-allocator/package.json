@@ -6,6 +6,8 @@
     "build": "tsc --noEmit && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=build/bundle.js --sourcemap=inline --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "compile": "tsc --noEmit",
     "start": "node ./build/index.js",
+    "test": "LOG_LEVEL=silent vitest",
+    "test:sbt": "LOG_LEVEL=silent vitest --run",
     "check": "tsc --noEmit && npm run format:check && npm run lint:check",
     "fix": "npm run format:fix && npm run lint:fix",
     "format:check": "prettier --check -- src",
@@ -28,6 +30,7 @@
     "pino": "^9.9.5",
     "prettier": "^3.6.2",
     "typescript": "^5.7.3",
+    "vitest": "^4.1.11",
     "zod": "^4.1.5"
   },
   "type": "module",

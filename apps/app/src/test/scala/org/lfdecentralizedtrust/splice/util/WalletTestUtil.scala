@@ -1502,8 +1502,13 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       round: Option[splice.types.Round] = None,
       ttl: java.time.Duration = java.time.Duration.ofDays(1),
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val couponRound = round.getOrElse(
+      // waits until scan sees a round that has opened
+      eventuallySucceeds() {
+        sv1ScanBackend.getLatestOpenMiningRound(env.environment.clock.now).payload.round
+      }
+    )
     val now = env.environment.clock.now
-    val couponRound = round.getOrElse(sv1ScanBackend.getLatestOpenMiningRound(now).payload.round)
     sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
       actAs = Seq(dsoParty),
       commands = coupons.flatMap { case (provider, amount, beneficiaryO) =>

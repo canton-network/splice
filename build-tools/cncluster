@@ -462,7 +462,7 @@ function subcmd_logs() {
 
 
 function k8s_labels_for_app() {
-    local global_domain_specific_apps=("global-domain-cometbft" "global-domain-sequencer" "global-domain-mediator")
+    local global_domain_specific_apps=("global-domain-sequencer" "global-domain-mediator")
 
     # shellcheck disable=SC2076
     # shellcheck disable=SC2053
@@ -1516,6 +1516,12 @@ function subcmd_deploy_upgrade() {
     _deploy_cluster_workflow "deploy_scratchnet_upgrade.yml" "Upgrade test" "$@"
 }
 
+subcommand_whitelist[deploy_lsu]='Trigger a scratchnet logical synchronizer upgrade (LSU) test deploy for a PR and post the run link back on the PR.'
+
+function subcmd_deploy_lsu() {
+    _deploy_cluster_workflow "deploy_scratchnet_lsu.yml" "LSU test" "$@"
+}
+
 function _deploy_cluster_workflow() {
     local deploy_workflow="$1" label="$2"; shift 2
 
@@ -1788,7 +1794,10 @@ function subcmd_participant_console() {
                 cncluster participant_console sv-1 7
 
               Example: opening multi-participant-24 console
-                cncluster participant_console multi-validator 7 multi-participant-24 7"
+                cncluster participant_console multi-validator 7 multi-participant-24 7
+
+              Set CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead
+              of opening a console."
     fi
 
     app_container="$app"
@@ -1855,11 +1864,19 @@ function subcmd_participant_console() {
     kubectl port-forward -n "$namespace" "$participant_pod" 11001:5"${participant_number}"01 11002:5"${participant_number}"02 &
     port_forwarding_pid=$!
 
-    _info "Starting Canton console..."
-    canton -v -c "$SPLICE_ROOT/build-tools/local-participant.conf"
+    if [ "${CONSOLE_SCRIPT-}" ]; then
+      _info "Running Canton script '$CONSOLE_SCRIPT'..."
+      canton_exit=0
+      canton run "$CONSOLE_SCRIPT" -c "$SPLICE_ROOT/build-tools/local-participant.conf" || canton_exit=$?
+    else
+      _info "Starting Canton console..."
+      canton -v -c "$SPLICE_ROOT/build-tools/local-participant.conf"
+    fi
 
     _info "Stopping port forwarding."
     kill $port_forwarding_pid
+    wait $port_forwarding_pid 2>/dev/null || true
+    return "${canton_exit:-0}"
 }
 
 subcommand_whitelist[sequencer_console]='Open a Canton console against a single sequencer running in the target namespace'
@@ -1871,7 +1888,8 @@ function subcmd_sequencer_console() {
     domain=${2:-0}
 
     if [ -z "${namespace}" ]; then
-        _error "Usage: $SCRIPTNAME sequencer_console <namespace-name> [<migration_id>]"
+        _error "Usage: $SCRIPTNAME sequencer_console <namespace-name> [<migration_id>]
+              Set CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead of opening a console."
     fi
 
     app="global-domain-sequencer"
@@ -1890,11 +1908,19 @@ function subcmd_sequencer_console() {
     kubectl port-forward -n "$namespace" "$sequencer_pod" 11001:5008 11002:5009 &
     port_forwarding_pid=$!
 
-    _info "Starting Canton console..."
-    canton -v -c "$SPLICE_ROOT/build-tools/local-sequencer.conf"
+    if [ "${CONSOLE_SCRIPT-}" ]; then
+      _info "Running Canton script '$CONSOLE_SCRIPT'..."
+      canton_exit=0
+      canton run "$CONSOLE_SCRIPT" -c "$SPLICE_ROOT/build-tools/local-sequencer.conf" || canton_exit=$?
+    else
+      _info "Starting Canton console..."
+      canton -v -c "$SPLICE_ROOT/build-tools/local-sequencer.conf"
+    fi
 
     _info "Stopping port forwarding."
     kill $port_forwarding_pid
+    wait $port_forwarding_pid 2>/dev/null || true
+    return "${canton_exit:-0}"
 }
 
 subcommand_whitelist[mediator_console]='Open a Canton console against a single mediator running in the target namespace'
@@ -1906,7 +1932,8 @@ function subcmd_mediator_console() {
     domain=${2:-0}
 
     if [ -z "${namespace}" ]; then
-        _error "Usage: $SCRIPTNAME mediator_console <namespace-name>"
+        _error "Usage: $SCRIPTNAME mediator_console <namespace-name>
+              Set CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead of opening a console."
     fi
 
     app="global-domain-mediator"
@@ -1925,11 +1952,19 @@ function subcmd_mediator_console() {
     kubectl port-forward -n "$namespace" "$mediator_pod" 11001:5007 &
     port_forwarding_pid=$!
 
-    _info "Starting Canton console..."
-    canton -v -c "$SPLICE_ROOT/build-tools/local-mediator.conf"
+    if [ "${CONSOLE_SCRIPT-}" ]; then
+      _info "Running Canton script '$CONSOLE_SCRIPT'..."
+      canton_exit=0
+      canton run "$CONSOLE_SCRIPT" -c "$SPLICE_ROOT/build-tools/local-mediator.conf" || canton_exit=$?
+    else
+      _info "Starting Canton console..."
+      canton -v -c "$SPLICE_ROOT/build-tools/local-mediator.conf"
+    fi
 
     _info "Stopping port forwarding."
     kill $port_forwarding_pid
+    wait $port_forwarding_pid 2>/dev/null || true
+    return "${canton_exit:-0}"
 }
 
 function _get_single_pod() {
@@ -2107,64 +2142,6 @@ function subcmd_preflight_sv_reonboard() {
     cd "${SPLICE_ROOT}" && \
             NETWORK_APPS_ADDRESS="${GCP_CLUSTER_HOSTNAME}" \
             sbt "apps-app/testOnly $preflight_tests"
-}
-
-###
-
-subcommand_whitelist[list_sv_cometbft_addresses]='List the sv cometbft addresses'
-
-function subcmd_list_sv_cometbft_addresses() {
-  sv="${1-}"
-
-  if [ -z "${sv}" ]; then
-    _error "Usage: $SCRIPTNAME list_sv_cometbft_addresses <sv-name>"
-  fi
-
-  pubkey_sv=$(mktemp)
-  pubkey_address=$(mktemp)
-  curl -sSLf "https://scan.$sv.${GCP_CLUSTER_HOSTNAME}/api/scan/v0/dso" | jq '[.sv_node_states[] | .contract.payload as $payload | .contract.payload.state.synchronizerNodes[] | select(.[0] | startswith("global"))[1].cometBft.nodes[]|{ sv: $payload.svName, pub_key: .[1].validatorPubKey, peer_id: .[0]}]' > "$pubkey_sv"
-  curl -sSLf --header "Content-Type: application/json" -X POST -d '{"id": 0, "method": "validators"}' "https://sv.$sv.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/admin/domain/cometbft/json-rpc" | \
-    jq '[.result.validators[] | { address: .address, pub_key:  .pub_key.value}] | to_entries | map({index: .key, pub_key: .value.pub_key, address: .value.address})' > "$pubkey_address"
-
-  jq -s '[ .[0] + .[1] | group_by(.pub_key)[] | select(length > 1) | add ] | sort_by(.index)' "$pubkey_address" "$pubkey_sv"
-}
-
-###
-
-subcommand_whitelist[list_cometbft_peers]="List sv1's cometbft peers"
-
-function subcmd_list_cometbft_peers() {
-  migration_id=${1:-}
-
-  if [ -z "${migration_id}" ]; then
-    _error "Usage: $SCRIPTNAME list_cometbft_peers <migration-id>"
-  fi
-
-  cleanup() {
-    kill $port_forward_pid
-  }
-  trap cleanup EXIT
-
-  kubectl port-forward -n "sv-1" deployment/global-domain-"$migration_id"-cometbft 26657:26657 > /dev/null &
-  port_forward_pid=$!
-
-  if ! kill -0 $port_forward_pid; then
-    _error "Failed to start port forwarding"
-    exit 1
-  fi
-
-  start=$(date +%s)
-  while ! nc -z -w 1 localhost 26657 > /dev/null 2>&1; do
-    sleep 0.1
-    now=$(date +%s)
-    if (( (now - start) > 5 )); then
-      echo "Failed to port-forward to sv-1 migration_id ${migration_id} cometbft pod"
-      cleanup
-      exit 1
-    fi
-  done
-
-  curl -sSLf "http://localhost:26657/net_info" | jq -S '.result.peers | map({sv: .node_info.moniker, peer_id: .node_info.id, listen_addr: .node_info.listen_addr, is_outbound: .is_outbound}) | sort_by(.sv)'
 }
 
 ###

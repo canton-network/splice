@@ -9,7 +9,8 @@
       "activationPolicy": "ALWAYS",
       "backupConfiguration": {
         "enabled": true,
-        "pointInTimeRecoveryEnabled": true
+        "pointInTimeRecoveryEnabled": true,
+        "startTime": "00:00"
       },
       "databaseFlags": [
         {
