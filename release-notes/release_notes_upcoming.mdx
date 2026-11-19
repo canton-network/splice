@@ -30,6 +30,10 @@
     - The Postgres images used by the Docker Compose deployments and by the Helm `pg-init` init containers are bumped
       to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
       Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
+    - As a mitigation for CVE-2026-114938, the Helm charts and Docker Compose setups now pass
+      `-XX:-UseBASE64Intrinsics` to the JVM by default, disabling the JVM's Base64 intrinsics.
+      If you override `defaultJvmOptions` in Helm, or set `PARTICIPANT_JVM_OPTS` / `VALIDATOR_JVM_OPTS`
+      in Docker Compose, add `-XX:-UseBASE64Intrinsics` to your JVM options yourself.
 
   - Scan App
 
