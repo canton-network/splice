@@ -41,8 +41,12 @@
       a daml upgrade that added new optional fields to templates caused old values to be returned with those
       fields included in the JSON object (as `null`), so the returned JSON depends on the Scan version.
       The new `ledger_api_json` encoding returns the same JSON regardless of the Scan version.
-      `compact_json` remains the default for now. Clients that compare responses across Scan instances should switch to
-      the new encoding.
+      `compact_json` remains the default for now. All users are advised to switch to the new encoding:
+
+      - The `ledger_api_json` encoding will become the new default in a future release, replacing `compact_json`.
+      - In the coming months, Scan will start serving updates in bulk, and historical data more than a few weeks old
+        will be available only in bulk. The bulk data will not support the `compact_json` encoding.
+
 
 ## Upcoming for next minor release (template):
 

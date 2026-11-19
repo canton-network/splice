@@ -3634,7 +3634,7 @@ components:
       description: |
         How daml values should be encoded in the response.
         "compact_json" is a compact, human-readable JSON encoding. It is the same encoding
-        as the one used in the HTTP JSON API or the JavaScript codegen.
+        as the one used in the HTTP JSON API (v1) or the JavaScript codegen.
         "protobuf_json" is a verbose JSON encoding that is more difficult to parse,
         but contains type information, i.e., the values can be parsed losslessly
         without having access to the Daml source code.
