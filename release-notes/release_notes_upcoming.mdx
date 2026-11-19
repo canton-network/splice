@@ -28,15 +28,7 @@
       deprecated: `true` is accepted and has no effect, `false` is rejected at startup. Remove it from your configuration.
     - An SV that joins after the switch cannot backfill update history from other SVs until a later release.
 
-    - `/v0/events` and `/v0/events/{event_id}` responses now include the optional verdict field
-      `round_number`: the oldest open mining round active at the verdict's `record_time`.
-      Scan only serves it for verdicts with a `record_time` at or after the time set for the switch-over key
-      `scan/always-serve-verdict-round-number` in `svOperationsSwitchOverTimes` of the DSO rules configuration.
-      SVs activate it with a "Set Decentralized Synchronizer Operations (DSO) Rules Configuration" vote.
-      New networks serve it from the start.
-      The upgrade deletes the `round_number` values that Scan stored before, so verdicts ingested before the upgrade
-      have no `round_number`.
-      A Scan of a newly onboarded SV omits `round_number` for the verdicts of its first one or two rounds.
+    - The endpoints `POST /v0/events` and `GET /v0/events/{event_id}` now include an optional  `round_number` field in the `verdict`. This field will be present in all verdicts after SV operators have enabled it via `DsoRules` configuration update. The value of this field will be same as the oldest `OpenMiningRound` active at the verdict's `record_time`, which is same as the `round_number` specified in `app_activity_records`.
 
   - Validator App
 
