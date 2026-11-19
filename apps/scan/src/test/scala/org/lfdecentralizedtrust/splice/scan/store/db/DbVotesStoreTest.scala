@@ -767,14 +767,16 @@ class DbVotesStoreTest
       }
 
       "refuse to decode a result that cannot be decoded, instead of storing a placeholder" in {
-        val thrown = the[IllegalArgumentException] thrownBy DbVotesStore.PeerVoteResult.decode(
-          CantonTimestamp.Epoch.plusSeconds(7),
-          "synchronizer",
-          "the-update",
-          0,
-          "the-contract",
-          """{"not": "a vote result"}""",
-        )
+        val thrown = the[DbVotesStore.UndecodablePeerVoteResult] thrownBy DbVotesStore
+          .EncodedPeerVoteResult(
+            CantonTimestamp.Epoch.plusSeconds(7),
+            "synchronizer",
+            "the-update",
+            0,
+            "the-contract",
+            """{"not": "a vote result"}""",
+          )
+          .decode
         thrown.getMessage should include("the-update")
         thrown.getCause should not be null
       }
@@ -1276,14 +1278,16 @@ class DbVotesStoreTest
 
   /** Decodes what a peer served the way the client of the API does. */
   private def decodeServed(served: DbVotesStore.ServedVoteResult): DbVotesStore.PeerVoteResult =
-    DbVotesStore.PeerVoteResult.decode(
-      served.recordTime,
-      served.synchronizerId,
-      served.updateId,
-      served.eventNumber,
-      served.contractId.getOrElse(fail(s"No contract id for ${served.updateId}")),
-      served.choiceResult,
-    )
+    DbVotesStore
+      .EncodedPeerVoteResult(
+        served.recordTime,
+        served.synchronizerId,
+        served.updateId,
+        served.eventNumber,
+        served.contractId.getOrElse(fail(s"No contract id for ${served.updateId}")),
+        served.choiceResult,
+      )
+      .decode
 
   private def mkFreshVotesStore(): Future[DbVotesStore] = {
     val participantId = mkParticipantId("DbVotesStoreTestFreshVotesStore")

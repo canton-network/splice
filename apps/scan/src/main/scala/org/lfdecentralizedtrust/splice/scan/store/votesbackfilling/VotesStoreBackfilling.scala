@@ -15,7 +15,10 @@ import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.{PekkoRetryableService, PekkoRetryingService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.VotesBackfillCursor
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.{
+  UndecodablePeerVoteResult,
+  VotesBackfillCursor,
+}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -121,6 +124,14 @@ class VotesStoreBackfilling(
               )
               Emitted(PeerPageBackfilled(votes.size, newCursor), Some(Backfilling(newCursor)))
             }
+        case Failure(ex: UndecodablePeerVoteResult) =>
+          // Every Scan can see and must be able to decode all vote results, so this is never expected.
+          // Retrying does not help until this app is upgraded, but neither does giving up.
+          logger.warn(
+            s"Vote store backfilling is stuck at $cursor, retrying in ${pollingInterval}: ${ex.getMessage}",
+            ex,
+          )
+          waitThen(Backfilling(cursor), WaitingForPeers(cursor))
         case Failure(ex) =>
           logger.info(
             s"Could not backfill votes from peers yet, retrying in ${pollingInterval}: ${ex.getMessage}"

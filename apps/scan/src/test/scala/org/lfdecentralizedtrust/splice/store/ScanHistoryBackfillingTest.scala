@@ -374,7 +374,7 @@ class ScanHistoryBackfillingTest extends UpdateHistoryTestBase {
     override def getVotesBefore(
         before: DbVotesStore.VotesBackfillCursor,
         count: Int,
-    )(implicit tc: TraceContext): Future[Seq[DbVotesStore.PeerVoteResult]] =
+    )(implicit tc: TraceContext): Future[Seq[DbVotesStore.EncodedPeerVoteResult]] =
       throw new UnsupportedOperationException(
         "TestBackfillingScanConnection does not simulate vote store backfilling"
       )
