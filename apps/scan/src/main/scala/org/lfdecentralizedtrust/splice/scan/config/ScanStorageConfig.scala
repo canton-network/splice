@@ -153,10 +153,6 @@ object ScanStorageConfig {
       (".*" + Regex.quote(prefix) + "_" + Regex.quote(key) + "_\\d+\\.zstd").r
   }
   object Encoding {
-    // The content of bulk storage objects must be the same on all SVs, independent of the version of their
-    // Scan app. This is why the human-readable encoding in bulk storage is ledger_api_json and not
-    // compact_json: the output of compact_json for a given value changes when a Daml upgrade appends
-    // optional fields to a record.
     case object LedgerApiJson
         extends Encoding("ledger_api_json", definitions.DamlValueEncoding.LedgerApiJson)
     case object ProtobufJson

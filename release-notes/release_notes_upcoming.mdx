@@ -47,7 +47,7 @@
     - Bulk storage (under development) now stores objects in the `ledger_api_json` encoding instead of `compact_json`,
       so that SVs running different Scan versions write identical objects. The bulk storage endpoints
       (`/v0/history/bulk/acs` and `/v0/history/bulk/updates`) no longer accept `compact_json`, and default to
-      `ledger_api_json`. Existing `compact_json` objects in the buckets are no longer listed.
+      `ledger_api_json`.
 
     - Add an optional `daml_value_encoding` field to the requests of `/v2/state/acs` and `/v2/holdings/state`.
       It defaults to `compact_json`, which is what these endpoints returned so far.
