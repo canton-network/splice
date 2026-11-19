@@ -74,9 +74,6 @@ test('loading the fixed tokens cache from the V1 format', async () => {
           client_a: {
             ledgerApi: { accessToken: 'token_123', expiry: now },
           },
-          client_b: {
-            participantAdminApi: { accessToken: 'token_456', expiry: fiveMinutesFromNow },
-          },
           version: 1,
         }),
       };
@@ -87,9 +84,6 @@ test('loading the fixed tokens cache from the V1 format', async () => {
     tokens: {
       client_a: {
         ledgerApi: { accessToken: 'token_123', expiry: now },
-      },
-      client_b: {
-        participantAdminApi: { accessToken: 'token_456', expiry: fiveMinutesFromNow },
       },
     },
     persisted: true,
@@ -129,15 +123,11 @@ test('getting a token that is not cached', async () => {
   expect(await getOrUpdateToken(cache, clientId, 'ledgerApi', tokenProvider)).toEqual(
     'fresh-token'
   );
-  expect(await getOrUpdateToken(cache, clientId, 'participantAdminApi', tokenProvider)).toEqual(
-    'fresh-token'
-  );
-  expect(tokenProvider).toHaveBeenCalledTimes(2);
+  expect(tokenProvider).toHaveBeenCalledTimes(1);
   expect(cache).toEqual({
     tokens: {
       [clientId]: {
         ledgerApi: { accessToken: 'fresh-token', expiry },
-        participantAdminApi: { accessToken: 'fresh-token', expiry },
       },
     },
     persisted: false,
@@ -153,10 +143,6 @@ test('getting a token that is already cached and does not require renewal', asyn
           accessToken: 'cached-token',
           expiry: new Date(Date.now() + 1000 * REQUIRED_TOKEN_LIFETIME_SECONDS * 2),
         },
-        participantAdminApi: {
-          accessToken: 'cached-token',
-          expiry: new Date(Date.now() + 1000 * REQUIRED_TOKEN_LIFETIME_SECONDS * 2),
-        },
       },
     },
     persisted: true,
@@ -164,9 +150,6 @@ test('getting a token that is already cached and does not require renewal', asyn
   const cacheSnapshot = JSON.stringify(cache);
   const tokenProvider = jest.fn() as () => Promise<Auth0ClientAccessToken>;
   expect(await getOrUpdateToken(cache, clientId, 'ledgerApi', tokenProvider)).toEqual(
-    'cached-token'
-  );
-  expect(await getOrUpdateToken(cache, clientId, 'participantAdminApi', tokenProvider)).toEqual(
     'cached-token'
   );
   expect(tokenProvider).not.toHaveBeenCalled();
@@ -182,10 +165,6 @@ test('getting a token that is already cached but requires renewal', async () => 
           accessToken: 'cached-token',
           expiry: new Date(Date.now() + 1000 * REQUIRED_TOKEN_LIFETIME_SECONDS * 0.5),
         },
-        participantAdminApi: {
-          accessToken: 'cached-token',
-          expiry: new Date(Date.now() + 1000 * REQUIRED_TOKEN_LIFETIME_SECONDS * 0.5),
-        },
       },
     },
     persisted: true,
@@ -198,15 +177,11 @@ test('getting a token that is already cached but requires renewal', async () => 
   expect(await getOrUpdateToken(cache, clientId, 'ledgerApi', tokenProvider)).toEqual(
     'fresh-token'
   );
-  expect(await getOrUpdateToken(cache, clientId, 'participantAdminApi', tokenProvider)).toEqual(
-    'fresh-token'
-  );
-  expect(tokenProvider).toHaveBeenCalledTimes(2);
+  expect(tokenProvider).toHaveBeenCalledTimes(1);
   expect(cache).toEqual({
     tokens: {
       [clientId]: {
         ledgerApi: { accessToken: 'fresh-token', expiry },
-        participantAdminApi: { accessToken: 'fresh-token', expiry },
       },
     },
     persisted: false,
@@ -227,10 +202,7 @@ test('getting a fresh token with an insufficient lifetime', async () => {
   await expect(getOrUpdateToken(cache, clientId, 'ledgerApi', tokenProvider)).rejects.toThrow(
     'too short to meet the required token lifetime'
   );
-  await expect(
-    getOrUpdateToken(cache, clientId, 'participantAdminApi', tokenProvider)
-  ).rejects.toThrow('too short to meet the required token lifetime');
-  expect(tokenProvider).toHaveBeenCalledTimes(2);
+  expect(tokenProvider).toHaveBeenCalledTimes(1);
   expect(JSON.stringify(cache)).toEqual(cacheSnapshot); // cache state did not change
 });
 
@@ -255,7 +227,6 @@ test('persisting the fixed tokens cache', async () => {
     tokens: {
       [clientId]: {
         ledgerApi: { accessToken: 'cached-token', expiry },
-        participantAdminApi: { accessToken: 'cached-token', expiry },
       },
     },
     persisted: false,
@@ -290,7 +261,6 @@ test('persisting the fixed tokens cache with a persisted previous version', asyn
     tokens: {
       [clientId]: {
         ledgerApi: { accessToken: 'cached-token', expiry },
-        participantAdminApi: { accessToken: 'cached-token', expiry },
       },
     },
     persisted: false,

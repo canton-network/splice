@@ -25,7 +25,6 @@ import {
   allValidatorsConfig,
   validatorIngressName,
 } from '@canton-network/splice-pulumi-common-validator/src/config';
-import _ from 'lodash';
 
 function tokenLifetime(): number {
   return fixedTokens() ? 2592000 : 86400; // TODO(DACH-NY/canton-network-internal#2114): Move this to the cluster config? We want it to be long for fixed token clusters
@@ -135,34 +134,12 @@ function createValidatorAppAudience(
   }
 }
 
-function createParticipantAdminApiAudience(
-  namespace: string,
-  clusterBasename: string,
-  auth0DomainProvider: auth0.Provider
-): ResolvedOutput<string> {
-  const identifier = `https://participant_admin_api.${namespace}.${clusterBasename}.canton.network`;
-  const resource = new auth0.ResourceServer(
-    `ParticipantAdminApi${namespace
-      .split('-')
-      .map(s => _.capitalize(s))
-      .join('')}`,
-    {
-      name: `Participant Admin API for SV ${namespace} on ${clusterBasename} (Pulumi managed)`,
-      identifier,
-      tokenLifetime: tokenLifetime(),
-    },
-    { provider: auth0DomainProvider }
-  );
-  return { value: identifier, output: resource.identifier };
-}
-
 function newM2MApp(
   resourceName: string,
   name: string,
   description: string,
   clusterBasename: string,
   ledgerApiAud: ResolvedOutput<string>,
-  participantAdminApiAud: ResolvedOutput<string>,
   appAud: ResolvedOutput<string>,
   auth0DomainProvider: auth0.Provider
 ): auth0.Client {
@@ -182,18 +159,6 @@ function newM2MApp(
       clientId: client.id,
       audience: ledgerApiAud.output,
       scopes: ['daml_ledger_api'],
-    },
-    {
-      provider: auth0DomainProvider,
-    }
-  );
-
-  new auth0.ClientGrant(
-    `${resourceName}ParticipantAdminGrant`,
-    {
-      clientId: client.id,
-      audience: participantAdminApiAud.output,
-      allowAllScopes: true,
     },
     {
       provider: auth0DomainProvider,
@@ -345,18 +310,12 @@ function auth0ForSvNamespace(
   const ledgerApiAud = createLedgerApiAudience(namespace, clusterBasename, provider);
   const svAppAud = createSvAppAudience(namespace, clusterBasename, provider);
   const validatorAud = createValidatorAppAudience(namespace, clusterBasename, provider);
-  const participantAdminApiAud = createParticipantAdminApiAudience(
-    namespace,
-    clusterBasename,
-    provider
-  );
   const validatorApp = newM2MApp(
     `${namespace.replace(/-/g, '')}ValidatorBackendApp`,
     `${namespace.replace(/-/g, '').toUpperCase()} Validator Backend`,
     `Used for the Validator backend for SV ${namespace} on ${clusterBasename}`,
     clusterBasename,
     ledgerApiAud,
-    participantAdminApiAud,
     validatorAud,
     provider
   );
@@ -366,7 +325,6 @@ function auth0ForSvNamespace(
     `Used for the SV backend for SV ${namespace} on ${clusterBasename}`,
     clusterBasename,
     ledgerApiAud,
-    participantAdminApiAud,
     svAppAud,
     provider
   );
@@ -387,7 +345,6 @@ function auth0ForSvNamespace(
       return {
         audiences: {
           ledgerApi: ledgerApiAud.value,
-          participantAdminApi: participantAdminApiAud.value,
           svAppApi: svAppAud.value,
           validatorApi: validatorAud.value,
         },
@@ -543,7 +500,6 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
       return {
         audiences: {
           ledgerApi: DEFAULT_AUDIENCE,
-          participantAdminApi: DEFAULT_AUDIENCE,
           validatorApi: DEFAULT_AUDIENCE,
         },
         backendClientIds: {
@@ -576,7 +532,6 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
       return {
         audiences: {
           ledgerApi: DEFAULT_AUDIENCE,
-          participantAdminApi: DEFAULT_AUDIENCE,
           validatorApi: DEFAULT_AUDIENCE,
         },
         backendClientIds: {
@@ -643,7 +598,6 @@ function svRunbookAuth0(
   svBackendClientId: string,
   validatorBackendClientId: string,
   ledgerApiAudience: string,
-  participantAdminApiAudience: string,
   svApiAudience: string,
   validatorApiAudience: string,
   fixedTokenCacheName: string
@@ -692,7 +646,6 @@ function svRunbookAuth0(
       namespacedConfig[namespace] = {
         audiences: {
           ledgerApi: ledgerApiAudience,
-          participantAdminApi: participantAdminApiAudience,
           svAppApi: svApiAudience,
           validatorApi: validatorApiAudience,
         },
@@ -764,7 +717,6 @@ function auth0ForValidatorNamespace(
         audiences: {
           // The Ledger API in the validator-test tenant
           ledgerApi: 'https://ledger_api.example.com',
-          participantAdminApi: 'https://participant_admin_api.example.com',
           // The Validator App API in the validator-test tenant
           validatorApi: 'https://validator.example.com/api',
         },
@@ -857,7 +809,6 @@ export function configureAuth0(
       'bUfFRpl2tEfZBB7wzIo9iRNGTj8wMeIn',
       'uxeQGIBKueNDmugVs1RlMWEUZhZqyLyr',
       'https://ledger_api.example.com',
-      'https://participant_admin_api.example.com',
       'https://sv.example.com/api',
       'https://validator.example.com/api',
       'auth0-fixed-token-cache-sv-test'

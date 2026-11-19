@@ -9,9 +9,7 @@ import {
   DomainMigrationIndex,
   ExactNamespace,
   getAdditionalJvmOptions,
-  getClientId,
   getLedgerApiAudience,
-  getParticipantAdminApiAudience,
   getParticipantKmsHelmResources,
   InstalledHelmChart,
   installSpliceHelmChart,
@@ -92,7 +90,6 @@ function installParticipantChart(
   customOptions?: SpliceCustomResourceOptions
 ): InstalledHelmChart {
   const defaultValues: ChartValues = loadDefaultParticipantValues(
-    xns,
     auth0,
     DecentralizedSynchronizerUpgradeConfig.activeMigrationId
   );
@@ -111,15 +108,10 @@ function installParticipantChart(
       // the following will not be needed when the MIGRATION_ID gets removed from defaults
       databaseName: `participant_${DecentralizedSynchronizerUpgradeConfig.frozenMigrationId}`,
     },
-    adminApi: {
-      ...defaultValues.adminApi,
-      // TODO(DACH-NY/canton-network-internal#8256): remove this once we remove the separate admin API auth flag
-      disableAuth: participant?.disableParticipantAdminApiAuth ?? false,
-      auth: {
-        ...defaultValues.adminApi?.auth,
-        user: `${getClientId(auth0, 'validator', xns.logicalName)}@clients`,
-        additionalUsers: [`${getClientId(auth0, 'sv', xns.logicalName)}@clients`],
-      },
+    auth: {
+      ...defaultValues.auth,
+      targetAudience: getLedgerApiAudience(auth0, xns.logicalName),
+      jwksUrl: `https://${auth0.auth0Domain}/.well-known/jwks.json`,
     },
     ...kmsValues,
     additionalEnvVars: [
@@ -148,7 +140,6 @@ function installParticipantChart(
 }
 
 function loadDefaultParticipantValues(
-  xns: ExactNamespace,
   auth0: Auth0Config,
   migrationId: DomainMigrationIndex
 ): ChartValues {
@@ -157,8 +148,6 @@ function loadDefaultParticipantValues(
     {
       MIGRATION_ID: `${migrationId}`,
       OIDC_AUTHORITY_URL: auth0.auth0Domain,
-      OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getLedgerApiAudience(auth0, xns.logicalName),
-      OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(auth0, xns.logicalName),
     }
   );
 }

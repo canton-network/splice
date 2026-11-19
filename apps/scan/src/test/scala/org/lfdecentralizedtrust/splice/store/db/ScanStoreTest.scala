@@ -50,6 +50,8 @@ import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.damlDecimal
 import org.lfdecentralizedtrust.splice.util.*
 
+import io.circe.{Json, yaml}
+import java.nio.file.{Files, Paths}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
@@ -57,6 +59,7 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
@@ -1950,6 +1953,57 @@ class DbScanStoreTest
     for {
       _ <- resetAllAppTables(storage)
     } yield ()
+
+  "bigquery-replicated-tables.yaml" should {
+
+    // Datastream adds a new Postgres column to staging, but the hourly
+    // appends copy only the listed columns to production. Listed
+    // columns that Postgres has dropped are allowed.
+    "list every column of the tables replicated to BigQuery" in {
+      val file = Paths.get(
+        sys.env("SPLICE_ROOT"),
+        "cluster/pulumi/common-sv/src/bigquery-replicated-tables.yaml",
+      )
+      val tables = yaml.parser
+        .parse(Files.readString(file))
+        .flatMap(_.as[Map[String, Json]])
+        .fold(e => fail(s"$file: $e"), identity)
+      // a column is a name or an object with a name and a since
+      val listedColumns = tables.view.mapValues { table =>
+        table.hcursor
+          .downField("columns")
+          .as[Seq[Json]]
+          .fold(e => fail(s"$file: $e"), identity)
+          .map(column =>
+            column.asString
+              .orElse(column.hcursor.downField("name").as[String].toOption)
+              .getOrElse(fail(s"$file: not a column: $column"))
+          )
+          .toSet
+      }.toMap
+      for {
+        dbColumns <- MonadUtil.sequentialTraverse(listedColumns.keys.toSeq.sorted) { table =>
+          storage
+            .query(
+              sql"""
+                select column_name
+                from information_schema.columns
+                where table_schema = current_schema and table_name = $table
+              """.as[String],
+              "bigQueryReplicatedTables.columns",
+            )
+            .failOnShutdownToAbortException("bigQueryReplicatedTables.columns")
+            .map(table -> _.toSet)
+        }
+      } yield {
+        forEvery(dbColumns) { case (table, columns) =>
+          columns should not be empty withClue s"$table in scan's database"
+          listedColumns(table) should contain allElementsOf columns withClue
+            s"$table's columns in $file"
+        }
+      }
+    }
+  }
 
   "getTopValidatorLicenses" should {
 
