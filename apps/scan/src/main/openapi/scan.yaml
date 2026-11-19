@@ -3649,9 +3649,7 @@ components:
         before such an upgrade can be returned with or without the new fields (as null) depending on the
         version of the app that serves the request. This encoding returns the same JSON regardless of the version.
         Optional and defaults to "compact_json".
-        Not all endpoints support all encodings. In particular, bulk storage never contains "compact_json" data,
-        so the bulk storage endpoints, and any endpoint that is backed by bulk storage, only support
-        "ledger_api_json" and "protobuf_json", and default to "ledger_api_json".
+        Not all endpoints support all encodings.
         Requests for an encoding that an endpoint does not support are rejected.
       enum:
         - "compact_json"
