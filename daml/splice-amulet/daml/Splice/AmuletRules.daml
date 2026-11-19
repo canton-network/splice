@@ -29,7 +29,7 @@ import Splice.Api.Token.HoldingV1 qualified as Api.Token.HoldingV1
 import Splice.Api.Token.TransferInstructionV1(TransferInstruction_Update(..), TransferInstructionResult, TransferInstruction)
 
 import Splice.TokenStandard.Utils
-  ( basicAccount, eventLog_holdingsChangeDefaultImpl, reasonToMeta, mintAccount, burnAccount )
+  ( basicAccount, eventLog_holdingsChangeDefaultImpl, reasonToMeta, mintAccount, burnAccount, require', isLessR )
 
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
@@ -168,6 +168,18 @@ data AmuletRules_UpdateExternalPartyConfigStatesResult = AmuletRules_UpdateExter
     newExternalPartyConfigStateCid : ContractId ExternalPartyConfigState
   deriving (Show, Eq, Serializable)
 
+data AmuletRules_MigrateContractStateSchemaResult = AmuletRules_MigrateContractStateSchemaResult
+  with
+    newAmuletRulesCid : ContractId AmuletRules
+    changesDescription : [(Int, Text)]
+      -- ^ Short description of what changed, for each schema version for which migration was applied.
+  deriving (Show, Eq, Serializable)
+
+-- | The latest contract state schema version that AmuletRules can be migrated to.
+-- When bumping this also update the value in AmuletRulesContractStateMigrationTrigger
+latestContractStateSchemaVersion : Int
+latestContractStateSchemaVersion = 1
+
 -- | The rules governing how Amulet users can modify the Amulet state managed by the DSO party.
 template AmuletRules
   with
@@ -176,7 +188,6 @@ template AmuletRules
     isDevNet : Bool
     contractStateSchemaVersion : Optional Int
       -- Schema version for amulet rules and associated contracts. Intended for bootstrapping new required contracts.
-      -- Currently still unused but added so apps can start recompiling against the new version and don't break once it will be set.
   where
     ensure validAmuletConfig configSchedule.initialValue && null configSchedule.futureValues && fromOptional 0 contractStateSchemaVersion >= 0
 
@@ -423,6 +434,7 @@ template AmuletRules
       controller provider
       do
         require "isDevNet flag is true" isDevNet
+        require "opsParties has at most 20 entries" (optional 0 length opsParties <= 20)
         featuredAppRightCid <- create FeaturedAppRight with dso; provider; activityWeight; appKind; opsParties
         return AmuletRules_DevNet_FeatureAppResult with ..
 
@@ -1039,6 +1051,23 @@ template AmuletRules
           amuletSwitchOverTimes = config.amuletSwitchOverTimes
           governanceLockConfig = config.governanceLockConfig
         pure AmuletRules_UpdateExternalPartyConfigStatesResult with ..
+
+    -- Migrate the contract state schema to latest version and create necessary contracts
+    choice AmuletRules_MigrateContractStateSchema : AmuletRules_MigrateContractStateSchemaResult
+      controller dso
+      do
+        let currentVersion = fromOptional 0 contractStateSchemaVersion
+        require' ("currentVersion", currentVersion) isLessR
+          ("latestContractStateSchemaVersion", latestContractStateSchemaVersion)
+        changesDescription <-
+          if currentVersion == 0
+            then do
+              _ <- create ActivityRecorder with dso
+              pure [(1, "created ActivityRecorder")]
+            else pure []
+        newAmuletRulesCid <- create this with
+          contractStateSchemaVersion = Some latestContractStateSchemaVersion
+        pure AmuletRules_MigrateContractStateSchemaResult with newAmuletRulesCid; changesDescription
 
 
 data OpenMiningRoundTriple = OpenMiningRoundTriple
