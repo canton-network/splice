@@ -1,0 +1,166 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+from typing import override
+
+import python_checks as checks
+
+
+class PythonChecksTest(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        self.config = checks.Config((), {}, {})
+
+    def write(self, name: str, content: str, *, tracked: bool = True) -> Path:
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        if tracked:
+            subprocess.run(["git", "add", "--", name], cwd=self.root, check=True)
+        return path
+
+    def test_selection_tracks_exclusions_and_literal_target_paths(self) -> None:
+        self.write("root.py", "")
+        self.write("a[1]/one.py", "")
+        self.write("a[1]/space name.py", "")
+        self.write("a1/not-selected.py", "")
+        self.write("a[1]/ignored.py", "")
+        self.write("a[1]/untracked.py", "", tracked=False)
+        self.write("other.txt", "")
+        config = checks.Config(("a[[]1]/ignored.py",), {}, {})
+        self.assertEqual(
+            checks.python_files(self.root, config, self.root / "a[1]"),
+            ["a[1]/one.py", "a[1]/space name.py"],
+        )
+        self.assertEqual(
+            checks.python_files(self.root, config, self.root / "root.py"),
+            ["root.py"],
+        )
+
+    def test_empty_and_outside_selections_fail(self) -> None:
+        self.write("covered.py", "")
+        for target in (self.root.parent, self.root / "missing"):
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                checks.python_files(self.root, self.config, target)
+
+    def test_root_relative_exclusions_include_nested_files(self) -> None:
+        self.write("keep.py", "")
+        self.write("vendor/nested/skip.py", "")
+        self.write("nested/vendor/keep.py", "")
+        config = checks.Config(("vendor/**",), {}, {})
+        self.assertEqual(
+            checks.python_files(self.root, config, None),
+            ["keep.py", "nested/vendor/keep.py"],
+        )
+
+    def test_config_validates_import_paths_rule_names_and_reasons(self) -> None:
+        self.write("lib/helper.py", "")
+        path = self.write("config.json", json.dumps({
+            "extra_mypypath": {"scripts": ["lib"]},
+            "disabled_rules": {"warn-unreachable": "TODO: third-party narrowing issue"},
+        }))
+        config = checks.load_config(self.root, path)
+        self.assertEqual(config.extra_mypypath, {"scripts": ("lib",)})
+        self.assertIn("warn-unreachable", config.disabled_rules)
+        invalid: tuple[object, ...] = (
+            [],
+            {"plugins": ["code.py"]},
+            {"exclusions": [1]},
+            {"exclusions": [":(magic)bad"]},
+            {"extra_mypypath": {"scripts": ["../outside"]}},
+            {"extra_mypypath": {"scripts": ["missing"]}},
+            {"disabled_rules": {"unknown": "reason"}},
+            {"disabled_rules": {"warn-unreachable": ""}},
+        )
+        for raw in invalid:
+            with self.subTest(raw=raw):
+                path.write_text(json.dumps(raw))
+                with self.assertRaises(ValueError):
+                    checks.load_config(self.root, path)
+
+    def test_check_isolates_directories_and_aggregates_failures(self) -> None:
+        config = checks.Config((), {"first": ("lib",)}, {"warn-unreachable": "TODO: example"})
+        with patch("python_checks.subprocess.run", side_effect=[
+            subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0),
+        ]) as run, redirect_stdout(StringIO()):
+            self.assertEqual(checks.check(
+                self.root, config, ["first/a.py", "first/b.py", "second/a.py"],
+            ), 1)
+        first, second = run.call_args_list
+        command = first.args[0]
+        self.assertIn("--config-file=", command)
+        self.assertIn("--strict", command)
+        self.assertIn("explicit-override", command)
+        self.assertNotIn("--warn-unreachable", command)
+        self.assertEqual(command[-3], "--")
+        self.assertEqual(command[-2:], ["first/a.py", "first/b.py"])
+        self.assertEqual(first.kwargs["env"]["MYPYPATH"], os.pathsep.join(["first", "lib"]))
+        self.assertEqual(second.kwargs["env"]["MYPYPATH"], "second")
+
+    def test_check_resolves_imports_without_running_targets_or_plugins(self) -> None:
+        self.write("lib/helper.py", "def answer() -> int:\n    return 42\n")
+        self.write("first/same-name.py",
+                   "from helper import answer\nvalue: int = answer()\nraise RuntimeError('must not run')\n")
+        self.write("-second/same-name.py", "value: str = 'different module'\n")
+        self.write("mypy.ini", "[mypy]\nplugins = nonexistent_plugin\n")
+        config = checks.Config(("lib/**",), {"first": ("lib",)}, {})
+        with redirect_stdout(StringIO()):
+            self.assertEqual(checks.check(
+                self.root, config, checks.python_files(self.root, config, None),
+            ), 0)
+
+    def test_test_only_runs_selected_tracked_test_modules(self) -> None:
+        self.write("-tests/test_ok.py",
+                   "import unittest\nclass Test(unittest.TestCase):\n    def test_ok(self) -> None:\n        pass\n")
+        self.write("-tests/test_untracked.py", "raise RuntimeError('untracked')", tracked=False)
+        self.write("-tests/test_excluded.py", "raise RuntimeError('excluded')")
+        config = checks.Config(("-tests/test_excluded.py",), {}, {})
+        with redirect_stdout(StringIO()):
+            self.assertEqual(checks.test(
+                self.root, checks.python_files(self.root, config, None),
+            ), 0)
+        with self.assertRaisesRegex(ValueError, "no tests"):
+            checks.test(self.root, ["source.py"])
+
+    def test_test_aggregates_failures(self) -> None:
+        with patch("python_checks.subprocess.run", side_effect=[
+            subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0),
+        ]) as run, redirect_stdout(StringIO()):
+            self.assertEqual(checks.test(self.root, ["a/test_one.py", "b/test_two.py"]), 1)
+        self.assertEqual(run.call_count, 2)
+
+    def test_cli_uses_callers_paths_and_explicit_repository(self) -> None:
+        self.write("scripts/python-checks.json", "{}")
+        self.write("nested/target.py", "")
+        original = Path.cwd()
+        os.chdir(self.root / "nested")
+        try:
+            with patch("python_checks.check", return_value=0) as check:
+                self.assertEqual(checks.main(["--root", str(self.root), "check", "."]), 0)
+            self.assertEqual(check.call_args.args[2], ["nested/target.py"])
+        finally:
+            os.chdir(original)
+
+    def test_cli_reports_errors(self) -> None:
+        self.write("scripts/python-checks.json", "{}")
+        error = StringIO()
+        with redirect_stderr(error):
+            self.assertEqual(checks.main(["--root", str(self.root), "check"]), 1)
+        self.assertIn("no covered Python files", error.getvalue())
+
+
+if __name__ == "__main__":
+    unittest.main()

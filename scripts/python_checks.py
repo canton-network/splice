@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Shared, configuration-isolated Python checks for Splice and its consumers."""
+
+import argparse
+from dataclasses import dataclass
+import glob
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+from collections.abc import Sequence
+
+
+RULES = {
+    "warn-unreachable": ("--warn-unreachable",),
+    "strict-equality-for-none": ("--strict-equality-for-none",),
+    "disallow-any-decorated": ("--disallow-any-decorated",),
+    **{
+        code: ("--enable-error-code", code)
+        for code in (
+            "explicit-override",
+            "ignore-without-code",
+            "possibly-undefined",
+            "redundant-expr",
+            "unused-awaitable",
+            "mutable-override",
+            "redundant-self",
+            "unimported-reveal",
+            "exhaustive-match",
+        )
+    },
+}
+
+
+@dataclass(frozen=True)
+class Config:
+    exclusions: tuple[str, ...]
+    extra_mypypath: dict[str, tuple[str, ...]]
+    disabled_rules: dict[str, str]
+
+
+def strings(value: object, name: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+        raise ValueError(f"{name} must be an array of nonempty strings")
+    return tuple(value)
+
+
+def relative_path(root: Path, value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"expected a repository-relative path: {value}")
+    resolved = (root / path).resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"path is outside the repository: {value}")
+    return resolved
+
+
+def load_config(root: Path, path: Path) -> Config:
+    raw: object = json.loads(path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError("configuration must be a JSON object")
+    unknown = raw.keys() - {"exclusions", "extra_mypypath", "disabled_rules"}
+    if unknown:
+        raise ValueError(f"unknown configuration keys: {sorted(unknown)}")
+    exclusions = strings(raw.get("exclusions", []), "exclusions")
+    for pattern in exclusions:
+        if pattern.startswith(("/", ":")) or ".." in pattern.split("/"):
+            raise ValueError(f"expected a root-relative Git exclusion pattern: {pattern}")
+
+    extra = raw.get("extra_mypypath", {})
+    if not isinstance(extra, dict):
+        raise ValueError("extra_mypypath must map directories to arrays of import paths")
+    imports: dict[str, tuple[str, ...]] = {}
+    for directory, paths in extra.items():
+        if not isinstance(directory, str) or not directory:
+            raise ValueError("extra_mypypath keys must be nonempty directory names")
+        key = relative_path(root, directory).relative_to(root).as_posix()
+        imports[key] = strings(paths, f"extra_mypypath[{directory}]")
+        for import_path in imports[key]:
+            if not relative_path(root, import_path).is_dir():
+                raise ValueError(f"import directory does not exist: {import_path}")
+
+    disabled = raw.get("disabled_rules", {})
+    if not isinstance(disabled, dict):
+        raise ValueError("disabled_rules must map known rules to reasons")
+    reasons: dict[str, str] = {}
+    for rule, reason in disabled.items():
+        if not isinstance(rule, str) or rule not in RULES:
+            raise ValueError(f"unknown disabled rule: {rule}")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(f"disabled rule {rule} needs a nonempty reason")
+        reasons[rule] = reason
+    return Config(exclusions, imports, reasons)
+
+
+def repository_root(start: Path) -> Path:
+    result = subprocess.run(
+        ["git", "-C", str(start), "rev-parse", "--show-toplevel"],
+        check=True, capture_output=True, text=True,
+    )
+    return Path(result.stdout.rstrip("\n")).resolve()
+
+
+def python_files(root: Path, config: Config, target: Path | None) -> list[str]:
+    selected = target.resolve() if target is not None else root
+    if not selected.is_relative_to(root):
+        raise ValueError(f"{target} is outside the repository")
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--", ":(top,glob)**/*.py",
+         *(f":(top,exclude){pattern}" for pattern in config.exclusions)],
+        cwd=root, check=True, capture_output=True,
+    )
+    files = sorted({
+        os.fsdecode(name) for name in result.stdout.split(b"\0")
+        if name and (root / os.fsdecode(name)).is_relative_to(selected)
+    })
+    if not files:
+        raise ValueError(f"no covered Python files found under {selected}")
+    return files
+
+
+def grouped(files: Sequence[str]) -> dict[str, list[str]]:
+    directories: dict[str, list[str]] = {}
+    for file in files:
+        directories.setdefault(Path(file).parent.as_posix(), []).append(file)
+    return directories
+
+
+def check(root: Path, config: Config, files: Sequence[str]) -> int:
+    failed = False
+    for directory, targets in grouped(files).items():
+        print(f"mypy: {directory}", flush=True)
+        env = dict(os.environ)
+        env["MYPYPATH"] = os.pathsep.join(
+            [directory, *config.extra_mypypath.get(directory, ())]
+        )
+        # Never load repository mypy configs: their plugins can execute target code.
+        command = [
+            "mypy", "--config-file=", "--python-version", "3.14", "--strict",
+            "--explicit-package-bases",
+            *(arg for rule, args in RULES.items() if rule not in config.disabled_rules for arg in args),
+            "--",
+            *targets,
+        ]
+        if subprocess.run(command, cwd=root, env=env).returncode != 0:
+            failed = True
+    return int(failed)
+
+
+def test(root: Path, files: Sequence[str]) -> int:
+    tests = [file for file in files if Path(file).name.startswith("test_")]
+    if not tests:
+        raise ValueError("no tests found in the selected covered files")
+    failed = False
+    for directory, targets in grouped(tests).items():
+        print(f"unittest: {directory}", flush=True)
+        for file in targets:
+            # Restrict discovery to selected tracked tests, including exclusions.
+            command = [
+                sys.executable, "-m", "unittest", "discover",
+                f"--start-directory={directory}", f"--pattern={glob.escape(Path(file).name)}",
+            ]
+            if subprocess.run(command, cwd=root).returncode != 0:
+                failed = True
+    return int(failed)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, help="repository to check (default: current Git checkout)")
+    parser.add_argument("--config", type=Path, help="JSON config, relative to the repository root")
+    commands = parser.add_subparsers(dest="command", required=True)
+    for name in ("check", "test"):
+        command = commands.add_parser(name, help=f"{name} covered Python files")
+        command.add_argument("path", nargs="?", type=Path, help="file or directory relative to the current directory")
+    args = parser.parse_args(argv)
+    try:
+        root = repository_root(args.root or Path.cwd())
+        config = load_config(root, root / (args.config or "scripts/python-checks.json"))
+        files = python_files(root, config, args.path)
+        if args.command == "check":
+            return check(root, config, files)
+        return test(root, files)
+    except subprocess.CalledProcessError as error:
+        print(f"error: Git command failed: {error.stderr!s}", file=sys.stderr)
+    except (OSError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

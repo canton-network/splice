@@ -5,6 +5,7 @@
   - [Opening PRs](opening-prs)
   - [Opening new issues](#opening-new-issues)
   - [Testing](#testing)
+    - [Python checks](#python-checks)
   - [Git Hygiene](#git-hygiene)
   - [Branch Naming](#branch-naming)
   - [TODO Comments](#todo-comments)
@@ -69,6 +70,53 @@ Every contribution must be tested in an automated test! For further details see 
 
 Also note that the splice CI [enforces](https://github.com/cncf/dco2) that all commits on a pull request contain a valid `Signed-off-by: Your Name <your@email.com>` line,
 to confirm adherence to the [DCO](https://developercertificate.org/) requirements.
+
+### Python checks
+
+Run these commands from the repository root in the Nix development shell:
+
+```bash
+direnv exec . python scripts/python_checks.py check
+direnv exec . python scripts/python_checks.py test
+```
+
+`check` runs mypy without executing the checked code; it runs in static CI, including
+static-only builds. `test` executes unit tests with unittest and remains in the
+Python test job. Both commands select tracked Python files, excluding the paths in
+`scripts/python-checks.json`. Stage new files before using these commands to check
+them. The scan-txlog exclusion remains pending #8085; vendored Canton is not checked.
+
+An optional file or directory limits the selection and is relative to the caller's
+working directory. With no path, selection covers the whole repository. For example,
+from `cluster/`:
+
+```bash
+direnv exec .. python ../scripts/python_checks.py check .
+direnv exec .. python ../scripts/python_checks.py test .
+```
+
+An outside-repository path, no covered files, or no selected tests is an error.
+Tests run only from the selected tracked `test_*.py` modules, separately to avoid
+colliding module names. Type checking is grouped by directory for the same reason.
+Mypy config files are intentionally ignored because they can load executable plugins.
+
+The shared CLI supports `--root ROOT` and `--config CONFIG` before the subcommand
+for other repositories, including canton-network-internal through its Splice
+submodule. Config paths are relative to the selected root. The JSON configuration has:
+
+- `exclusions`: root-relative Git exclusion pathspec patterns, without magic prefixes.
+  Selection starts with all tracked Python files, so new locations are included by
+  default unless excluded.
+- `extra_mypypath`: a map from checked directories to additional root-relative import
+  directories. This extends each directory's isolated mypy import path.
+- `disabled_rules`: a map from names in `scripts/python_checks.py`'s `RULES` to
+  nonempty reasons. Use a specific TODO reference for a rule needing substantial
+  adoption work rather than broadening this task or adding blanket ignores.
+
+All twelve additional rules from #8340 are currently enabled. The stdlib-only
+Scan party monitor retains a local `explicit-override` exception for Python 3.9
+compatibility. New rule adoption should stay behavior-preserving; discuss substantial
+refactoring first.
 
 ## Git Hygiene
 

@@ -15,6 +15,14 @@ This document provides instructions for AI coding agents (GitHub Copilot, Claude
 
 Every contribution must be tested in an automated test. For further details see the [Testing README](TESTING.md).
 
+For Python, use `direnv exec . python scripts/python_checks.py check` and
+`direnv exec . python scripts/python_checks.py test` from the repository root.
+Both accept an optional caller-relative path and select tracked files only.
+Coverage exclusions, additional import directories, and justified stricter-rule
+exceptions live in `scripts/python-checks.json`; see [Python checks](CONTRIBUTING.md#python-checks).
+Keep mypy's `--config-file=` isolation and never execute target code from `check`.
+Ask before substantial refactoring to adopt a stricter rule, or leave a specific TODO.
+
 ## Building and Running Tests
 
 * Run `sbt` inside the direnv/nix dev shell, e.g. `direnv exec . sbt -batch "apps-scan/testOnly <FullyQualifiedSuite>"`. `-batch` avoids the interactive prompt; redirect output to a file and grep for `^\[error\]` and `Tests:`.

@@ -102,6 +102,11 @@ jobs:
         with:
           cmd: ./scripts/check-trailing-whitespace.sh
 
+      - name: Type check Python
+        uses: ./.github/actions/nix/run
+        with:
+          cmd: python scripts/python_checks.py check
+
       - name: Run Daml warts check
         uses: ./.github/actions/nix/run
         with:
