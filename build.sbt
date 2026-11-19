@@ -1452,6 +1452,7 @@ lazy val `apps-scan` =
         pekko_http_cors,
         scalapb_runtime_grpc,
         scalapb_runtime,
+        circe_yaml % Test,
       ),
       BuildCommon.sharedAppSettings,
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,
