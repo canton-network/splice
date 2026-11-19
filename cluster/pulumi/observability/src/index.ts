@@ -15,6 +15,7 @@ import {
   installGcpLoggingAlerts,
   installGcpQuotaAlerts,
   installLoggedSecretsAlerts,
+  installSequencerForkDetectedAlert,
   installSequencerParticipantRegistrationAlert,
   installTopologyKeyMonitorAlerts,
 } from './gcpAlerts';
@@ -48,8 +49,13 @@ istioMonitoring(namespace, [observability]);
 if (cloudArmorConfig.enabled && cloudArmorConfig.logging.enabled) {
   installCloudArmorRejectionsMetrics();
 }
+const notificationChannel = getNotificationChannel();
+if (notificationChannel) {
+  // Fire regardless of enableAlerts/clusterIsResetPeriodically: a sequencer fork must never go
+  // unnoticed
+  installSequencerForkDetectedAlert(notificationChannel);
+}
 if (enableAlerts && !clusterIsResetPeriodically) {
-  const notificationChannel = getNotificationChannel();
   if (notificationChannel) {
     installGcpLoggingAlerts(notificationChannel);
     installTopologyKeyMonitorAlerts(notificationChannel);
