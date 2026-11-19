@@ -36,7 +36,6 @@ async function installBigQuery(
         prefix: 'mock',
         enableLegacyDatastream,
         enableStagProdDatastream,
-        useProdDataForFunctions: false,
         legacyDesiredState: 'RUNNING',
         stagProdDesiredState: 'RUNNING',
         retentionPeriodSeconds: 7 * 24 * 3600,
