@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
+import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -17,7 +18,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_UnhideRewardCouponsV2
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.PageLimit
+import org.lfdecentralizedtrust.splice.store.{PageLimit, UnavailablePartiesStore}
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -26,15 +27,17 @@ import scala.jdk.CollectionConverters.*
 import UnhideRewardCouponV2Trigger.*
 
 class UnhideRewardCouponV2Trigger(
-    svConfig: SvAppBackendConfig,
+    override protected val svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
     tracer: Tracer,
 ) extends PollingParallelTaskExecutionTrigger[Task]
-    with SvTaskBasedTrigger[Task] {
+    with SvTaskBasedTrigger[Task]
+    with UnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit
@@ -77,28 +80,35 @@ class UnhideRewardCouponV2Trigger(
             .map(_.payload.provider)
             .distinct
             .asJava
-          for {
-            dsoRules <- store.getDsoRules()
-            amuletRules <- store.getAmuletRules()
-            cmd = dsoRules.exercise(
-              _.exerciseDsoRules_UnhideRewardCouponsV2(
-                amuletRules.contractId,
-                new AmuletRules_UnhideRewardCouponsV2(cids, beneficiaries),
-                controller,
+          // The provider becomes an observer, so its participant must vet a supported Amulet version.
+          // Providers without one are skipped and marked as unavailable.
+          completeWithVettedAmuletVersion(
+            Set(task.providerParty),
+            coupons.map(_.contractId.contractId),
+          )(
+            for {
+              dsoRules <- store.getDsoRules()
+              amuletRules <- store.getAmuletRules()
+              cmd = dsoRules.exercise(
+                _.exerciseDsoRules_UnhideRewardCouponsV2(
+                  amuletRules.contractId,
+                  new AmuletRules_UnhideRewardCouponsV2(cids, beneficiaries),
+                  controller,
+                )
               )
+              _ <- svTaskContext
+                .connection(SpliceLedgerConnectionPriority.Low)
+                .submit(
+                  Seq(store.key.svParty),
+                  Seq(store.key.dsoParty),
+                  cmd,
+                )
+                .noDedup
+                .withSynchronizerId(dsoRules.domain)
+                .yieldUnit()
+            } yield TaskSuccess(
+              s"unhid ${coupons.size} reward coupons for ${task.providerParty}"
             )
-            _ <- svTaskContext
-              .connection(SpliceLedgerConnectionPriority.Low)
-              .submit(
-                Seq(store.key.svParty),
-                Seq(store.key.dsoParty),
-                cmd,
-              )
-              .noDedup
-              .withSynchronizerId(dsoRules.domain)
-              .yieldUnit()
-          } yield TaskSuccess(
-            s"unhid ${coupons.size} reward coupons for ${task.providerParty}"
           )
         }
     } yield result

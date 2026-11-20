@@ -205,7 +205,14 @@ class DsoDelegateBasedAutomationService(
       )
     )
 
-    registerTrigger(new UnhideRewardCouponV2Trigger(config, triggerContext, svTaskContext))
+    registerTrigger(
+      new UnhideRewardCouponV2Trigger(
+        config,
+        triggerContext,
+        svTaskContext,
+        unavailablePartiesStore,
+      )
+    )
 
     registerTrigger(
       new BootstrapExternalPartyConfigStateInstructionTrigger(

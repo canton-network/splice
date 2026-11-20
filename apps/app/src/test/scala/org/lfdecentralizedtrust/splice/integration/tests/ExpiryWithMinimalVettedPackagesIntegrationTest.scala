@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   FeaturedAppActivityMarker,
+  RewardCouponV2,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferPreapproval
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsEntryContext}
@@ -399,6 +400,7 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
 /** Tests that expiry triggers ignore parties whose participant has no vetted amulet.
   * Amulets are covered as a representative of the triggers based on `BatchedMultiDomainExpiredContractTrigger`;
   * reward coupons are covered separately as `ExpireRewardCouponsTrigger` has its own batching logic.
+  * `UnhideRewardCouponV2Trigger` is covered as it is not an expiry trigger.
   */
 class ExpiryWithNoVettedAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
@@ -501,6 +503,45 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
           dsoParty,
           _.data.provider == aliceId,
         ) should have size 1L withClue "app reward coupon"
+      },
+    )
+  }
+
+  "Unhiding reward coupons ignores providers with no vetted amulet version" in { implicit env =>
+    val alice = setupAliceWithDustAmulets()
+    val aliceId = alice.toProtoPrimitive
+
+    advanceRoundsByOneTickViaAutomation()
+    val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+    val currentRound = openRounds.toList.headOption.value.payload.round
+
+    unvetAllAmuletVersionsOnAlice()
+    ignoredParties() should not contain alice
+
+    actAndCheck(timeUntilSuccess = 60.seconds)(
+      "Create a reward coupon for alice that is hidden from her",
+      // alice is no informee of the hidden coupon, so it can be created while she is unvetted
+      createAsDso()(
+        new RewardCouponV2(
+          dsoParty.toProtoPrimitive,
+          aliceId,
+          currentRound,
+          BigDecimal(10.0).bigDecimal,
+          env.environment.clock.now.toInstant.plus(Duration.ofHours(1)),
+          false,
+          java.util.Optional.empty(),
+        ).create
+      ),
+    )(
+      "UnhideRewardCouponV2Trigger ignores alice and her reward coupon stays hidden",
+      _ => {
+        val ignored = ignoredParties()
+        ignored should contain(alice)
+        ignored should not contain dsoParty
+        dsoAcs.filterJava(RewardCouponV2.COMPANION)(
+          dsoParty,
+          c => c.data.provider == aliceId && !c.data.providerIsObserver,
+        ) should have size 1L withClue "hidden reward coupon"
       },
     )
   }
