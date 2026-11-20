@@ -32,13 +32,11 @@ import org.lfdecentralizedtrust.splice.util.SpliceUtil.defaultAnsConfig
 import java.io.ByteArrayOutputStream
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import java.time.Duration
 import java.time.temporal.ChronoUnit
 import scala.jdk.CollectionConverters.*
 
 class ScanTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
-    with AmuletConfigUtil
     with WalletTestUtil
     with TimeTestUtil
     with HasExecutionContext
@@ -106,71 +104,6 @@ class ScanTimeBasedIntegrationTest
 
     advanceRoundsToNextRoundOpening
     roundNum() shouldBe firstRound + 2
-  }
-
-  "return correct amulet configs" in { implicit env =>
-    // Currently we are not guaranteed that the first three rounds are correctly
-    // captured in the tx log, so for now we first advance a round, and query only on that
-    // round and beyond. Once that is fixed, we should make sure that querying for round 0 is reliable as well.
-
-    advanceRoundsToNextRoundOpening
-
-    clue(s"Get config for round ${firstRound + 3}") {
-      val cfg = eventuallySucceeds() {
-        sv1ScanBackend.getAmuletConfigForRound(firstRound + 3)
-      }
-      cfg.amuletCreateFee.bigDecimal.setScale(10) should be(BigDecimal(0).bigDecimal.setScale(10))
-      cfg.holdingFee.bigDecimal.setScale(10) should be(
-        SpliceUtil.defaultHoldingFee.rate divide walletAmuletPrice setScale 10
-      )
-      cfg.lockHolderFee.bigDecimal.setScale(10) should be(BigDecimal(0).bigDecimal.setScale(10))
-      cfg.transferFee.initial.bigDecimal.setScale(10) should be(
-        SpliceUtil.zeroTransferFee.initialRate.setScale(10)
-      )
-      cfg.transferFee.steps shouldBe empty
-    }
-
-    clue(s"Try to get config for round ${firstRound + 4} which does not yet exist") {
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getAmuletConfigForRound(firstRound + 4),
-        _.errorMessage should include(s"Round ${firstRound + 4} not found"),
-      )
-    }
-
-    val newHoldingFee = BigDecimal(0.1)
-    clue("schedule a config change, and advance time for it to take effect") {
-      val amuletRules = sv1ScanBackend.getAmuletRules().contract
-      val configs = Seq(
-        (
-          Some(Duration.ofSeconds(10)),
-          mkUpdatedAmuletConfig(amuletRules, defaultTickDuration, holdingFee = newHoldingFee),
-          amuletRules.payload.configSchedule.initialValue,
-        )
-      )
-
-      setAmuletConfig(configs)
-      advanceTime(Duration.ofSeconds(20))
-      eventually() {
-        BigDecimal(
-          sv1ScanBackend
-            .getAmuletRules()
-            .payload
-            .configSchedule
-            .initialValue
-            .transferConfig
-            .holdingFee
-            .rate
-        ) should be(newHoldingFee)
-      }
-      advanceRoundsToNextRoundOpening
-    }
-    clue(s"Round ${firstRound + 4} should now be open, and have the new configuration") {
-      eventuallySucceeds() {
-        sv1ScanBackend.getAmuletConfigForRound(firstRound + 4).holdingFee should be(
-          walletUsdToAmulet(newHoldingFee)
-        )
-      }
-    }
   }
 
   "return AnsRules contract and config" in { implicit env =>

@@ -284,14 +284,6 @@ abstract class ScanAppReference(
       httpCommand(HttpScanAppClient.GetRewardCouponsV2Disclosures(contractIds))
     }
 
-  @Help.Summary("Get the Amulet config parameters for a given round")
-  def getAmuletConfigForRound(
-      round: Long
-  ): HttpScanAppClient.AmuletConfig =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetAmuletConfigForRound(round))
-    }
-
   @Help.Summary(
     "Get a member's (participant or mediator) traffic status as reported by the sequencer"
   )

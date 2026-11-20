@@ -14,9 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
   ARC_DsoRules,
 }
 import org.lfdecentralizedtrust.splice.scan.store.{
-  ClosedMiningRoundTxLogEntry,
   ErrorTxLogEntry,
-  OpenMiningRoundTxLogEntry,
   TxLogEntry,
   VoteRequestTxLogEntry,
 }
@@ -177,17 +175,6 @@ object ScanTables extends AcsTables {
           case err: ErrorTxLogEntry =>
             ScanTxLogRowData(
               entry = err
-            )
-          case omr: OpenMiningRoundTxLogEntry =>
-            ScanTxLogRowData(
-              entry = omr,
-              round = Some(omr.round),
-            )
-          case cmr: ClosedMiningRoundTxLogEntry =>
-            ScanTxLogRowData(
-              entry = cmr,
-              round = Some(cmr.round),
-              closedRoundEffectiveAt = cmr.effectiveAt.map(CantonTimestamp.assertFromInstant),
             )
           case vr: VoteRequestTxLogEntry =>
             val result = vr.result.getOrElse(throw txMissingField())

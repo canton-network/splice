@@ -10,10 +10,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   amulet as amuletCodegen,
   ans as ansCodegen,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
-  ClosedMiningRound,
-  OpenMiningRound,
-}
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ExerciseNode,
@@ -465,32 +461,6 @@ object AmuletExpireV2
       template = amuletCodegen.Amulet.COMPANION,
       choice = amuletCodegen.Amulet.CHOICE_Amulet_ExpireV2,
     )
-
-object OpenMiningRoundCreate {
-  type TCid = OpenMiningRound.ContractId
-  type T = OpenMiningRound
-  type ContractType = Contract[TCid, T]
-  val companion = OpenMiningRound.COMPANION
-
-  def unapply(
-      event: CreatedEvent
-  ): Option[ContractType] = {
-    Contract.fromCreatedEvent(companion)(event)
-  }
-}
-
-object ClosedMiningRoundCreate {
-  type TCid = ClosedMiningRound.ContractId
-  type T = ClosedMiningRound
-  type ContractType = Contract[TCid, T]
-  val companion = ClosedMiningRound.COMPANION
-
-  def unapply(
-      event: CreatedEvent
-  ): Option[ContractType] = {
-    Contract.fromCreatedEvent(companion)(event)
-  }
-}
 
 object AppRewardCreate {
   type TCid = amuletCodegen.AppRewardCoupon.ContractId
