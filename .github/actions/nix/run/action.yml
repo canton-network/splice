@@ -214,7 +214,13 @@ runs:
 
         echo "Running actual command"
         if [[ -n "${NIX_ENV_SOURCE:-}" ]]; then
-          bash -euo pipefail -c 'source "$NIX_ENV_SOURCE" && source "$ENVRC_SOURCE" && bash "$1"' bash "$CMD_FILE" &
+          # TODO: stop unsetting CI. The self-hosted-k8s-* runners never passed CI into the job container,
+          # so `nix develop --keep CI` kept nothing and everything that checks CI took its local path. This
+          # keeps that behavior until the code relying on it is fixed: e.g. TokenStandardCliTestDataTimeBasedIntegrationTest
+          # compares its test data only when CI is set, and token-standard/cli/__tests__/mocks/data/ is stale
+          # (splice-amulet 0.1.22). Other CI checks: project/Wartremover.scala, build-tools/npm-install.sh,
+          # build-tools/get-snapshot-version, build-tools/cncluster, build-tools/lib/pulumi-commands.
+          env -u CI bash -euo pipefail -c 'source "$NIX_ENV_SOURCE" && source "$ENVRC_SOURCE" && bash "$1"' bash "$CMD_FILE" &
         else
           # Run the command for real within the nix environment
           nix develop \
