@@ -109,11 +109,15 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            // `cncluster cluster_test` claims the most recent comment carrying this
+            // marker and reports the status of the run in it. Keep the marker in sync
+            // with `_deploy_cluster_workflow` in build-tools/cncluster.
+            const marker = '<!-- splice-cluster-test:unclaimed -->';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: "To run a cluster test on this PR, a maintainer can run the following from a scratchnet checkout (`cluster/deployment/<scratchnet>`):\n\n`cncluster deploy_basic ${{ github.event.issue.number }}`\n\nThis grabs the cluster lock if free (use `cncluster lock` to lock explicitly), triggers the deploy workflow, and posts the run link back on this PR. Nothing was triggered by this comment."
+              body: `${marker}\nTo run a cluster test on this PR, a maintainer can run the following from a scratchnet checkout (\`cluster/deployment/<scratchnet>\`):\n\n\`cncluster cluster_test ${context.issue.number}\`\n\nThis grabs the cluster lock if free (use \`cncluster lock\` to lock explicitly) and triggers the deploy workflow. This comment is then updated with the run link and, once the run has finished, with its result. Nothing was triggered by this comment yet.`
             });
 
   result_hdm:
