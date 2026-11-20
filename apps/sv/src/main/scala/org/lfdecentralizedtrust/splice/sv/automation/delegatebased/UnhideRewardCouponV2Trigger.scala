@@ -48,7 +48,7 @@ class UnhideRewardCouponV2Trigger(
         PageLimit.tryCreate(svConfig.delegatelessAutomationUnhideRewardCouponV2SampleSize)
       )
       // The provider becomes an observer, so its participant must vet a supported Amulet version.
-      supportedProviders <- partiesWithSupportedAmuletVersion(providers)
+      supportedProviders <- ignorePartiesWithoutSupportedAmuletVersion(providers)
     } yield supportedProviders.map(Task(_))
   }
 

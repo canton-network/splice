@@ -179,10 +179,11 @@ trait UnavailablePartiesGuard extends NamedLogging {
           ignorePartiesWithoutVettedAmulet(stakeholders, contractIds).map(TaskSuccess(_))
       }
 
-  /** The given parties that have vetted an Amulet version that is not ignored. The other parties are marked as
-    * unavailable, like the parties of a batch without vetted or with an ignored Amulet version.
+  /** Marks the given parties that have not vetted an Amulet version, or only an ignored one, as unavailable,
+    * like the parties of a batch without vetted or with an ignored Amulet version.
+    * Returns the remaining parties.
     */
-  protected def partiesWithSupportedAmuletVersion(parties: Seq[PartyId])(implicit
+  protected def ignorePartiesWithoutSupportedAmuletVersion(parties: Seq[PartyId])(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Seq[PartyId]] =
