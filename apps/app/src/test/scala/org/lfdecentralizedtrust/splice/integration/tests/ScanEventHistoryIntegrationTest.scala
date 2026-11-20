@@ -275,7 +275,7 @@ class ScanEventHistoryIntegrationTest
       val updateId = EventId.updateIdFromEventId(eventId)
 
       val roundO = sv1ScanBackend
-        .getEventById(updateId, Some(CompactJson))
+        .getEventById(updateId, Some(LedgerApiJson))
         .flatMap(_.verdict)
         .flatMap(_.roundNumber)
       roundO shouldBe defined withClue "verdict round_number not populated yet (advance more)"
