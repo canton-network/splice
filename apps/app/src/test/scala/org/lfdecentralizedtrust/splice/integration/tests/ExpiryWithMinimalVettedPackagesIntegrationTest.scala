@@ -267,9 +267,9 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
 
   override protected val enablePersistedUnavailableParties: Boolean = false
 
-  // Amulet version 0.1.19 is just below the minimumInitialization version.
+  // Alice's validator only vets the minimumInitialization version, which is thus her preferred version.
   override val ignoredAmuletVersions: Set[String] = Set(
-    DarResources.amulet_0_1_19.metadata.version.toString
+    DarResources.amulet.minimumInitialization.metadata.version.toString
   )
 
   private val entryName = "alice.unverified.ans"

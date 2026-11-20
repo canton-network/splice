@@ -102,23 +102,6 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  def supportsAmuletAllocationV2(
-      parties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      Seq(
-        PackageIdResolver.Package.SpliceAmulet -> parties
-      ),
-      now,
-      DarResources.amulet,
-      DarResources.amulet_0_1_21,
-      ignoreRedundantCheck = false,
-    )
-  }
-
   def supportsGovernanceLock(
       parties: Seq[PartyId],
       now: CantonTimestamp,

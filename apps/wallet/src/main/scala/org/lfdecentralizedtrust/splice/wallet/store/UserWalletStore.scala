@@ -822,17 +822,10 @@ object UserWalletStore {
         } { contract =>
           UserWalletAcsStoreRowData(contract)
         },
-        mkFilter(amuletallocationv2.AmuletAllocationV2.COMPANION)(
-          { co =>
-            co.payload.allocation.admin == dso &&
-            co.payload.allocation.authorizer.owner.toScala.contains(endUser)
-          },
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) =>
-              pkgVersionSupport
-                .supportsAmuletAllocationV2(Seq(key.endUserParty), now)(tc)
-          },
-        ) { contract =>
+        mkFilter(amuletallocationv2.AmuletAllocationV2.COMPANION) { co =>
+          co.payload.allocation.admin == dso &&
+          co.payload.allocation.authorizer.owner.toScala.contains(endUser)
+        } { contract =>
           UserWalletAcsStoreRowData(contract)
         },
         // Development fund coupons
