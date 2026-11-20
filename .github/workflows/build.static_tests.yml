@@ -152,15 +152,37 @@ jobs:
         with:
           cmd: ./scripts/check-npm-package-names.py
 
+      - name: Look up whether DarResources was already checked for these inputs
+        id: dar_resources_checked
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/dar-resources-checked
+          key: dar-resources-checked-1 ${{ hashFiles('daml/dars/**', 'daml/dars.lock', 'apps/dar-resources-generator/src/**', 'apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/DarResources.scala', 'build.sbt', 'project/*.scala', 'project/*.sbt', 'project/build.properties', '.scalafmt.conf', 'nix/canton-sources.json') }}
+          lookup-only: true
+
       - name: SBT-based static checks
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
-          cmd: "Test/compile lint updateTestConfigForParallelRuns updateDarResources"
+          cmd: "Test/compile lint updateTestConfigForParallelRuns${{ steps.dar_resources_checked.outputs.cache-hit != 'true' && ' updateDarResources' || '' }}"
 
       - name: Verify no changes in SBT test files
         uses: ./.github/actions/nix/run
         with:
           cmd: git add . && git diff --staged --exit-code test*.log '**/DarResources.scala'
+
+      - name: Mark DarResources as checked for these inputs
+        if: steps.dar_resources_checked.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p /tmp/dar-resources-checked
+          echo "${GITHUB_SHA}" > /tmp/dar-resources-checked/checked
+
+      - name: Save the DarResources check marker
+        if: steps.dar_resources_checked.outputs.cache-hit != 'true'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/dar-resources-checked
+          key: ${{ steps.dar_resources_checked.outputs.cache-primary-key }}
 
       # We explicitly do not call post-sbt job here. We don't want to save the
       # cache as it will be saved by the docs job that is much faster, and we
