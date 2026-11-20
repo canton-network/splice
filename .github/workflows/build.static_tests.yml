@@ -16,10 +16,12 @@ on:
 
 jobs:
   check_canton_consistency:
-    runs-on: ${{ inputs.self_hosted && 'self-hosted-k8s-x-small' || 'ubuntu-24.04' }}
+    runs-on: ${{ inputs.self_hosted && 'canton-network-splice' || 'ubuntu-24.04' }}
+    env:
+      # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
+      NIX_ENV_SOURCE: ${{ inputs.self_hosted && '/tmp/nix.source' || '' }}
+      ENVRC_SOURCE: ${{ inputs.self_hosted && '/tmp/envrc.source' || '' }}
     timeout-minutes: 15
-    container:
-      image: ${{ inputs.self_hosted && 'us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12' || '' }}
     steps:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -67,10 +69,12 @@ jobs:
             fi
             echo "Success: Docker digests match the version."
   static_tests:
-    runs-on: ${{ inputs.self_hosted && 'self-hosted-k8s-medium' || 'ubuntu-24.04' }}
+    runs-on: ${{ inputs.self_hosted && 'canton-network-splice' || 'ubuntu-24.04' }}
+    env:
+      # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
+      NIX_ENV_SOURCE: ${{ inputs.self_hosted && '/tmp/nix.source' || '' }}
+      ENVRC_SOURCE: ${{ inputs.self_hosted && '/tmp/envrc.source' || '' }}
     timeout-minutes: 35
-    container:
-      image: ${{ inputs.self_hosted && 'us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12' || '' }}
 
     steps:
 

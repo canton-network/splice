@@ -41,10 +41,12 @@ jobs:
   bundle_smoke_test:
     needs: check_release_pr
     if: needs.check_release_pr.outputs.is_release == 'true'
-    runs-on: self-hosted-k8s-large
+    runs-on: canton-network-splice
+    env:
+      # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
+      NIX_ENV_SOURCE: /tmp/nix.source
+      ENVRC_SOURCE: /tmp/envrc.source
     name: Build bundle and smoke-test startup
-    container:
-      image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
     steps:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

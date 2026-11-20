@@ -37,45 +37,50 @@ runs:
       shell: bash
       run: | # zizmor: ignore[template-injection]
         set -euo pipefail
-        target="$(cat /tmp/nix_target)"
-        nix_path="$(cat /tmp/nix_path)"
-        echo "sourcing nix profile"
-        export USER=$(whoami)
-        . ~/.nix-profile/etc/profile.d/nix.sh
+        if [[ -n "${NIX_ENV_SOURCE:-}" ]]; then
+          # Nix is preinstalled on the runner and the environment was exported by nix/setup_nix
+          echo "Using the nix environment from $NIX_ENV_SOURCE and $ENVRC_SOURCE"
+        else
+          target="$(cat /tmp/nix_target)"
+          nix_path="$(cat /tmp/nix_path)"
+          echo "sourcing nix profile"
+          export USER=$(whoami)
+          . ~/.nix-profile/etc/profile.d/nix.sh
 
 
-        echo "Running command with nix version $(nix --version) and nix target $target"
+          echo "Running command with nix version $(nix --version) and nix target $target"
 
-        # Attempt to build the nix env with retries to work around transient download failures
-        echo "building nix env"
-        MAX_RETRY_NIX_ENV=5
-        NIX_ENV_TRY_COUNT=0
-        until [ $NIX_ENV_TRY_COUNT -ge $MAX_RETRY_NIX_ENV ]
-        do
-          if [ $NIX_ENV_TRY_COUNT -gt 0 ]; then
-            SLEEP_DURATION=$((NIX_ENV_TRY_COUNT*2))
-            echo "Failed to build and enter the nix environment, retrying in $SLEEP_DURATION seconds..."
-            sleep $SLEEP_DURATION
+          # Attempt to build the nix env with retries to work around transient download failures
+          echo "building nix env"
+          MAX_RETRY_NIX_ENV=5
+          NIX_ENV_TRY_COUNT=0
+          until [ $NIX_ENV_TRY_COUNT -ge $MAX_RETRY_NIX_ENV ]
+          do
+            if [ $NIX_ENV_TRY_COUNT -gt 0 ]; then
+              SLEEP_DURATION=$((NIX_ENV_TRY_COUNT*2))
+              echo "Failed to build and enter the nix environment, retrying in $SLEEP_DURATION seconds..."
+              sleep $SLEEP_DURATION
+            fi
+            nix develop \
+              path:$nix_path#$target \
+              --verbose \
+              --ignore-environment \
+              --keep USER \
+              --keep HOME \
+              --keep TERM \
+              --keep CI \
+              --keep RUN_SPLITTED_TESTS_CMD \
+              --keep COURSIER_CACHE \
+              --keep SBT_OPTS \
+              --command echo "Confirmed that we can build and enter the nix environment!" \
+              && break
+            NIX_ENV_TRY_COUNT=$((NIX_ENV_TRY_COUNT+1))
+          done
+
+          if [ $NIX_ENV_TRY_COUNT -ge $MAX_RETRY_NIX_ENV ]; then
+            echo "Failed to build and enter the nix environment after $MAX_RETRY_NIX_ENV attempts"
+            exit 1
           fi
-          nix develop \
-            path:$nix_path#$target \
-            --verbose \
-            --ignore-environment \
-            --keep USER \
-            --keep HOME \
-            --keep TERM \
-            --keep CI \
-            --keep RUN_SPLITTED_TESTS_CMD \
-            --keep COURSIER_CACHE \
-            --keep SBT_OPTS \
-            --command echo "Confirmed that we can build and enter the nix environment!" \
-            && break
-          NIX_ENV_TRY_COUNT=$((NIX_ENV_TRY_COUNT+1))
-        done
-
-        if [ $NIX_ENV_TRY_COUNT -ge $MAX_RETRY_NIX_ENV ]; then
-          echo "Failed to build and enter the nix environment after $MAX_RETRY_NIX_ENV attempts"
-          exit 1
         fi
 
         # kill all processes in the process group (this includes children of children) upon being interrupted
@@ -208,31 +213,35 @@ runs:
         ADDITIONAL_NIX_ARGS="${{ inputs.additional_nix_args }}"
 
         echo "Running actual command"
-        # Run the command for real within the nix environment
-        nix develop \
-          path:$nix_path#$target \
-          --verbose \
-          --ignore-environment \
-          --keep USER \
-          --keep HOME \
-          --keep TERM \
-          --keep CI \
-          --keep COURSIER_CACHE \
-          --keep SBT_OPTS \
-          --keep RUN_SPLITTED_TESTS_CMD \
-          --keep GCP_DA_CN_DEVNET_KEY \
-          --keep GCP_DA_CN_CI_KEY \
-          --keep GCP_DA_CN_CI_2_KEY \
-          --keep GCP_DA_CN_SCRATCHNET_KEY \
-          --keep GCP_DA_CN_SCRATCHNET2_KEY \
-          --keep GCP_DA_CN_MAINNET_KEY \
-          --keep GCP_DA_CN_SPLICE_KEY \
-          --keep GCP_CLUSTER_HOSTNAME \
-          --keep CIRCLE_BRANCH \
-          --keep TARGET_CLUSTER \
-          --keep DA_REPO_ROOT \
-          $ADDITIONAL_NIX_ARGS \
-          --command bash $CMD_FILE &
+        if [[ -n "${NIX_ENV_SOURCE:-}" ]]; then
+          bash -euo pipefail -c 'source "$NIX_ENV_SOURCE" && source "$ENVRC_SOURCE" && bash "$1"' bash "$CMD_FILE" &
+        else
+          # Run the command for real within the nix environment
+          nix develop \
+            path:$nix_path#$target \
+            --verbose \
+            --ignore-environment \
+            --keep USER \
+            --keep HOME \
+            --keep TERM \
+            --keep CI \
+            --keep COURSIER_CACHE \
+            --keep SBT_OPTS \
+            --keep RUN_SPLITTED_TESTS_CMD \
+            --keep GCP_DA_CN_DEVNET_KEY \
+            --keep GCP_DA_CN_CI_KEY \
+            --keep GCP_DA_CN_CI_2_KEY \
+            --keep GCP_DA_CN_SCRATCHNET_KEY \
+            --keep GCP_DA_CN_SCRATCHNET2_KEY \
+            --keep GCP_DA_CN_MAINNET_KEY \
+            --keep GCP_DA_CN_SPLICE_KEY \
+            --keep GCP_CLUSTER_HOSTNAME \
+            --keep CIRCLE_BRANCH \
+            --keep TARGET_CLUSTER \
+            --keep DA_REPO_ROOT \
+            $ADDITIONAL_NIX_ARGS \
+            --command bash $CMD_FILE &
+        fi
         PID=$!
 
         wait $PID
