@@ -435,7 +435,7 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
     requireMatchExpected ("allocation.admin", allocation.admin) admin
     -- validate finalized allocation and record extra legs
     validateNextIterationArgs "finalizedAllocation" (isSome allocation.nextIterationFunding)
-      finalizedAlloc.extraTransferLegSides allocation.nextIterationFunding
+      finalizedAlloc.extraTransferLegSides finalizedAlloc.nextIterationFunding
     let adjustedAllocView = allocationView with
           allocation = allocation with
             transferLegSides = allocation.transferLegSides ++ finalizedAlloc.extraTransferLegSides
