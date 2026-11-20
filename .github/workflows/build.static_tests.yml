@@ -16,11 +16,7 @@ on:
 
 jobs:
   check_canton_consistency:
-    runs-on: ${{ inputs.self_hosted && 'canton-network-splice' || 'ubuntu-24.04' }}
-    env:
-      # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
-      NIX_ENV_SOURCE: ${{ inputs.self_hosted && '/tmp/nix.source' || '' }}
-      ENVRC_SOURCE: ${{ inputs.self_hosted && '/tmp/envrc.source' || '' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out repository code
@@ -28,46 +24,37 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ inputs.commit_sha }}
-          submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Nix
-        uses: ./.github/actions/tests/common_test_setup
-        with:
-          cache_version: 10
-          test_name: canton_consistency
-          target: 'static_tests'
-
       - name: Run consistency check
-        uses: ./.github/actions/nix/run
-        with:
-          additional_nix_args: "--keep PATH"
-          cmd: |
-            CURRENT_VERSION=$(jq -r '.version' nix/canton-sources.json)
-            echo "Validating Docker digests for Canton version: $CURRENT_VERSION"
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT_VERSION=$(jq -r '.version' nix/canton-sources.json)
+          echo "Validating Docker digests for Canton version: $CURRENT_VERSION"
 
-            function set_value() {
-              local key="$1"
-              local value="$2"
-              jq --arg key "$key" --arg value "$value" '.[ $key ] = $value' nix/canton-sources.json > nix/canton-sources.tmp.json
-              mv nix/canton-sources.tmp.json nix/canton-sources.json
-            }
+          function set_value() {
+            local key="$1"
+            local value="$2"
+            jq --arg key "$key" --arg value "$value" '.[ $key ] = $value' nix/canton-sources.json > nix/canton-sources.tmp.json
+            mv nix/canton-sources.tmp.json nix/canton-sources.json
+          }
 
-            for img in base participant mediator sequencer; do
-              echo "Fetching image sha256 for canton-$img..."
-              sha=$(skopeo inspect --no-creds --override-os linux --override-arch amd64 "docker://europe-docker.pkg.dev/da-images/public-all/docker/canton-$img:${CURRENT_VERSION}" --format '{{.Digest}}')
-              set_value "canton_${img}_image_sha256" "$sha"
-            done
+          for img in base participant mediator sequencer; do
+            echo "Fetching image sha256 for canton-$img..."
+            sha=$(skopeo inspect --no-creds --override-os linux --override-arch amd64 "docker://europe-docker.pkg.dev/da-images/public-all/docker/canton-$img:${CURRENT_VERSION}" --format '{{.Digest}}')
+            set_value "canton_${img}_image_sha256" "$sha"
+          done
 
-            git add nix/canton-sources.json
-            if ! git diff --staged --exit-code nix/canton-sources.json; then
-              echo "-------------------------------------------------------"
-              echo "FAIL: Canton Docker digests are out of sync with version $CURRENT_VERSION!"
-              echo "Please run './build-tools/bump-canton.sh $CURRENT_VERSION' locally to fix this."
-              echo "-------------------------------------------------------"
-              exit 1
-            fi
-            echo "Success: Docker digests match the version."
+          git add nix/canton-sources.json
+          if ! git diff --staged --exit-code nix/canton-sources.json; then
+            echo "-------------------------------------------------------"
+            echo "FAIL: Canton Docker digests are out of sync with version $CURRENT_VERSION!"
+            echo "Please run './build-tools/bump-canton.sh $CURRENT_VERSION' locally to fix this."
+            echo "-------------------------------------------------------"
+            exit 1
+          fi
+          echo "Success: Docker digests match the version."
   static_tests:
     runs-on: ${{ inputs.self_hosted && 'canton-network-splice' || 'ubuntu-24.04' }}
     env:
