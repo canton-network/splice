@@ -106,7 +106,7 @@ jobs:
   scala_test_sim_time:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-sim-time.log'
       start_canton_options: -s
       parallelism: 6
@@ -119,7 +119,7 @@ jobs:
   scala_test_resource_intensive:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-resource-intensive.log'
       start_canton_options: -w
       parallelism: 1
@@ -133,7 +133,7 @@ jobs:
     uses: ./.github/workflows/build.scala_test.yml
     with:
       # x-large because of SvReonboardingIntegrationTest, which starts additional Canton instances
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-key-download.log'
       start_canton_options: -wk
       parallelism: 1
@@ -147,7 +147,7 @@ jobs:
   scala_test_record_time_tolerance:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-medium
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-dynamic-synchronizer-params-reconciliation.log'
       start_canton_options: -s
       parallelism: 1
@@ -160,7 +160,7 @@ jobs:
   scala_test_logical_sync_upgrade:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-lsu.log'
       # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
       start_canton_options: -wk
@@ -174,7 +174,7 @@ jobs:
   scala_test_roll_forward_lsu:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-roll-forward-lsu.log'
       # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
       start_canton_options: -wk
@@ -188,7 +188,7 @@ jobs:
   scala_test_signatures:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-medium
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-signatures.log'
       start_canton_options: -w -B "scripts/bootstrap/bootstrap-canton-with-unsigned-keys.sc"
       parallelism: 1
@@ -202,7 +202,7 @@ jobs:
   scala_test_wall_clock_time:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names.log'
       start_canton_options: -w
       parallelism: 10
@@ -216,7 +216,7 @@ jobs:
   scala_test_frontend_wall_clock_time:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-frontend.log'
       start_canton_options: -w
       parallelism: 3
@@ -230,7 +230,7 @@ jobs:
   scala_test_frontend_simtime:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-frontend-sim-time.log'
       start_canton_options: -s
       parallelism: 1
@@ -244,7 +244,7 @@ jobs:
   scala_test_docker_compose:
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
-      runs_on: self-hosted-docker-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-docker-based.log'
       start_canton_options: -w
       parallelism: 2
@@ -257,7 +257,7 @@ jobs:
   scala_test_with_docker_no_canton:
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
-      runs_on: self-hosted-docker-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-docker-no-canton.log'
       parallelism: 1
       test_name: docker-no-canton
@@ -271,7 +271,7 @@ jobs:
   scala_test_with_docker_and_canton_simtime:
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
-      runs_on: self-hosted-docker-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-sim-time-docker.log'
       start_canton_options: -s
       with_canton: true
@@ -287,7 +287,7 @@ jobs:
   scala_test_app_upgrade:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-app-upgrade.log'
       start_canton_options: -w
       parallelism: 1
@@ -333,7 +333,7 @@ jobs:
   scala_test_without_canton:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-medium
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-non-integration.log'
       with_canton: false
       parallelism: 2

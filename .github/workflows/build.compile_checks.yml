@@ -8,9 +8,11 @@ on:
 
 jobs:
   compile_checks:
-    runs-on: self-hosted-k8s-medium
-    container:
-      image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
+    runs-on: canton-network-splice
+    env:
+      # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
+      NIX_ENV_SOURCE: /tmp/nix.source
+      ENVRC_SOURCE: /tmp/envrc.source
 
     steps:
 

@@ -17,9 +17,11 @@ jobs:
   ingestion_performance_tests:
     # note that we're loading the entirety of mainnet updates (and in the future, the ACS) so as to make sure that that's not the bottleneck.
     # as of 03.03.2026 that seems to be enough, but we might have to increase it as the activity in mainnet does too.
-    runs-on: self-hosted-k8s-medium
-    container:
-      image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
+    runs-on: canton-network-splice
+    env:
+      # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
+      NIX_ENV_SOURCE: /tmp/nix.source
+      ENVRC_SOURCE: /tmp/envrc.source
     name: Ingestion Performance Tests
     if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     steps:
@@ -125,9 +127,11 @@ jobs:
 
   read_performance_tests:
     needs: ingestion_performance_tests
-    runs-on: self-hosted-k8s-medium
-    container:
-      image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
+    runs-on: canton-network-splice
+    env:
+      # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
+      NIX_ENV_SOURCE: /tmp/nix.source
+      ENVRC_SOURCE: /tmp/envrc.source
     name: Read Performance Tests
     if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     steps:
