@@ -33,7 +33,12 @@ import org.lfdecentralizedtrust.splice.store.{
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
-import org.lfdecentralizedtrust.splice.util.{EventId, UpdateHistoryTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{
+  EventId,
+  TriggerTestUtil,
+  UpdateHistoryTestUtil,
+  WalletTestUtil,
+}
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 
@@ -55,7 +60,8 @@ class ScanHistoryBackfillingIntegrationTest
     with UpdateHistoryTestUtil
     with WalletTestUtil
     with HasActorSystem
-    with HasExecutionContext {
+    with HasExecutionContext
+    with TriggerTestUtil {
 
   override protected def runEventHistorySanityCheck: Boolean = false
 
@@ -180,10 +186,8 @@ class ScanHistoryBackfillingIntegrationTest
     actAndCheck(
       "Advance one round, to commit transactions related to the round infrastructure", {
         val previousRound = currentRoundInScan(sv1ScanBackend)
-        // Note: runOnce() does nothing if there is no work to be done.
-        eventually() {
-          advanceRoundsTrigger.runOnce().futureValue should be(true)
-        }
+        // Note: running the trigger does nothing if there is no work to be done.
+        runUntilTaskSucceeds(advanceRoundsTrigger)
         previousRound
       },
     )(
@@ -352,18 +356,18 @@ class ScanHistoryBackfillingIntegrationTest
       sv2ScanTxLogBackfillTrigger.retrieveTasks().futureValue should be(empty)
     }
 
-    actAndCheck(
-      "Run trigger that checks for corrupt snapshots once on all scans", {
-        sv1DeleteSnapshotsTrigger.runOnce().futureValue
-        sv2DeleteSnapshotsTrigger.runOnce().futureValue
-      },
-    )(
-      "History marked as free of corrupt snapshots",
-      _ => {
+    clue(
+      "Run the trigger that deletes corrupt snapshots until the history is marked as free of them"
+    ) {
+      // Without corrupt snapshots, the trigger marks the history when retrieving its tasks and
+      // returns no task, so there is no task outcome to wait for.
+      runTasksUntil(sv1DeleteSnapshotsTrigger) {
         sv1ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
+      }
+      runTasksUntil(sv2DeleteSnapshotsTrigger) {
         sv2ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
-      },
-    )
+      }
+    }
 
     clue(
       "Backfilling triggers state. SV1+SV2: update is about to initialize, txlog is not doing anything yet"
@@ -382,8 +386,8 @@ class ScanHistoryBackfillingIntegrationTest
 
     actAndCheck(
       "Run backfilling once on all scans", {
-        sv1BackfillTrigger.runOnce().futureValue
-        sv2BackfillTrigger.runOnce().futureValue
+        runUntilTaskSucceeds(sv1BackfillTrigger)
+        runUntilTaskSucceeds(sv2BackfillTrigger)
       },
     )(
       "Backfilling is complete only on the founding SV",
@@ -560,8 +564,8 @@ class ScanHistoryBackfillingIntegrationTest
 
     actAndCheck(
       "Run txlog backfilling once on all scans", {
-        sv1ScanTxLogBackfillTrigger.runOnce().futureValue
-        sv2ScanTxLogBackfillTrigger.runOnce().futureValue
+        runUntilTaskSucceeds(sv1ScanTxLogBackfillTrigger)
+        runUntilTaskSucceeds(sv2ScanTxLogBackfillTrigger)
       },
     )(
       "TxLog backfilling is in progress",
