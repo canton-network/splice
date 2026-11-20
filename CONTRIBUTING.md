@@ -80,10 +80,12 @@ scripts/python-checks.py check
 scripts/python-checks.py test
 ```
 
-`check` runs mypy and `test` runs unit tests over tracked Python files; stage new
-files first. Pass a caller-relative file or directory to limit a run, for example
-`scripts/python-checks.py check scripts/scan-party-monitor`. Configure coverage
-exclusions, extra import directories, and rule exceptions in `scripts/python-checks.json`.
+`check` runs mypy over tracked `.py` files and extensionless scripts starting with
+`#!/usr/bin/env python` or `#!/usr/bin/env python3`; `test` runs `test_*.py` unit
+tests. Stage new files first. Pass a caller-relative file or directory to limit a
+run, for example `scripts/python-checks.py check scripts/scan-party-monitor`.
+Configure coverage exclusions, extra import directories, and rule exceptions in
+`scripts/python-checks.json`.
 
 ## Git Hygiene
 

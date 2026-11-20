@@ -116,16 +116,32 @@ def python_files(root: Path, config: Config, target: Path | None) -> list[str]:
         raise ValueError(f"{target} is outside the repository")
     with Repo(root) as repo:
         output: str = repo.git.ls_files(
-            "-z", "--", ":(top,glob)**/*.py",
+            "-z", "--stage", "--",
             *(f":(top,exclude){pattern}" for pattern in config.exclusions),
         )
-    files = sorted({
-        name for name in output.split("\0")
-        if name and (root / name).is_relative_to(selected)
-    })
+    files: set[str] = set()
+    for entry in output.split("\0"):
+        if not entry:
+            continue
+        metadata, name = entry.split("\t", 1)
+        path = root / name
+        if not path.is_relative_to(selected):
+            continue
+        if name.endswith(".py"):
+            files.add(name)
+        elif (
+            not path.suffix
+            and metadata.startswith(("100644 ", "100755 "))
+            and not path.is_symlink()
+        ):
+            with path.open("rb") as source:
+                if source.readline(128).rstrip(b"\r\n") in (
+                    b"#!/usr/bin/env python", b"#!/usr/bin/env python3",
+                ):
+                    files.add(name)
     if not files:
         raise ValueError(f"no covered Python files found under {selected}")
-    return files
+    return sorted(files)
 
 
 def grouped(files: Sequence[str]) -> dict[str, list[str]]:
@@ -145,22 +161,28 @@ def check(root: Path, config: Config, files: Sequence[str]) -> int:
         env["MYPYPATH"] = os.pathsep.join(
             [directory, *config.extra_mypypath.get(directory, ())]
         )
-        # Never load repository mypy configs: their plugins can execute target code.
-        command = [
-            "mypy", "--config-file=", "--python-version", "3.14", "--strict",
-            "--explicit-package-bases",
-            *(arg for rule, args in RULES.items() if rule not in config.disabled_rules for arg in args),
-            "--",
-            *targets,
+        modules = [target for target in targets if target.endswith(".py")]
+        # Extensionless scripts share the __main__ module name; check them separately.
+        batches = ([modules] if modules else []) + [
+            [target] for target in targets if not target.endswith(".py")
         ]
-        if subprocess.run(command, cwd=root, env=env).returncode != 0:
-            failed = True
+        for batch in batches:
+            # Never load repository mypy configs: their plugins can execute target code.
+            command = [
+                "mypy", "--config-file=", "--python-version", "3.14", "--strict",
+                "--explicit-package-bases",
+                *(arg for rule, args in RULES.items() if rule not in config.disabled_rules for arg in args),
+                "--",
+                *batch,
+            ]
+            if subprocess.run(command, cwd=root, env=env).returncode != 0:
+                failed = True
     return int(failed)
 
 
 def test(root: Path, files: Sequence[str]) -> int:
     """Run selected test modules in isolated processes and return a nonzero status if any test fails."""
-    tests = [file for file in files if Path(file).name.startswith("test_")]
+    tests = [file for file in files if Path(file).match("test_*.py")]
     if not tests:
         raise ValueError("no tests found in the selected covered files")
     failed = False

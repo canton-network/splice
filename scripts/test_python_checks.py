@@ -61,6 +61,31 @@ class PythonChecksTest(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 checks.python_files(self.root, self.config, target)
 
+    def test_selection_recognizes_only_tracked_extensionless_python_shebangs(self) -> None:
+        self.write(".py", "")
+        self.write("regular.py", "")
+        self.write("scripts/python", "#!/usr/bin/env python\n")
+        self.write("scripts/python3", "#!/usr/bin/env python3\n")
+        self.write("scripts/shell", "#!/usr/bin/env bash\n")
+        self.write("scripts/plain", "print('not a shebang')\n")
+        self.write("scripts/later", "\n#!/usr/bin/env python3\n")
+        self.write("scripts/other-version", "#!/usr/bin/env python3.14\n")
+        self.write("scripts/other.txt", "#!/usr/bin/env python3\n")
+        self.write("scripts/untracked", "#!/usr/bin/env python3\n", tracked=False)
+        self.write("excluded/ignored", "#!/usr/bin/env python3\n")
+        self.write("scripts/binary", "").write_bytes(b"\xff" * 256)
+        (self.root / "scripts/symlink").symlink_to(self.root / "missing")
+        self.repo.index.add(["scripts/symlink"])
+        config = checks.Config(("excluded/**",), {}, {})
+        self.assertEqual(
+            checks.python_files(self.root, config, None),
+            [".py", "regular.py", "scripts/python", "scripts/python3"],
+        )
+        self.assertEqual(
+            checks.python_files(self.root, config, self.root / "scripts/python3"),
+            ["scripts/python3"],
+        )
+
     def test_root_relative_exclusions_include_nested_files(self) -> None:
         self.write("keep.py", "")
         self.write("vendor/nested/skip.py", "")
@@ -127,11 +152,24 @@ class PythonChecksTest(unittest.TestCase):
                 self.root, config, checks.python_files(self.root, config, None),
             ), 0)
 
+    def test_check_accepts_multiple_extensionless_scripts_without_running_them(self) -> None:
+        self.write("bin/first_command",
+                   "#!/usr/bin/env python3\nfrom first_command import answer\n"
+                   "value: int = answer()\nraise RuntimeError('must not run')\n")
+        self.write("bin/second-command", "#!/usr/bin/env python\nvalue: str = 'second'\n")
+        self.write("bin/first_command.py", "def answer() -> int:\n    return 1\n")
+        with redirect_stdout(StringIO()):
+            self.assertEqual(checks.check(
+                self.root, self.config,
+                ["bin/first_command", "bin/second-command", "bin/first_command.py"],
+            ), 0)
+
     def test_test_only_runs_selected_tracked_test_modules(self) -> None:
         self.write("-tests/test_ok.py",
                    "import unittest\nclass Test(unittest.TestCase):\n    def test_ok(self) -> None:\n        pass\n")
         self.write("-tests/test_untracked.py", "raise RuntimeError('untracked')", tracked=False)
         self.write("-tests/test_excluded.py", "raise RuntimeError('excluded')")
+        self.write("-tests/test_command", "#!/usr/bin/env python3\nraise RuntimeError('not a module')\n")
         config = checks.Config(("-tests/test_excluded.py",), {}, {})
         with redirect_stdout(StringIO()):
             self.assertEqual(checks.test(
@@ -139,6 +177,8 @@ class PythonChecksTest(unittest.TestCase):
             ), 0)
         with self.assertRaisesRegex(ValueError, "no tests"):
             checks.test(self.root, ["source.py"])
+        with self.assertRaisesRegex(ValueError, "no tests"):
+            checks.test(self.root, ["-tests/test_command"])
 
     def test_test_aggregates_failures(self) -> None:
         with patch.object(checks.subprocess, "run", side_effect=[
