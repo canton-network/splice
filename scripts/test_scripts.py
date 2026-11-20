@@ -3,6 +3,7 @@
 
 # TODO(#8086): add real unit tests for scripts/*.py; this is only a smoke test
 
+from typing import override
 import importlib.util
 import unittest
 from datetime import timedelta
@@ -38,6 +39,7 @@ class CheckAcsSnapshotsTest(unittest.TestCase):
 
 
 class BumpWalletGatewayVersionTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.module = load_script("bump-wallet-gateway-version.py")
 

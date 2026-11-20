@@ -72,7 +72,8 @@ def graphql(query: str, variables: dict[str, Any]) -> Any:
         if res.returncode == 0 or "HTTP 5" not in res.stderr:
             break
         time.sleep(5 * (attempt + 1))
-    if res.returncode != 0:
+    # range(4) always assigns res; mypy does not infer nonempty ranges.
+    if res.returncode != 0:  # type: ignore[possibly-undefined]
         raise SystemExit(f"gh api graphql failed ({res.returncode}):\n{res.stderr.strip()}\n{res.stdout.strip()}")
     return json.loads(res.stdout)["data"]
 
