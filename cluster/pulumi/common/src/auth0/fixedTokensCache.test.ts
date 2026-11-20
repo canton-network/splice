@@ -339,3 +339,7 @@ test('persisting the fixed tokens cache with a persisted previous version', asyn
 function encodeSecretData(data: Record<string, unknown>): Record<string, string> {
   return _.mapValues(data, encodeSecretValue);
 }
+
+test('the fixed tokens cache secret does not reuse the name read by releases without format versioning', () => {
+  expect(getCacheSecretName()).not.toMatch(/^auth0-fixed-token-cache-/);
+});

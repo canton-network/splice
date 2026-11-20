@@ -210,8 +210,9 @@ export function encodeSecretValue(value: unknown): string {
 
 // Each Pulumi stack gets its own cache secret to avoid concurrent write races
 // when multiple stacks (e.g., validator1, splitwell) run in parallel.
+// Not the legacy name: releases up to 0.10.2 cannot parse the versioned format.
 export function getCacheSecretName(): string {
-  return `auth0-fixed-token-cache-${pulumi.getProject()}-${pulumi.getStack()}`;
+  return `auth0-versioned-fixed-token-cache-${pulumi.getProject()}-${pulumi.getStack()}`;
 }
 
 async function fatalError(message: string): Promise<never> {
