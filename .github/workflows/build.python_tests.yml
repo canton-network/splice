@@ -50,7 +50,7 @@ jobs:
         if: steps.skip.outputs.skip != 'true'
         uses: ./.github/actions/nix/run
         with:
-          cmd: ./scripts/python_checks.py test
+          cmd: ./scripts/python-checks.py test
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')

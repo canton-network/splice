@@ -105,7 +105,7 @@ jobs:
       - name: Type check Python
         uses: ./.github/actions/nix/run
         with:
-          cmd: ./scripts/python_checks.py check
+          cmd: ./scripts/python-checks.py check
 
       - name: Run Daml warts check
         uses: ./.github/actions/nix/run

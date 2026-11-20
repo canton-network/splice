@@ -14,7 +14,9 @@ from typing import override
 
 from git import Repo
 
-import python_checks as checks
+from test_scripts import load_script
+
+checks = load_script("python-checks.py")
 
 
 class PythonChecksTest(unittest.TestCase):
@@ -96,7 +98,7 @@ class PythonChecksTest(unittest.TestCase):
 
     def test_check_isolates_directories_and_aggregates_failures(self) -> None:
         config = checks.Config((), {"first": ("lib",)}, {"warn-unreachable": "Example exception"})
-        with patch("python_checks.subprocess.run", side_effect=[
+        with patch.object(checks.subprocess, "run", side_effect=[
             subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0),
         ]) as run, redirect_stdout(StringIO()):
             self.assertEqual(checks.check(
@@ -139,7 +141,7 @@ class PythonChecksTest(unittest.TestCase):
             checks.test(self.root, ["source.py"])
 
     def test_test_aggregates_failures(self) -> None:
-        with patch("python_checks.subprocess.run", side_effect=[
+        with patch.object(checks.subprocess, "run", side_effect=[
             subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0),
         ]) as run, redirect_stdout(StringIO()):
             self.assertEqual(checks.test(self.root, ["a/test_one.py", "b/test_two.py"]), 1)
@@ -152,7 +154,7 @@ class PythonChecksTest(unittest.TestCase):
         os.chdir(self.root / "nested")
         try:
             for root_args in ([], ["--root", str(self.root)]):
-                with patch("python_checks.check", return_value=0) as check:
+                with patch.object(checks, "check", return_value=0) as check:
                     self.assertEqual(checks.main([*root_args, "check", "."]), 0)
                 self.assertEqual(check.call_args.args[2], ["nested/target.py"])
         finally:
