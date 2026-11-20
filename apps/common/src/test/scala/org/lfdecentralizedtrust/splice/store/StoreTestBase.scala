@@ -211,33 +211,6 @@ abstract class StoreTestBase
     )
   }
 
-  protected def transferCommand(
-      sender: PartyId,
-      receiver: PartyId,
-      delegate: PartyId,
-      amount: BigDecimal,
-      expiresAt: Instant,
-      nonce: Long,
-  ) = {
-    val templateId = externalpartyamuletrulesCodegen.TransferCommand.TEMPLATE_ID_WITH_PACKAGE_ID
-
-    val template = new externalpartyamuletrulesCodegen.TransferCommand(
-      dsoParty.toProtoPrimitive,
-      sender.toProtoPrimitive,
-      receiver.toProtoPrimitive,
-      delegate.toProtoPrimitive,
-      amount.bigDecimal,
-      expiresAt,
-      nonce,
-      Optional.of("transfer-command-description"),
-    )
-    contract(
-      identifier = templateId,
-      contractId = new externalpartyamuletrulesCodegen.TransferCommand.ContractId(nextCid()),
-      payload = template,
-    )
-  }
-
   protected def ansRules() = {
     val templateId = ansCodegen.AnsRules.TEMPLATE_ID_WITH_PACKAGE_ID
 

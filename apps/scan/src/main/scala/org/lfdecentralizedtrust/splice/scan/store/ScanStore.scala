@@ -16,7 +16,6 @@ import com.digitalasset.daml.lf.data.Time.Timestamp
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProvider}
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
@@ -228,23 +227,6 @@ trait ScanStore
     splice.governancelock.GovernanceLock.ContractId,
     splice.governancelock.GovernanceLock,
   ]]]
-
-  def lookupTransferCommandCounterByParty(
-      partyId: PartyId
-  )(implicit tc: TraceContext): Future[
-    Option[ContractWithState[
-      splice.externalpartyamuletrules.TransferCommandCounter.ContractId,
-      splice.externalpartyamuletrules.TransferCommandCounter,
-    ]]
-  ]
-
-  def lookupLatestTransferCommandEvents(
-      sender: PartyId,
-      nonce: Long,
-      limit: Int,
-  )(implicit
-      tc: TraceContext
-  ): Future[Map[TransferCommand.ContractId, TransferCommandTxLogEntry]]
 
   def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
       companion: C,
