@@ -81,7 +81,9 @@ There are two types of cluster tests that can be requested on a PR:
 - A Hard Migration test, which tests the full hard migration workflow on a scratch cluster.
 
 To request a cluster test to be run on your PR, comment `/cluster_test` on the PR. The job will paste a comment with instructions for
-maintainers.
+maintainers, who run `cncluster cluster_test <pr>` from a scratchnet checkout. That comment is then updated in place with the link to
+the run and, once the run has finished, with its result. `cncluster upgrade_test <pr>` and `cncluster lsu_test <pr>` trigger the
+upgrade and LSU tests on a scratchnet in the same way, reporting in a new comment.
 To request an `/upgrade_test`, `/hdm_test` or `/lsu_test`,
 comment on your PR. After commenting, the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
 contact an existing maintainer to approve it.
