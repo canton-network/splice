@@ -81,6 +81,14 @@ class BumpWalletGatewayVersionTest(unittest.TestCase):
         env = "WALLET_GATEWAY_VERSION=1.13.0\nPORTFOLIO_VERSION=1.14.0\n"
         self.assertEqual(self.module.read_compose_version(env, "PORTFOLIO_VERSION"), "1.14.0")
 
+    def test_find_duplicate_matches_open_pr_for_same_versions(self) -> None:
+        older = {"number": 1, "title": self.module.pr_title("1.13.0", "1.15.0"), "headRefName": "b1", "url": "u1"}
+        same = {"number": 2, "title": self.module.pr_title("1.14.0", "1.16.0"), "headRefName": "b2", "url": "u2"}
+        title = self.module.pr_title("1.14.0", "1.16.0")
+        self.assertEqual(self.module.find_duplicate([older, same], title), same)
+        self.assertIsNone(self.module.find_duplicate([older], title))
+        self.assertIsNone(self.module.find_duplicate([], title))
+
 
 if __name__ == "__main__":
     unittest.main()
