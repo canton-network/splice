@@ -152,7 +152,7 @@ class SvFrontendIntegrationTest
           },
         )
 
-        val licenseRows = getLicensesTableRows
+        val licenseRows = eventually()(getLicensesTableRows)
         val newValidatorParty = allocateRandomSvParty("splice-client", Some(2))
 
         actAndCheck(
