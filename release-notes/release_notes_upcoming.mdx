@@ -99,9 +99,12 @@
 
       - Security hardening: add extra assertions to the `WalletAppInstall` choices.
 
-      - The minimum supported Daml package versions are raised to the ones introduced in Splice 0.6.11, which
-        are the first to implement the token standard V2 and thus emit V2 transaction-history events for
-        all Canton Coin transactions:
+      - All Canton Coin transactions now emit token standard V2 transaction-history events, i.e.,
+        `EventLog_HoldingsChange` events reported by the DSO party. Clients can rely on these events
+        to parse the history of all Canton Coin holdings.
+
+      - To guarantee this, the minimum supported Daml package versions are raised to the ones introduced
+        in Splice 0.6.11, which are the first to implement the token standard V2:
 
           | name | version |
           | :--- | :--- |
