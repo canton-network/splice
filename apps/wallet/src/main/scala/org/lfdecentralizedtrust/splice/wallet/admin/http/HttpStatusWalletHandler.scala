@@ -3,11 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.wallet.admin.http
 
-import org.lfdecentralizedtrust.splice.environment.PackageVersionSupport
 import org.lfdecentralizedtrust.splice.http.v0.status.wallet.WalletResource as r0
 import org.lfdecentralizedtrust.splice.http.v0.{status, definitions as d0}
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.auth.AuthenticationOnlyAuthExtractor.AuthenticatedRequest
@@ -20,7 +18,6 @@ import scala.concurrent.{ExecutionContext, Future}
 class HttpStatusWalletHandler(
     override protected val walletManager: UserWalletManager,
     protected val loggerFactory: NamedLoggerFactory,
-    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     tracer: Tracer,
@@ -61,18 +58,13 @@ class HttpStatusWalletHandler(
   ): Future[r0.FeatureSupportResponse] = {
     implicit val AuthenticatedRequest(_, traceContext) = tuser
     withSpan(s"$workflowId.featureSupport") { _ => _ =>
-      val parties = Seq(store.walletKey.dsoParty)
-      val now = CantonTimestamp.now()
-      for {
-        tokenStandard <- packageVersionSupport.supportsTokenStandard(parties, now)
-        preapprovalDescription <- packageVersionSupport.supportsDescriptionInTransferPreapprovals(
-          parties,
-          now,
-        )
-      } yield r0.FeatureSupportResponse.OK(
-        d0.WalletFeatureSupportResponse(
-          tokenStandard = tokenStandard.supported,
-          transferPreapprovalDescription = preapprovalDescription.supported,
+      // Both features are supported by the minimum supported Daml versions.
+      Future.successful(
+        r0.FeatureSupportResponse.OK(
+          d0.WalletFeatureSupportResponse(
+            tokenStandard = true,
+            transferPreapprovalDescription = true,
+          )
         )
       )
     }

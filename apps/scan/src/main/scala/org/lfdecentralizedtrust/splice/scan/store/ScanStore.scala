@@ -358,12 +358,7 @@ object ScanStore {
                 Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
             )
         },
-        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
-          },
-        ) { contract =>
+        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanAcsStoreRowData(contract)
         },
         mkFilter(splice.amulet.Amulet.COMPANION)(co => co.payload.dso == dso) { contract =>
@@ -542,13 +537,8 @@ object ScanStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
         ),
-        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) =>
-              pkgVersionSupport
-                .supports24hSubmissionDelay(Seq(key.dsoParty), Seq(key.dsoParty), now)(tc)
-          },
+        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
+          co.payload.dso == dso
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract
