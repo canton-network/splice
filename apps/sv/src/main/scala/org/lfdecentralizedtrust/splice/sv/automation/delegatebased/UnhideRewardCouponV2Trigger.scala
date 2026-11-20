@@ -43,11 +43,13 @@ class UnhideRewardCouponV2Trigger(
   override protected def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[Task]] = {
-    store
-      .listNonObserverRewardCouponsV2ProvidersSample(
+    for {
+      providers <- store.listNonObserverRewardCouponsV2ProvidersSample(
         PageLimit.tryCreate(svConfig.delegatelessAutomationUnhideRewardCouponV2SampleSize)
       )
-      .map(_.map(Task(_)))
+      // The provider becomes an observer, so its participant must vet a supported Amulet version.
+      supportedProviders <- partiesWithSupportedAmuletVersion(providers)
+    } yield supportedProviders.map(Task(_))
   }
 
   override protected def isStaleTask(task: Task)(implicit
@@ -80,35 +82,28 @@ class UnhideRewardCouponV2Trigger(
             .map(_.payload.provider)
             .distinct
             .asJava
-          // The provider becomes an observer, so its participant must vet a supported Amulet version.
-          // Providers without one are skipped and marked as unavailable.
-          completeWithVettedAmuletVersion(
-            Set(task.providerParty),
-            coupons.map(_.contractId.contractId),
-          )(
-            for {
-              dsoRules <- store.getDsoRules()
-              amuletRules <- store.getAmuletRules()
-              cmd = dsoRules.exercise(
-                _.exerciseDsoRules_UnhideRewardCouponsV2(
-                  amuletRules.contractId,
-                  new AmuletRules_UnhideRewardCouponsV2(cids, beneficiaries),
-                  controller,
-                )
+          for {
+            dsoRules <- store.getDsoRules()
+            amuletRules <- store.getAmuletRules()
+            cmd = dsoRules.exercise(
+              _.exerciseDsoRules_UnhideRewardCouponsV2(
+                amuletRules.contractId,
+                new AmuletRules_UnhideRewardCouponsV2(cids, beneficiaries),
+                controller,
               )
-              _ <- svTaskContext
-                .connection(SpliceLedgerConnectionPriority.Low)
-                .submit(
-                  Seq(store.key.svParty),
-                  Seq(store.key.dsoParty),
-                  cmd,
-                )
-                .noDedup
-                .withSynchronizerId(dsoRules.domain)
-                .yieldUnit()
-            } yield TaskSuccess(
-              s"unhid ${coupons.size} reward coupons for ${task.providerParty}"
             )
+            _ <- svTaskContext
+              .connection(SpliceLedgerConnectionPriority.Low)
+              .submit(
+                Seq(store.key.svParty),
+                Seq(store.key.dsoParty),
+                cmd,
+              )
+              .noDedup
+              .withSynchronizerId(dsoRules.domain)
+              .yieldUnit()
+          } yield TaskSuccess(
+            s"unhid ${coupons.size} reward coupons for ${task.providerParty}"
           )
         }
     } yield result

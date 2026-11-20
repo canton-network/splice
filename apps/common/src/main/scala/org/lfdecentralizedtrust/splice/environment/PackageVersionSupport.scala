@@ -88,7 +88,7 @@ trait PackageVersionSupport extends NamedLogging {
   /** The ids of the packages the ledger prefers for the given package requirements, i.e., for each package
     * the newest version vetted by all of its parties.
     */
-  def preferredPackageIds(
+  def getPreferredPackageIds(
       packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
       at: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Seq[String]]
@@ -140,7 +140,7 @@ class TopologyAwarePackageVersionSupport private[environment] (
 )(implicit ec: ExecutionContext)
     extends PackageVersionSupport {
 
-  override def preferredPackageIds(
+  override def getPreferredPackageIds(
       packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
       at: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Seq[String]] =

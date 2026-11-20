@@ -13,7 +13,7 @@ import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
 import ExpireRewardCouponV2Trigger.{Coupon, CouponCid, Task, getStakeholders}
-import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
+import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -55,46 +55,36 @@ class ExpireRewardCouponV2Trigger(
       tc: TraceContext
   ): Future[TaskOutcome] = {
     val expiredCoupons = task.work.expiredContracts
-    // The batch is already split by the amulet version so we skip the whole batch.
-    // RewardCouponV2 was introduced in amulet 0.1.19.
-    if (task.work.vettedVersion < DarResources.amulet_0_1_19.metadata.version) {
-      Future.successful(
-        TaskSuccess(
-          s"Skipped batch of ${expiredCoupons.size} reward coupons at amulet version ${task.work.vettedVersion}: "
+    val cids = expiredCoupons.map(_.contractId).asJava
+    val expiryInformees = (task.work.stakeholders - store.key.dsoParty)
+      .map(_.toProtoPrimitive)
+      .toSeq
+      .distinct
+      .sorted
+    for {
+      dsoRules <- store.getDsoRules()
+      amuletRules <- store.getAmuletRules()
+      cmd = dsoRules.exercise(
+        _.exerciseDsoRules_ClaimExpiredRewardsV2(
+          amuletRules.contractId,
+          new AmuletRules_ClaimExpiredRewardsV2(
+            cids,
+            expiryInformees.asJava,
+          ),
+          controller,
         )
       )
-    } else {
-      val cids = expiredCoupons.map(_.contractId).asJava
-      val expiryInformees = (task.work.stakeholders - store.key.dsoParty)
-        .map(_.toProtoPrimitive)
-        .toSeq
-        .distinct
-        .sorted
-      for {
-        dsoRules <- store.getDsoRules()
-        amuletRules <- store.getAmuletRules()
-        cmd = dsoRules.exercise(
-          _.exerciseDsoRules_ClaimExpiredRewardsV2(
-            amuletRules.contractId,
-            new AmuletRules_ClaimExpiredRewardsV2(
-              cids,
-              expiryInformees.asJava,
-            ),
-            controller,
-          )
+      _ <- svTaskContext
+        .connection(SpliceLedgerConnectionPriority.Low)
+        .submit(
+          Seq(store.key.svParty),
+          Seq(store.key.dsoParty),
+          cmd,
         )
-        _ <- svTaskContext
-          .connection(SpliceLedgerConnectionPriority.Low)
-          .submit(
-            Seq(store.key.svParty),
-            Seq(store.key.dsoParty),
-            cmd,
-          )
-          .noDedup
-          .withSynchronizerId(dsoRules.domain)
-          .yieldUnit()
-      } yield TaskSuccess(s"archived ${expiredCoupons.size} expired reward coupons v2")
-    }
+        .noDedup
+        .withSynchronizerId(dsoRules.domain)
+        .yieldUnit()
+    } yield TaskSuccess(s"archived ${expiredCoupons.size} expired reward coupons v2")
   }
 
 }

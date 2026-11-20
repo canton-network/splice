@@ -179,6 +179,34 @@ trait UnavailablePartiesGuard extends NamedLogging {
           ignorePartiesWithoutVettedAmulet(stakeholders, contractIds).map(TaskSuccess(_))
       }
 
+  /** The given parties that have vetted an Amulet version that is not ignored. The other parties are marked as
+    * unavailable, like the parties of a batch without vetted or with an ignored Amulet version.
+    */
+  protected def partiesWithSupportedAmuletVersion(parties: Seq[PartyId])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Seq[PartyId]] =
+    for {
+      versions <- Future.traverse(parties)(party =>
+        svTaskContext.vettingLookupService
+          .lookupVettingState(party, PackageIdResolver.Package.SpliceAmulet)
+          .map(party -> _)
+      )
+      (supported, unsupported) = versions.partition {
+        case (_, Some(version)) => !amuletVersionIgnored(version.toString)
+        case (_, None) => false
+      }
+      ignored <-
+        if (unsupported.isEmpty) Future.successful(Set.empty[PartyId])
+        else unavailablePartiesStore.addParties(unsupported.map(_._1))
+    } yield {
+      if (ignored.nonEmpty)
+        logger.info(
+          s"Ignoring ${ignored.size} parties without a supported vetted Amulet version: $ignored"
+        )
+      supported.map(_._1)
+    }
+
   protected def ignorePartiesWithoutVettedAmulet(
       informees: Set[PartyId],
       contractIds: Seq[String],

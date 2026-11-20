@@ -67,7 +67,7 @@ class ExpiredAmuletTrigger(
       // Pin the dso-governance and amulet versions vetted by the DSO and all stakeholders, as TAPS alone fails to
       // find them when a stakeholder vets older versions than the DSO (https://github.com/DACH-NY/canton/issues/31450).
       // Revisit once that is fixed. See AmuletExpiryWithMinimalVettedPackagesIntegrationTest.
-      preferredPackageIds <- svTaskContext.packageVersionSupport.preferredPackageIds(
+      preferredPackageIds <- svTaskContext.packageVersionSupport.getPreferredPackageIds(
         Seq(
           PackageIdResolver.Package.SpliceDsoGovernance -> Seq(store.key.dsoParty),
           PackageIdResolver.Package.SpliceAmulet -> stakeholders.toSeq,
