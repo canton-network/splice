@@ -12,6 +12,7 @@ import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.util.HexString
 import com.google.protobuf.ByteString
 import io.circe.Json
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.ledger.api as ledgerApi
 import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullLong, OmitNullString}
@@ -38,6 +39,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   EventId,
   LegacyOffset,
+  SwitchOverTimes,
   Trees,
   ValueJsonCodecTranscode,
 }
@@ -566,8 +568,10 @@ object ScanHttpEncodings {
   def encodeVerdict(
       verdict: VerdictT,
       views: Seq[TransactionViewT],
-      includeRound: Boolean,
+      dsoRulesO: Option[DsoRules],
   ): definitions.EventHistoryVerdict = {
+    val includeRound =
+      dsoRulesO.exists(SwitchOverTimes.serveVerdictRoundNumber(verdict.recordTime, _))
     val verdictResultEnum: definitions.VerdictResult = verdict.verdictResult match {
       case VerdictResultDbValue.Accepted =>
         definitions.VerdictResult.VerdictResultAccepted

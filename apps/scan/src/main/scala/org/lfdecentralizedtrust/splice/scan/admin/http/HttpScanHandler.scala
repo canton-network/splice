@@ -151,7 +151,6 @@ import org.lfdecentralizedtrust.splice.util.{
   DsoInfo,
   PackageQualifiedName,
   QualifiedName,
-  SwitchOverTimes,
 }
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
@@ -896,9 +895,7 @@ class HttpScanHandler(
       )
     )
     val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-      val includeRound =
-        dsoRulesO.exists(SwitchOverTimes.serveVerdictRoundNumber(v.recordTime, _))
-      ScanHttpEncodings.encodeVerdict(v, views, includeRound)
+      ScanHttpEncodings.encodeVerdict(v, views, dsoRulesO)
     }
     val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
       v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
