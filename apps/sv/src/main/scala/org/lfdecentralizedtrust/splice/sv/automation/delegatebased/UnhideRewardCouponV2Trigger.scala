@@ -3,10 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
-import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
@@ -17,8 +17,9 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_UnhideRewardCouponsV2
+import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.{PageLimit, UnavailablePartiesStore}
+import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -27,40 +28,48 @@ import scala.jdk.CollectionConverters.*
 import UnhideRewardCouponV2Trigger.*
 
 class UnhideRewardCouponV2Trigger(
-    override protected val svConfig: SvAppBackendConfig,
+    svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
     tracer: Tracer,
 ) extends PollingParallelTaskExecutionTrigger[Task]
-    with SvTaskBasedTrigger[Task]
-    with UnavailablePartiesGuard {
+    with SvTaskBasedTrigger[Task] {
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[Task]] = {
     for {
-      providers <- store.listNonObserverRewardCouponsV2ProvidersSample(
+      providerParties <- store.listNonObserverRewardCouponsV2ProvidersSample(
         PageLimit.tryCreate(svConfig.delegatelessAutomationUnhideRewardCouponV2SampleSize)
       )
-      // The provider becomes an observer, so its participant must vet a supported Amulet version.
-      supportedProviders <- ignorePartiesWithoutSupportedAmuletVersion(providers)
+      supportedProviders <- MonadUtil.sequentialTraverseFilter(providerParties)(provider =>
+        hasSupportedAmuletVersion(provider).map(Option.when(_)(provider))
+      )
     } yield supportedProviders.map(Task(_))
   }
+
+  // The provider becomes an observer, so its participant must vet a supported Amulet version.
+  private def hasSupportedAmuletVersion(provider: PartyId)(implicit
+      tc: TraceContext
+  ): Future[Boolean] =
+    svTaskContext.vettingLookupService
+      .lookupVettingState(provider, PackageIdResolver.Package.SpliceAmulet)
+      .map(_.exists(version => !svConfig.allIgnoredAmuletVersions.contains(version.toString)))
 
   override protected def isStaleTask(task: Task)(implicit
       tc: TraceContext
   ): Future[Boolean] = {
-    store
-      .listNonObserverRewardCouponsV2ForProvider(
+    for {
+      coupons <- store.listNonObserverRewardCouponsV2ForProvider(
         task.providerParty,
         PageLimit.tryCreate(1),
       )
-      .map(_.isEmpty)
+      supported <- hasSupportedAmuletVersion(task.providerParty)
+    } yield coupons.isEmpty || !supported
   }
 
   override def completeTaskAsDsoDelegate(

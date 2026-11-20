@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
@@ -400,7 +401,7 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
 /** Tests that expiry triggers ignore parties whose participant has no vetted amulet.
   * Amulets are covered as a representative of the triggers based on `BatchedMultiDomainExpiredContractTrigger`;
   * reward coupons are covered separately as `ExpireRewardCouponsTrigger` has its own batching logic.
-  * `UnhideRewardCouponV2Trigger` is covered as it is not an expiry trigger.
+  * `UnhideRewardCouponV2Trigger` is covered as well: it skips such providers without marking them as unavailable.
   */
 class ExpiryWithNoVettedAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
@@ -507,7 +508,7 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
     )
   }
 
-  "Unhiding reward coupons ignores providers with no vetted amulet version" in { implicit env =>
+  "Unhiding reward coupons skips providers with no vetted amulet version" in { implicit env =>
     val alice = setupAliceWithDustAmulets()
     val aliceId = alice.toProtoPrimitive
 
@@ -516,9 +517,8 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
     val currentRound = openRounds.toList.headOption.value.payload.round
 
     unvetAllAmuletVersionsOnAlice()
-    ignoredParties() should not contain alice
 
-    actAndCheck(timeUntilSuccess = 60.seconds)(
+    actAndCheck(
       "Create a reward coupon for alice that is hidden from her",
       // alice is no informee of the hidden coupon, so it can be created while she is unvetted
       createAsDso()(
@@ -533,16 +533,23 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
         ).create
       ),
     )(
-      "UnhideRewardCouponV2Trigger ignores alice and her reward coupon stays hidden",
-      _ => {
-        val ignored = ignoredParties()
-        ignored should contain(alice)
-        ignored should not contain dsoParty
-        dsoAcs.filterJava(RewardCouponV2.COMPANION)(
-          dsoParty,
-          c => c.data.provider == aliceId && !c.data.providerIsObserver,
-        ) should have size 1L withClue "hidden reward coupon"
-      },
+      "sv1's store lists alice as a provider of hidden coupons",
+      _ =>
+        sv1Backend.appState.dsoStore
+          .listNonObserverRewardCouponsV2ProvidersSample(PageLimit.tryCreate(10))
+          .futureValue should contain(alice),
     )
+
+    clue("UnhideRewardCouponV2Trigger has no task for alice and her reward coupon stays hidden") {
+      sv1Backend.dsoDelegateBasedAutomation
+        .trigger[UnhideRewardCouponV2Trigger]
+        .runOnce()
+        .futureValue shouldBe false
+      dsoAcs.filterJava(RewardCouponV2.COMPANION)(
+        dsoParty,
+        c => c.data.provider == aliceId && !c.data.providerIsObserver,
+      ) should have size 1L withClue "hidden reward coupon"
+      ignoredParties() should not contain alice
+    }
   }
 }
