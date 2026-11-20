@@ -79,7 +79,7 @@
         "participantAddress": "participant",
         "participantClient": {
           "adminApi": {
-            "disableAuth": false
+            "disableAuth": true
           }
         },
         "participantIdentitiesDumpPeriodicBackup": {

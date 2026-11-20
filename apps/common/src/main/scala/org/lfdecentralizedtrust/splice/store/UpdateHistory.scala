@@ -1260,44 +1260,6 @@ class UpdateHistory private (
     }
   }
 
-  def lookupContractById[TCId <: ContractId[?], T <: DamlRecord[?]](
-      companion: Contract.Companion.Template[TCId, T]
-  )(contractId: TCId)(implicit tc: TraceContext): Future[Option[Contract[TCId, T]]] = {
-    for {
-      // Annoyingly our index for contract id lookups does not include the history id.
-      // In production, we only ever have one history id per database but at least in tests
-      // postgres sometimes picks an index to filter by history_id and does a linear search over contract_id.
-      // The materialized CTE forces it to pick the contract_id index.
-      r <- storage
-        .querySingle(
-          sql"""
-            with unfiltered_contracts as materialized (select
-              update_row_id,
-              event_id,
-              contract_id,
-              created_at,
-              template_id_package_id,
-              template_id_module_name,
-              template_id_entity_name,
-              package_name,
-              create_arguments,
-              signatories,
-              observers,
-              contract_key,
-              history_id,
-              record_time
-            from update_history_creates
-            where contract_id = $contractId)
-            select * from unfiltered_contracts where history_id = $historyId""".toActionBuilder
-            .as[SelectFromCreateEvents]
-            .headOption,
-          "lookupContractById",
-        )
-        .value
-        .map(_.map(_.toContract(companion)))
-    } yield r
-  }
-
   private def queryExerciseEvents(
       transactionRowIds: Seq[Long]
   )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromExerciseEvents]]] = {

@@ -38,11 +38,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
   GovernanceLock,
   GovernanceLockKey,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommand,
-  TransferCommandCounter,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
@@ -51,7 +47,6 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   OpenMiningRoundTxLogEntry,
   ScanStore,
   ScanTxLogParser,
-  TransferCommandTxLogEntry,
   TxLogEntry,
   VoteRequestTxLogEntry,
 }
@@ -484,29 +479,6 @@ class DbScanStore private (
       )
     }
 
-  override def lookupTransferCommandCounterByParty(
-      partyId: PartyId
-  )(implicit tc: TraceContext): Future[
-    Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]]
-  ] = waitUntilAcsIngested {
-    (for {
-      row <- storage
-        .querySingle(
-          selectFromAcsTableWithState(
-            ScanTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            TransferCommandCounter.COMPANION,
-            additionalWhere = sql"""
-                and wallet_party = $partyId
-            """,
-            orderLimit = sql"limit 1",
-          ).headOption,
-          "lookupTransferCommandCounterReceiver",
-        )
-    } yield contractWithStateFromRow(TransferCommandCounter.COMPANION)(row)).value
-  }
-
   override def lookupFeaturedAppRight(
       providerPartyId: PartyId
   )(implicit
@@ -837,38 +809,6 @@ class DbScanStore private (
         .value
     } yield result.map(contractFromRow(VoteRequest.COMPANION)(_))
   }
-
-  override def lookupLatestTransferCommandEvents(sender: PartyId, nonce: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Map[TransferCommand.ContractId, TransferCommandTxLogEntry]] =
-    waitUntilAcsIngested {
-      for {
-        // This query is linear in the number of events that match (sender, nonce).
-        // Given that for each TransferCommand that's at most 2 and we expect few nonce conflicts
-        // this is acceptable.
-        result <- storage
-          .query(
-            sql"""
-              with ranked_rows as (
-                select #${TxLogQueries.SelectFromTxLogTableResult
-                .sqlColumnsCommaSeparated()}, rank() over (partition by transfer_command_contract_id order by entry_number desc) from #${ScanTables.txLogTableName}
-                where store_id = $txLogStoreId
-                  and entry_type = ${TxLogEntry.EntryType.TransferCommandTxLogEntry}
-                  and transfer_command_sender = ${sender}
-                  and transfer_command_nonce = $nonce
-              )
-              select #${TxLogQueries.SelectFromTxLogTableResult.sqlColumnsCommaSeparated()}
-              from ranked_rows
-              where rank = 1
-              limit $limit
-            """.toActionBuilder.as[TxLogQueries.SelectFromTxLogTableResult],
-            "getLatestTransferCommandEventByContractId",
-          )
-      } yield result
-        .map(txLogEntryFromRow[TransferCommandTxLogEntry](txLogConfig))
-        .map(entry => new TransferCommand.ContractId(entry.contractId) -> entry)
-        .toMap
-    }
 
   // TODO (#934): this method probably belongs in UpdateHistory instead
   override def lookupContractByRecordTime[C, TCId <: ContractId[?], T](

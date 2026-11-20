@@ -37,10 +37,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCo
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommand,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   ClosedMiningRound,
   IssuingMiningRound,
@@ -109,7 +106,6 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   AppActivityStore,
   ScanEventStore,
   ScanStore,
-  TxLogEntry,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.{
@@ -1255,82 +1251,6 @@ class HttpScanHandler(
               definitions.ErrorResponse(s"No TransferPreapproval found for party: $party")
             )
         }
-    }
-  }
-
-  override def lookupTransferCommandCounterByParty(
-      respond: ScanResource.LookupTransferCommandCounterByPartyResponse.type
-  )(
-      party: String
-  )(extracted: TraceContext): Future[ScanResource.LookupTransferCommandCounterByPartyResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.lookupTransferCommandCounterByParty") { _ => _ =>
-      val partyId = PartyId.tryFromProtoPrimitive(party)
-      store
-        .lookupTransferCommandCounterByParty(
-          partyId
-        )
-        .map {
-          case Some(c) =>
-            v0.ScanResource.LookupTransferCommandCounterByPartyResponse.OK(
-              definitions.LookupTransferCommandCounterByPartyResponse(
-                c.toHttp
-              )
-            )
-          case None =>
-            v0.ScanResource.LookupTransferCommandCounterByPartyResponse.NotFound(
-              definitions.ErrorResponse(
-                s"No TransferCommandCounter found for party: $party, use 0 for the nonce"
-              )
-            )
-        }
-    }
-  }
-
-  override def lookupTransferCommandStatus(
-      respond: ScanResource.LookupTransferCommandStatusResponse.type
-  )(
-      sender: String,
-      nonce: Long,
-  )(extracted: TraceContext): Future[ScanResource.LookupTransferCommandStatusResponse] = {
-    implicit val tc = extracted
-    val senderParty = PartyId.tryFromProtoPrimitive(sender)
-    withSpan(s"$workflowId.lookupTransferCommandStatus") { _ => _ =>
-      for {
-        txLogEntryMap <- store.lookupLatestTransferCommandEvents(
-          senderParty,
-          nonce,
-          HttpScanHandler.MAX_TRANSFER_COMMAND_CONTRACTS,
-        )
-        filteredMap <- MonadUtil
-          .sequentialTraverse(txLogEntryMap.view.toList) { case (cid, entry) =>
-            // The update history ingests independently so this lookup can return None temporarily.
-            // We just filter out those contracts.
-            updateHistory
-              .lookupContractById(TransferCommand.COMPANION)(cid)
-              .map(
-                _.map(c =>
-                  cid.contractId -> definitions.TransferCommandContractWithStatus(
-                    c.toHttp,
-                    TxLogEntry.Http.toResponse(entry.status),
-                  )
-                )
-              )
-          }
-          .map(_.flatten.toMap)
-      } yield {
-        if (filteredMap.isEmpty) {
-          v0.ScanResource.LookupTransferCommandStatusResponseNotFound(
-            definitions.ErrorResponse(
-              s"Couldn't find transfer command for sender $senderParty with nonce $nonce created in the last 24h"
-            )
-          )
-        } else {
-          v0.ScanResource.LookupTransferCommandStatusResponseOK(
-            definitions.LookupTransferCommandStatusResponse(filteredMap)
-          )
-        }
-      }
     }
   }
 
@@ -3089,10 +3009,6 @@ object HttpScanHandler {
       case definitions.BulkObjectKind.members.Updates => BulkObjectKind.Updates
       case definitions.BulkObjectKind.members.Snapshots => BulkObjectKind.Snapshots
     }
-
-  // We expect a handful at most but want to somewhat guard against attacks
-  // so we just hardcode a limit of 100.
-  private val MAX_TRANSFER_COMMAND_CONTRACTS: Int = 100
 
   // for DsoSequencers that use the serial instead of the migration we set -1 as the migration id
   // we can't simply make it non required as it's part of the public API and it would break clients

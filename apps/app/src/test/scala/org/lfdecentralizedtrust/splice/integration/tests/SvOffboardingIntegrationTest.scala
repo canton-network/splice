@@ -240,18 +240,18 @@ class SvOffboardingIntegrationTest
       )
 
       // Check that the ExecuteConfirmedActionTrigger ignores the confirmation from SV4 now that it is no longer a member.
-      sv1ScanBackend.lookupTransferCommandCounterByParty(
-        sv1Backend.getDsoInfo().svParty
-      ) shouldBe None
+      sv1Backend.appState.dsoStore
+        .lookupTransferCommandCounterBySender(sv1Backend.getDsoInfo().svParty)
+        .futureValue shouldBe None
       actAndCheck(timeUntilSuccess = 60.seconds)(
         "Resume ExecuteConfirmedActionTrigger",
         resumeAllDsoDelegateTriggers[ExecuteConfirmedActionTrigger],
       )(
         "TransferCommandCounter gets created",
         (_: Unit) =>
-          sv1ScanBackend.lookupTransferCommandCounterByParty(
-            sv1Backend.getDsoInfo().svParty
-          ) shouldBe a[Some[?]],
+          sv1Backend.appState.dsoStore
+            .lookupTransferCommandCounterBySender(sv1Backend.getDsoInfo().svParty)
+            .futureValue shouldBe a[Some[?]],
       )
 
       actAndCheck(
