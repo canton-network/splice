@@ -1,5 +1,9 @@
 name: "Setup Nix"
-description: "Setup Nix"
+description: |
+  Setup Nix.
+  On runners with Nix preinstalled (canton-network-splice), the job sets NIX_ENV_SOURCE and ENVRC_SOURCE.
+  In that case the nix environment is exported to $NIX_ENV_SOURCE and the .envrc.vars sourcing to $ENVRC_SOURCE,
+  and Nix is neither installed nor cached. nix/run then sources both files instead of calling `nix develop`.
 inputs:
   nix_path:
     description: "The path to nix flake directory"
@@ -71,8 +75,27 @@ runs:
         echo "$TARGET" > /tmp/nix_target # Create a file to indicate which target are we using (so we don't need to re-specifify target to run)
         echo "$NIX_PATH" > /tmp/nix_path # Create a file to indicate where the nix config is (so we don't need to re-specifify nix_path to run)
 
+    - name: Setup Nix (preinstalled)
+      if: ${{ env.NIX_ENV_SOURCE != '' }}
+      shell: bash
+      env:
+        NIX_PATH: ${{ inputs.nix_path }}
+        TARGET: ${{ inputs.target }}
+      run: |
+        set -exuo pipefail
+        if [[ -z "${ENVRC_SOURCE:-}" ]]; then
+          echo "ENVRC_SOURCE must be set together with NIX_ENV_SOURCE"
+          exit 1
+        fi
+        if [[ "$GITHUB_REPOSITORY" == "DACH-NY/canton-network-internal" ]]; then
+          echo 'pwd=${PWD}; cd $GITHUB_WORKSPACE/splice && source .envrc.vars && cd $GITHUB_WORKSPACE && source .envrc.vars && cd $pwd && echo "Sourced environment files"' > "$ENVRC_SOURCE"
+        else
+          echo 'pwd=${PWD}; cd $GITHUB_WORKSPACE && source .envrc.vars && cd $pwd && echo "Sourced environment files"' > "$ENVRC_SOURCE"
+        fi
+        nix --extra-experimental-features "nix-command flakes" print-dev-env "path:${NIX_PATH}#${TARGET}" --profile ./splice-profile > "$NIX_ENV_SOURCE"
+
     - name: Download cache (for non-self-hosted)
-      if: ${{ !startsWith(runner.name, 'self-hosted') }}
+      if: ${{ env.NIX_ENV_SOURCE == '' && (!startsWith(runner.name, 'self-hosted')) }}
       shell: bash
       run: |
         set -euxo pipefail
@@ -94,6 +117,7 @@ runs:
         fi
 
     - name: Restore nix
+      if: ${{ env.NIX_ENV_SOURCE == '' }}
       id: restore_nix
       shell: bash
       run: |
@@ -114,6 +138,7 @@ runs:
           sudo chown $(whoami):$(whoami) "/cache/nix"
         fi
     - name: Setup Nix
+      if: ${{ env.NIX_ENV_SOURCE == '' }}
       shell: bash
       env:
         NIX_PATH: ${{ inputs.nix_path }}
@@ -159,7 +184,7 @@ runs:
     # The nix cache does not change in the workflow, so we can save it immediately, rather than splitting it into pre-&post- steps
     - name: Save nix cache
       shell: bash
-      if: ${{ inputs.should_save == 'true' }}
+      if: ${{ env.NIX_ENV_SOURCE == '' && (inputs.should_save == 'true') }}
       run: |
         set -euxo pipefail
         echo ~
@@ -197,7 +222,7 @@ runs:
 
     - name: Check if cache already exists in GCP
       id: already_exists
-      if: ${{ inputs.should_save_gcp == 'true' }}
+      if: ${{ env.NIX_ENV_SOURCE == '' && (inputs.should_save_gcp == 'true') }}
       shell: bash
       run: |
         if curl -Isf https://storage.googleapis.com/splice-nix-cache-public/${cache_key}.tar.gz &> /dev/null; then
@@ -206,7 +231,7 @@ runs:
         fi
     - name: Authenticate to GCP
       id: auth
-      if: ${{ inputs.should_save_gcp == 'true' && steps.already_exists.outputs.already_exists != 'true' }}
+      if: ${{ env.NIX_ENV_SOURCE == '' && (inputs.should_save_gcp == 'true' && steps.already_exists.outputs.already_exists != 'true') }}
       uses: "google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193" #v2.1.10
       with:
         workload_identity_provider: "${{ inputs.upload_workload_identity_provider }}"
@@ -214,7 +239,7 @@ runs:
 
     - name: tar-gz the cache
       shell: bash
-      if: ${{ inputs.should_save_gcp == 'true' && steps.already_exists.outputs.already_exists != 'true' }}
+      if: ${{ env.NIX_ENV_SOURCE == '' && (inputs.should_save_gcp == 'true' && steps.already_exists.outputs.already_exists != 'true') }}
       id: prep_cache_upload
       run: |
         set -euxo pipefail
@@ -228,7 +253,7 @@ runs:
         echo "cache_file=/tmp/nix-upload/${cache_key}.tar.gz" >> $GITHUB_OUTPUT
 
     - name: Upload nix cache
-      if: ${{ inputs.should_save_gcp == 'true' && steps.already_exists.outputs.already_exists != 'true' }}
+      if: ${{ env.NIX_ENV_SOURCE == '' && (inputs.should_save_gcp == 'true' && steps.already_exists.outputs.already_exists != 'true') }}
       uses: google-github-actions/upload-cloud-storage@c0f6160ff80057923ff50e5e567695cea181ec23 # v2.2.4
       with:
         destination: splice-nix-cache-public

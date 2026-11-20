@@ -204,7 +204,13 @@ class DockerComposeValidatorFrontendIntegrationTest
 
       clue("JSON ledger API is exposed") {
         val response =
-          Http().singleRequest(Get("http://json-ledger-api.localhost/v2/version")).futureValue
+          Http()
+            .singleRequest(
+              Get("http://localhost/v2/version")
+                // java can't resolve the *.localhost domain, so we need to set the Host header manually
+                .withHeaders(Host("json-ledger-api.localhost"))
+            )
+            .futureValue
         response.status should be(StatusCodes.OK)
         response.entity.toStrict(10.seconds).futureValue.data.utf8String should include(
           "\"version\":\"3." // check that it reports a version. We don't care about the exact version
@@ -278,7 +284,9 @@ class DockerComposeValidatorFrontendIntegrationTest
           }
         Using.resource(
           channelConfig
-            .builderFor("grpc-ledger-api.localhost", 80)
+            .builderFor("localhost", 80)
+            // java can't resolve the *.localhost domain, so we need to set the authority manually
+            .overrideAuthority("grpc-ledger-api.localhost")
             .executor(env.executionContext)
             .build
         ) { channel =>

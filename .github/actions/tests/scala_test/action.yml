@@ -247,7 +247,10 @@ runs:
       if: ${{ fromJson(inputs.with_docker_images) }}
       shell: bash
       run: |
-        [[ -d "$HOME/.docker" ]] && sudo chown "$(id -u):$(id -g)" "$HOME/.docker"
+        # The canton-network-splice runners have no $HOME/.docker
+        if [[ -d "$HOME/.docker" ]]; then
+          sudo chown "$(id -u):$(id -g)" "$HOME/.docker"
+        fi
 
     # Install QEMU to support building multi-arch images
     - name: Set up QEMU
@@ -312,6 +315,21 @@ runs:
           fi
           if [[ "${{ inputs.is_frontend_test }}" == "true" ]]; then
             export VITE_DISABLE_QUERY_DEVTOOLS=true
+            # TODO(tech-debt): drop the polling once the canton-network-splice runners allow raising fs.inotify.max_user_watches.
+            # The "increase inotify limit" step cannot change it there (read-only /proc/sys), and the limit of 12288
+            # is shared by all runner pods on the node, so the file watchers fail with ENOSPC. Poll instead:
+            # chokidar (nodemon, vite) reads CHOKIDAR_*, `tsc --watch` reads TSC_WATCH*.
+            export CHOKIDAR_USEPOLLING=true
+            export CHOKIDAR_INTERVAL=1000
+            export TSC_WATCHFILE=DynamicPriorityPolling
+            export TSC_WATCHDIRECTORY=RecursiveDirectoryUsingDynamicPriorityPolling
+            # start-frontends.sh runs the frontends in windows of the tmux server that start-canton.sh already
+            # started, and these inherit the global environment of that server, not the environment of this shell
+            if tmux has-session 2>/dev/null; then
+              for var in CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL TSC_WATCHFILE TSC_WATCHDIRECTORY; do
+                tmux set-environment -g "$var" "${!var}"
+              done
+            fi
             ./start-frontends.sh ${{ inputs.start_frontend_args }}
           fi
           ${{ inputs.pre_sbt_cmd }}
