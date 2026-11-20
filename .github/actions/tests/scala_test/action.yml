@@ -253,18 +253,6 @@ runs:
           sudo chown "$(id -u):$(id -g)" "$HOME/.docker"
         fi
 
-    # The localnet and docker-compose tests reach the services through *.localhost hostnames. The self-hosted-k8s-*
-    # runners resolved them with hostAliases (see localnetHostAliases in cluster/pulumi/gha/src/runners.ts),
-    # the canton-network-splice runners do not.
-    - name: Resolve the localnet hostnames
-      shell: bash
-      run: |
-        for host in ans.localhost canton.localhost scan.localhost sv.localhost wallet.localhost json-ledger-api.localhost grpc-ledger-api.localhost; do
-          if ! grep -qE "^127\.0\.0\.1\s(.*\s)?${host//./\\.}(\s|$)" /etc/hosts; then
-            echo "127.0.0.1 $host" | sudo tee -a /etc/hosts
-          fi
-        done
-
     # Install QEMU to support building multi-arch images
     - name: Set up QEMU
       if: ${{ fromJson(inputs.with_docker_images) }}
