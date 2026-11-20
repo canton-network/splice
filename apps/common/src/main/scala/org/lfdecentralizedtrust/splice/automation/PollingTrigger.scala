@@ -269,8 +269,12 @@ trait PollingTrigger extends Trigger with FlagCloseableAsync {
     * The resulting Future completes with true when the trigger is done executing the work,
     * or completes with false if there was nothing to do.
     * See [[pause()]] for a description of when work is "done".
+    *
+    * It is "raw" because "done" does not mean "succeeded": for task-based triggers, a task that was
+    * skipped because it had become stale also counts as done. Tests of such triggers should use
+    * [[PollingParallelTaskExecutionTrigger.runOnceWithOutcome]] or the helpers in `TriggerTestUtil`.
     */
-  def runOnce()(implicit traceContext: TraceContext): Future[Boolean] = {
+  def rawRunOnce()(implicit traceContext: TraceContext): Future[Boolean] = {
     blocking {
       mutex.exclusive {
         assert(

@@ -114,7 +114,7 @@ class ScheduledPackageVettingIntegrationTest
         aliceValidatorBackend.stop()
         aliceValidatorBackend.startSync()
         aliceVettingTrigger
-          .runOnce()
+          .rawRunOnce()
           .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(60, "seconds")))
       }
 

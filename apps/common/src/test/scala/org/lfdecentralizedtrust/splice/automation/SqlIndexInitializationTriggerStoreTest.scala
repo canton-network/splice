@@ -249,8 +249,8 @@ class SqlIndexInitializationTriggerStoreTest
           case other =>
             fail(s"Expected Drop for test_index, got $other")
         }
-        _ <- loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-          within = { trigger.runOnce() },
+        outcome <- loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          within = { trigger.runOnceWithOutcome() },
           assertion = { entries =>
             forExactly(1, entries) {
               _.message should include(
@@ -259,6 +259,7 @@ class SqlIndexInitializationTriggerStoreTest
             }
           },
         )
+        _ = outcome should matchPattern { case Some(_: TaskSuccess) => }
         indexNamesAfterDrop <- listIndexNames()
         _ = indexNamesAfterDrop should not contain ("test_index")
 
@@ -373,7 +374,9 @@ class SqlIndexInitializationTriggerStoreTest
 
       for {
         _ <- lockAcquired
-        _ <- trigger.runOnce()
+        // The outcome is not asserted: the test only checks that the index is not created while
+        // the lock is held.
+        _ <- trigger.runOnceWithOutcome()
         indexNamesWhileLocked <- listIndexNames()
         _ = indexNamesWhileLocked should not contain "test_index"
         // The contended action is still pending and succeeds once the lock is released

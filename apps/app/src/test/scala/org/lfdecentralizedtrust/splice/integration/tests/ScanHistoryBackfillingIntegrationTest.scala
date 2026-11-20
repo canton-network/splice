@@ -33,7 +33,12 @@ import org.lfdecentralizedtrust.splice.store.{
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
-import org.lfdecentralizedtrust.splice.util.{EventId, UpdateHistoryTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{
+  EventId,
+  TriggerTestUtil,
+  UpdateHistoryTestUtil,
+  WalletTestUtil,
+}
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 
@@ -55,7 +60,8 @@ class ScanHistoryBackfillingIntegrationTest
     with UpdateHistoryTestUtil
     with WalletTestUtil
     with HasActorSystem
-    with HasExecutionContext {
+    with HasExecutionContext
+    with TriggerTestUtil {
 
   override protected def runEventHistorySanityCheck: Boolean = false
 
@@ -180,10 +186,8 @@ class ScanHistoryBackfillingIntegrationTest
     actAndCheck(
       "Advance one round, to commit transactions related to the round infrastructure", {
         val previousRound = currentRoundInScan(sv1ScanBackend)
-        // Note: runOnce() does nothing if there is no work to be done.
-        eventually() {
-          advanceRoundsTrigger.runOnce().futureValue should be(true)
-        }
+        // Note: running the trigger does nothing if there is no work to be done.
+        runUntilTaskSucceeds(advanceRoundsTrigger)
         previousRound
       },
     )(
@@ -354,8 +358,8 @@ class ScanHistoryBackfillingIntegrationTest
 
     actAndCheck(
       "Run trigger that checks for corrupt snapshots once on all scans", {
-        sv1DeleteSnapshotsTrigger.runOnce().futureValue
-        sv2DeleteSnapshotsTrigger.runOnce().futureValue
+        runUntilTaskSucceeds(sv1DeleteSnapshotsTrigger)
+        runUntilTaskSucceeds(sv2DeleteSnapshotsTrigger)
       },
     )(
       "History marked as free of corrupt snapshots",
@@ -382,8 +386,8 @@ class ScanHistoryBackfillingIntegrationTest
 
     actAndCheck(
       "Run backfilling once on all scans", {
-        sv1BackfillTrigger.runOnce().futureValue
-        sv2BackfillTrigger.runOnce().futureValue
+        runUntilTaskSucceeds(sv1BackfillTrigger)
+        runUntilTaskSucceeds(sv2BackfillTrigger)
       },
     )(
       "Backfilling is complete only on the founding SV",
@@ -560,8 +564,8 @@ class ScanHistoryBackfillingIntegrationTest
 
     actAndCheck(
       "Run txlog backfilling once on all scans", {
-        sv1ScanTxLogBackfillTrigger.runOnce().futureValue
-        sv2ScanTxLogBackfillTrigger.runOnce().futureValue
+        runUntilTaskSucceeds(sv1ScanTxLogBackfillTrigger)
+        runUntilTaskSucceeds(sv2ScanTxLogBackfillTrigger)
       },
     )(
       "TxLog backfilling is in progress",
