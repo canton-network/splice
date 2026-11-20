@@ -26,7 +26,7 @@ const Onboarding: React.FC = () => {
       return await registerUser();
     },
     onSuccess: () => {
-      navigate('/transactions');
+      void navigate('/transactions');
     },
     onError: error => {
       console.error(`Failed to onboard user`, error);

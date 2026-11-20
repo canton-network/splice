@@ -25,7 +25,7 @@ const TransferPreapproval: React.FC = () => {
       return await createTransferPreapproval().then(async () => transferPreapprovalQuery.refetch());
     },
     onSuccess: () => {
-      navigate('/transactions');
+      void navigate('/transactions');
     },
     onError: error => {
       console.error(`Failed to create transfer preapproval`, error);

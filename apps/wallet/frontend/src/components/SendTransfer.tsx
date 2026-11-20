@@ -79,7 +79,7 @@ const SendTransfer: React.FC = () => {
       }
     },
     onSuccess: () => {
-      navigate('/transactions');
+      void navigate('/transactions');
     },
     onError: error => {
       console.error(
@@ -108,7 +108,7 @@ const SendTransfer: React.FC = () => {
       }
     },
     onSuccess: () => {
-      navigate('/transactions');
+      void navigate('/transactions');
     },
     onError: error => {
       console.error(
