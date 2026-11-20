@@ -315,7 +315,7 @@ runs:
           fi
           if [[ "${{ inputs.is_frontend_test }}" == "true" ]]; then
             export VITE_DISABLE_QUERY_DEVTOOLS=true
-            # TODO: drop the polling once the canton-network-splice runners allow raising fs.inotify.max_user_watches.
+            # TODO(tech-debt): drop the polling once the canton-network-splice runners allow raising fs.inotify.max_user_watches.
             # The "increase inotify limit" step cannot change it there (read-only /proc/sys), and the limit of 12288
             # is shared by all runner pods on the node, so the file watchers fail with ENOSPC. Poll instead:
             # chokidar (nodemon, vite) reads CHOKIDAR_*, `tsc --watch` reads TSC_WATCH*.
