@@ -131,6 +131,16 @@ The `common-frontend` package (`@canton-network/splice-common-frontend`) contain
 
 - Every commit needs a DCO `Signed-off-by:` line; use `git commit -s`.
 - PRs are squash-merged, so the PR title and description become the commit message.
+- User-facing changes, i.e. ones visible to anyone deploying, operating, integrating with or using Splice, need an entry in
+  `release-notes/release_notes_upcoming.mdx` under the next patch release section. Breaking changes also go into the minor release template in the same file.
+  Match the style of the [published release notes](https://docs.canton.network/global-synchronizer/release-notes/splice):
+  - Group entries by component, e.g. `Scan App`, `SV App`, `Validator App`, `Wallet`, `Helm charts and Docker images`, `Daml Changes`.
+  - Write for the affected users. State what changed and what they must do about it, e.g. a new config key with its
+    Helm value, or a firewall or proxy change.
+  - Name endpoints, fields and config keys in backticks. Leave out internal refactorings and test-only apps such as splitwell.
+  - List security fixes under `Security`, stating the impact and the action users must take, e.g. rotating leaked secrets.
+    While details are under embargo, only note that the release contains security fixes.
+- Do not disclose an unfixed vulnerability in an issue, PR, commit or release note; handle it as described in [SECURITY.md](SECURITY.md).
 - Mark work that is still to be done with the most specific tag, so that it is tracked and done when it is due:
   - `FIXME`: must be fixed before the PR is merged. The static CI checks reject FIXMEs.
   - `TODO(#1234)`: must be fixed as part of that issue. Use the feature's tracking issue if a separate issue makes no sense.
