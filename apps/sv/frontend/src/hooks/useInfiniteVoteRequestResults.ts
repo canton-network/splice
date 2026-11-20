@@ -5,7 +5,7 @@ import { List } from '@daml/types';
 import { DsoRules_CloseVoteRequestResult } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 import { InfiniteData, useInfiniteQuery, UseInfiniteQueryResult } from '@tanstack/react-query';
 
-import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../contexts/GovernanceReadClientContext';
 
 export interface VoteRequestResultsPage {
   results: DsoRules_CloseVoteRequestResult[];
@@ -17,7 +17,7 @@ const PAGE_SIZE = 20;
 export const useInfiniteVoteRequestResults = (): UseInfiniteQueryResult<
   InfiniteData<VoteRequestResultsPage>
 > => {
-  const { listVoteRequestResults } = useSvAdminClient();
+  const { listVoteRequestResults } = useGovernanceReadClient();
   return useInfiniteQuery({
     queryKey: ['infiniteVoteRequestResults', PAGE_SIZE],
     queryFn: async ({ pageParam }) => {

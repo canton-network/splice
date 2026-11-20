@@ -39,7 +39,8 @@ declare global {
 }
 
 export const svUrl: string = window.splice_config.services.sv.url;
-export const server: SetupServer = buildServer(svUrl);
+export const scanUrl: string = 'http://localhost:5012/api/scan';
+export const server: SetupServer = buildServer(svUrl, scanUrl);
 
 // Start server before all tests
 beforeAll(() => {

@@ -43,6 +43,8 @@ interface ProposalListingSectionProps {
   showThresholdDeadline?: boolean;
   showVoteStats?: boolean;
   showStatus?: boolean;
+  /** Defaults to true; false hides the YOUR VOTE column (read-only mode has no "you"). */
+  showYourVote?: boolean;
   sortOrder?: ProposalSortOrder;
   fetchNextPage?: () => void;
   hasNextPage?: boolean;
@@ -78,7 +80,7 @@ const sortProposals = (
     .toSorted((a, b) => getEffectiveDate(a).diff(getEffectiveDate(b)));
 };
 
-const getColumnsCount = (...shown: (boolean | undefined)[]) => 5 + shown.filter(Boolean).length;
+const getColumnsCount = (...shown: (boolean | undefined)[]) => 4 + shown.filter(Boolean).length;
 
 const getGridTemplate = (columnsCount: number) =>
   `minmax(0, 1fr) minmax(0, 0.7fr) ${'1fr '.repeat(columnsCount - 2).trim()}`;
@@ -129,12 +131,14 @@ interface TableHeaderProps {
   showThresholdDeadline?: boolean;
   showStatus?: boolean;
   showVoteStats?: boolean;
+  showYourVote: boolean;
 }
 
 const TableHeader: React.FC<TableHeaderProps> = ({
   showThresholdDeadline,
   showStatus,
   showVoteStats,
+  showYourVote,
 }) => (
   <>
     <TableCell sx={governanceTableHeadCellSx}>{CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}</TableCell>
@@ -153,7 +157,7 @@ const TableHeader: React.FC<TableHeaderProps> = ({
       </>
     )}
     {showVoteStats && <TableCell sx={governanceTableHeadCellSx}>VOTES</TableCell>}
-    <TableCell sx={governanceTableHeadCellSx}>YOUR VOTE</TableCell>
+    {showYourVote && <TableCell sx={governanceTableHeadCellSx}>YOUR VOTE</TableCell>}
   </>
 );
 
@@ -169,6 +173,7 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
     showThresholdDeadline,
     showVoteStats,
     showStatus,
+    showYourVote = true,
     sortOrder,
     fetchNextPage,
     hasNextPage,
@@ -187,7 +192,12 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
 
   const sortedData = useMemo(() => sortProposals(data, sortOrder), [data, sortOrder]);
 
-  const columnsCount = getColumnsCount(showThresholdDeadline, showStatus, showVoteStats);
+  const columnsCount = getColumnsCount(
+    showThresholdDeadline,
+    showStatus,
+    showVoteStats,
+    showYourVote
+  );
   const gridTemplate = getGridTemplate(columnsCount);
 
   const supportsInfiniteScroll = fetchNextPage !== undefined;
@@ -216,6 +226,7 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
                     showThresholdDeadline={showThresholdDeadline}
                     showStatus={showStatus}
                     showVoteStats={showVoteStats}
+                    showYourVote={showYourVote}
                   />
                 </TableRow>
               </TableHead>
@@ -237,6 +248,7 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
                     showVoteStats={showVoteStats}
                     showThresholdDeadline={showThresholdDeadline}
                     showStatus={showStatus}
+                    showYourVote={showYourVote}
                   />
                 ))}
               </TableBody>
@@ -346,6 +358,7 @@ interface VoteRowProps {
   showThresholdDeadline?: boolean;
   showStatus?: boolean;
   showVoteStats?: boolean;
+  showYourVote: boolean;
 }
 
 const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
@@ -364,6 +377,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
     showThresholdDeadline,
     showStatus,
     showVoteStats,
+    showYourVote,
   } = props;
 
   const navigate = useNavigate();
@@ -473,13 +487,15 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
           />
         </TableCell>
       )}
-      <TableCell sx={governanceTableBodyCellSx} data-testid={`${uniqueId}-row-your-vote`}>
-        <VoteStats
-          vote={yourVote}
-          typography={tableBodyTypography}
-          data-testid={`${uniqueId}-row-your-vote-stats`}
-        />
-      </TableCell>
+      {showYourVote && (
+        <TableCell sx={governanceTableBodyCellSx} data-testid={`${uniqueId}-row-your-vote`}>
+          <VoteStats
+            vote={yourVote}
+            typography={tableBodyTypography}
+            data-testid={`${uniqueId}-row-your-vote-stats`}
+          />
+        </TableCell>
+      )}
     </TableRow>
   );
 });

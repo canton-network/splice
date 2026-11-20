@@ -20,14 +20,16 @@ import { ContractId } from '@daml/types';
 
 import * as svHooks from '../hooks';
 import { useDsoInfos as useSvAppDsoInfos } from '../contexts/SvContext';
+import { useDappModeConfig } from '../utils';
 
 export const SvAppVotesHooksProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const dappMode = useDappModeConfig();
   const hooks: VotesHooks = {
-    isReadOnly: false,
+    isReadOnly: dappMode !== undefined,
     useDsoInfos(): UseQueryResult<DsoInfo> {
       return useSvAppDsoInfos();
     },
-    useSvInfo(): UseQueryResult<SvInfo> {
+    useSvInfo(): UseQueryResult<Partial<SvInfo>> {
       // The sv-app has both DsoInfo and SvInfo in a single endpoint
       return useSvAppDsoInfos();
     },
