@@ -3006,7 +3006,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       ),
     )
 
-  private def svOnboardingRequest(
+  protected def svOnboardingRequest(
       name: String,
       candidate: PartyId,
       participantId: String,
@@ -3067,7 +3067,11 @@ class DbSvDsoStoreTest
     with AcsJdbcTypes
     with AcsTables {
 
-  override protected def mkStore(): Future[DbSvDsoStore] = {
+  override protected def mkStore(): Future[DbSvDsoStore] = mkStoreWithAcs(Seq.empty)
+
+  private def mkStoreWithAcs(
+      initialAcs: Seq[StoreTestBase.AcsImportEntry]
+  ): Future[DbSvDsoStore] = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
         DarResources.amulet.all ++
@@ -3091,11 +3095,49 @@ class DbSvDsoStoreTest
       )(parallelExecutionContext, implicitly, implicitly, implicitly)
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- store.multiDomainAcsStore.testIngestionSink
-        .ingestAcs(acsOffset, Seq.empty)
+        .ingestAcs(acsOffset, initialAcs.map(acsImportEntryToActiveContract))
       _ <- store.domains.ingestionSink.ingestConnectedDomains(
         Map(SynchronizerAlias.tryCreate(domain) -> dummyDomain)
       )
     } yield store
+  }
+
+  "SvOnboardingRequest with text fields longer than the index columns" should {
+
+    val longText = "x" * 5000
+    def request = svOnboardingRequest(longText, userParty(1), "long-pid", longText)
+
+    "be ingested from the update stream" in {
+      val created = request
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(created)(store.multiDomainAcsStore)
+        result <- store.lookupSvOnboardingRequestByCandidateParty(userParty(1))
+      } yield result should be(Some(created))
+    }
+
+    "be ingested from the ACS" in {
+      val created = request
+      for {
+        store <- mkStoreWithAcs(
+          Seq(StoreTestBase.AcsImportEntry(created, dummyDomain, 0L))
+        )
+        result <- store.lookupSvOnboardingRequestByCandidateParty(userParty(1))
+      } yield result should be(Some(created))
+    }
+
+    "be found by the columns that were truncated" in {
+      val created = request
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(created)(store.multiDomainAcsStore)
+        byToken <- store.lookupSvOnboardingRequestByTokenWithOffset(longText)
+        byName <- store.lookupSvOnboardingRequestByCandidateName(longText)
+      } yield {
+        byToken.value should be(Some(created))
+        byName should be(Some(created))
+      }
+    }
   }
 
   "listProvisionalGovernanceLocksWithFeaturedAppRightSample" should {

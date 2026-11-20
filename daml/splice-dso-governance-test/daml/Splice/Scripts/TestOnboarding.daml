@@ -7,6 +7,7 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional (fromSome)
 import qualified DA.Map as Map
+import qualified DA.Text as T
 import Daml.Script
 import DA.Time
 import DA.List
@@ -267,6 +268,42 @@ testSvOnboarding = do
   actualConfig === Some newNodeConfig
 
   pure ()
+
+
+testSvOnboardingTextTooLong : Script ()
+testSvOnboardingTextTooLong = do
+  (_, dso, (_, sv2, _, _)) <- initMainNet
+
+  svX <- allocateParty "svX"
+
+  [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
+  let tooLongText = T.implode (replicate (dsoRules.config.maxTextLength + 1) "x")
+
+  -- the sponsor cannot start an onboarding whose text fields exceed the configured maximum
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding "svX" svX "svX-participant-id" tooLongText sv2
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding tooLongText svX "svX-participant-id" "mock-token" sv2
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding "svX" svX tooLongText "mock-token" sv2
+
+  requests <- query @SvOnboardingRequest dso
+  requests === []
+
+  -- text of exactly the configured maximum is still accepted
+  let maxLengthText = T.implode (replicate dsoRules.config.maxTextLength "x")
+  submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding maxLengthText svX "svX-participant-id" "mock-token" sv2
+
+  [(_, request)] <- query @SvOnboardingRequest dso
+  request === SvOnboardingRequest with
+    candidateName = maxLengthText
+    candidateParty = svX
+    candidateParticipantId = "svX-participant-id"
+    token = "mock-token"
+    sponsor = sv2
+    dso
+    expiresAt = request.expiresAt
 
 
 testSvOnboardingRequestExpiry : Script ()
