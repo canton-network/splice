@@ -23,8 +23,9 @@ runs:
         SPLICE_ROOT: ${{ inputs.splice_root }}
       run: |
         if [[ -d log ]]; then
-          # pigz fails if there is no file to compress, which can be the case if Canton just rolled its logs
-          pigz -r "$SPLICE_ROOT"/log/* || true
+          # This step runs outside of nix and the canton-network-splice runners have no pigz, so use gzip.
+          # gzip fails if there is no file to compress, which can be the case if Canton just rolled its logs
+          gzip -r "$SPLICE_ROOT"/log/* || true
         fi
 
     - name: Move potential additional debugging artifacts to log directory
