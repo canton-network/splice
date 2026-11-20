@@ -7,21 +7,17 @@ import cats.Monoid
 import cats.syntax.foldable.*
 import com.daml.ledger.javaapi.data.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequest,
   DsoRules_CloseVoteRequestResult,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.transfercommandresult.{
-  TransferCommandResultFailure,
-  TransferCommandResultSuccess,
-}
 import org.lfdecentralizedtrust.splice.history.*
 import org.lfdecentralizedtrust.splice.store.TxLogStore
 import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.dollarsToCC
-import org.lfdecentralizedtrust.splice.util.{Codec, EventId, ExerciseNode}
+import org.lfdecentralizedtrust.splice.util.{EventId, ExerciseNode}
 
 import scala.collection.immutable
 import scala.jdk.CollectionConverters.*
@@ -68,21 +64,6 @@ class ScanTxLogParser(
         exercised match {
           case DsoRulesCloseVoteRequest(node) =>
             State.fromCloseVoteRequest(eventId, node)
-          case ExternalPartyAmuletRules_CreateTransferCommand(node) =>
-            State.fromCreateTransferCommand(eventId, node)
-          case TransferCommand_Send(node) =>
-            val state = parseTrees(
-              tree,
-              synchronizerId,
-              tree.getChildNodeIds(exercised).asScala.toList,
-              ignoreUnexpectedAmuletCreateArchive,
-            )
-            val transferCommandState = State.fromTransferCommand_Send(eventId, exercised, node)
-            state.appended(transferCommandState)
-          case TransferCommand_Withdraw(node) =>
-            State.fromTransferCommand_Withdraw(eventId, exercised, node)
-          case TransferCommand_Expire(node) =>
-            State.fromTransferCommand_Expire(eventId, exercised, node)
           case _ =>
             parseTrees(
               tree,
@@ -229,89 +210,6 @@ object ScanTxLogParser {
           VoteRequestTxLogEntry(
             eventId,
             result = Some(node.result.value),
-          )
-        )
-      )
-    }
-
-    def fromCreateTransferCommand(
-        eventId: String,
-        node: ExerciseNode[
-          ExternalPartyAmuletRules_CreateTransferCommand.Arg,
-          ExternalPartyAmuletRules_CreateTransferCommand.Res,
-        ],
-    ): State = {
-      State(
-        immutable.Queue(
-          TransferCommandTxLogEntry(
-            eventId,
-            contractId = Codec.encodeContractId(node.result.value.transferCommandCid),
-            sender = PartyId.tryFromProtoPrimitive(node.argument.value.sender),
-            nonce = node.argument.value.nonce,
-            status = TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-          )
-        )
-      )
-    }
-
-    def fromTransferCommand_Send(
-        eventId: String,
-        exercised: ExercisedEvent,
-        node: ExerciseNode[TransferCommand_Send.Arg, TransferCommand_Send.Res],
-    ): State = {
-      State(
-        immutable.Queue(
-          TransferCommandTxLogEntry(
-            eventId = eventId,
-            contractId = exercised.getContractId,
-            sender = PartyId.tryFromProtoPrimitive(node.result.value.sender),
-            nonce = node.result.value.nonce,
-            status = node.result.value.result match {
-              case failure: TransferCommandResultFailure =>
-                TransferCommandTxLogEntry.Status.Failed(
-                  TransferCommandFailed(failure.reason.toString)
-                )
-              case _: TransferCommandResultSuccess =>
-                TransferCommandTxLogEntry.Status.Sent(TransferCommandSent())
-              case e =>
-                sys.error(s"TransferCommandResult must be either failure or success but got: $e")
-            },
-          )
-        )
-      )
-    }
-
-    def fromTransferCommand_Withdraw(
-        eventId: String,
-        exercised: ExercisedEvent,
-        node: ExerciseNode[TransferCommand_Withdraw.Arg, TransferCommand_Withdraw.Res],
-    ): State = {
-      State(
-        immutable.Queue(
-          TransferCommandTxLogEntry(
-            eventId = eventId,
-            contractId = exercised.getContractId,
-            sender = PartyId.tryFromProtoPrimitive(node.result.value.sender),
-            nonce = node.result.value.nonce,
-            status = TransferCommandTxLogEntry.Status.Withdrawn(TransferCommandWithdrawn()),
-          )
-        )
-      )
-    }
-
-    def fromTransferCommand_Expire(
-        eventId: String,
-        exercised: ExercisedEvent,
-        node: ExerciseNode[TransferCommand_Expire.Arg, TransferCommand_Expire.Res],
-    ): State = {
-      State(
-        immutable.Queue(
-          TransferCommandTxLogEntry(
-            eventId = eventId,
-            contractId = exercised.getContractId,
-            sender = PartyId.tryFromProtoPrimitive(node.result.value.sender),
-            nonce = node.result.value.nonce,
-            status = TransferCommandTxLogEntry.Status.Expired(TransferCommandExpired()),
           )
         )
       )

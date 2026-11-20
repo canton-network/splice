@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   FeaturedAppActivityMarker,
+  RewardCouponV2,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferPreapproval
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsEntryContext}
@@ -30,6 +31,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
@@ -228,15 +230,15 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
   }
 }
 
-/** Tests that expiry triggers fall back to V1 choices when alice's validator
-  * has only vetted minimal package versions (not splice-amulet 0.1.17+).
+/** Check that TAPS succeeds in expiring dust amulets when alice's validator
+  * has only vetted the minimal package versions, while the DSO uses newer ones.
   */
-class AmuletExpiryV1FallbackIntegrationTest
+class AmuletExpiryWithMinimalVettedPackagesIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
   override protected val enablePersistedUnavailableParties: Boolean = true
 
-  "Amulet expiry falls back to V1 choices when alice's validator has not vetted splice-amulet 0.1.17" in {
+  "Amulet expiry works when alice's validator has only vetted the minimal package versions" in {
     implicit env =>
       setupAliceWithDustAmulets()
       actAndCheck(timeUntilSuccess = 60.seconds)(
@@ -250,7 +252,7 @@ class AmuletExpiryV1FallbackIntegrationTest
           }
         },
       )(
-        "Dust amulets are expired via V1 choices",
+        "Dust amulets are expired",
         _ => {
           aliceWalletClient.list().amulets shouldBe empty withClue "dust amulets"
           aliceWalletClient.list().lockedAmulets shouldBe empty withClue "dust lockedAmulets"
@@ -399,6 +401,7 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
 /** Tests that expiry triggers ignore parties whose participant has no vetted amulet.
   * Amulets are covered as a representative of the triggers based on `BatchedMultiDomainExpiredContractTrigger`;
   * reward coupons are covered separately as `ExpireRewardCouponsTrigger` has its own batching logic.
+  * `UnhideRewardCouponV2Trigger` is covered as well: it skips such providers without marking them as unavailable.
   */
 class ExpiryWithNoVettedAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
@@ -503,5 +506,50 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
         ) should have size 1L withClue "app reward coupon"
       },
     )
+  }
+
+  "Unhiding reward coupons skips providers with no vetted amulet version" in { implicit env =>
+    val alice = setupAliceWithDustAmulets()
+    val aliceId = alice.toProtoPrimitive
+
+    advanceRoundsByOneTickViaAutomation()
+    val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+    val currentRound = openRounds.toList.headOption.value.payload.round
+
+    unvetAllAmuletVersionsOnAlice()
+
+    actAndCheck(
+      "Create a reward coupon for alice that is hidden from her",
+      // alice is no informee of the hidden coupon, so it can be created while she is unvetted
+      createAsDso()(
+        new RewardCouponV2(
+          dsoParty.toProtoPrimitive,
+          aliceId,
+          currentRound,
+          BigDecimal(10.0).bigDecimal,
+          env.environment.clock.now.toInstant.plus(Duration.ofHours(1)),
+          false,
+          java.util.Optional.empty(),
+        ).create
+      ),
+    )(
+      "sv1's store lists alice as a provider of hidden coupons",
+      _ =>
+        sv1Backend.appState.dsoStore
+          .listNonObserverRewardCouponsV2ProvidersSample(PageLimit.tryCreate(10))
+          .futureValue should contain(alice),
+    )
+
+    clue("UnhideRewardCouponV2Trigger has no task for alice and her reward coupon stays hidden") {
+      sv1Backend.dsoDelegateBasedAutomation
+        .trigger[UnhideRewardCouponV2Trigger]
+        .runOnce()
+        .futureValue shouldBe false
+      dsoAcs.filterJava(RewardCouponV2.COMPANION)(
+        dsoParty,
+        c => c.data.provider == aliceId && !c.data.providerIsObserver,
+      ) should have size 1L withClue "hidden reward coupon"
+      ignoredParties() should not contain alice
+    }
   }
 }

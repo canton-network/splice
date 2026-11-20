@@ -146,7 +146,6 @@ class UserWalletAutomationService(
           scanConnection,
           treasury,
           dedupDuration,
-          packageVersionSupport,
         )
       )
     } else if (config.useTokenStandardTransfer) {
@@ -158,7 +157,6 @@ class UserWalletAutomationService(
           scanConnection,
           treasury,
           dedupDuration,
-          packageVersionSupport,
         )
       )
     } else {

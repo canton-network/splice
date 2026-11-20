@@ -11,7 +11,6 @@ import org.lfdecentralizedtrust.splice.environment.SpliceConsoleEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GenerateExternalPartyTopologyResponse,
-  LookupTransferCommandStatusResponse,
   SignedTopologyTx,
 }
 import org.lfdecentralizedtrust.splice.identities.NodeIdentitiesDump
@@ -43,7 +42,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   transferinstructionv1,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.UnclaimedDevelopmentFundCoupon
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommandCounter
 
 import scala.concurrent.Future
 
@@ -347,27 +345,6 @@ abstract class ValidatorAppReference(
       consoleEnvironment.run {
         httpCommand(
           HttpScanProxyAppClient.LookupTransferPreapprovalByParty(party)
-        )
-      }
-    }
-
-    def lookupTransferCommandCounterByParty(
-        party: PartyId
-    ): Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]] = {
-      consoleEnvironment.run {
-        httpCommand(
-          HttpScanProxyAppClient.LookupTransferCommandCounterByParty(party)
-        )
-      }
-    }
-
-    def lookupTransferCommandStatus(
-        sender: PartyId,
-        nonce: Long,
-    ): Option[LookupTransferCommandStatusResponse] = {
-      consoleEnvironment.run {
-        httpCommand(
-          HttpScanProxyAppClient.LookupTransferCommandStatus(sender, nonce)
         )
       }
     }

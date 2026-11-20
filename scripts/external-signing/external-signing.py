@@ -11,7 +11,6 @@ import colorlog
 from Crypto.PublicKey import ECC
 from Crypto.Signature import eddsa
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
 import hashlib
 import os
 from typing import Any
@@ -65,15 +64,6 @@ async def session_get(session: aiohttp.ClientSession, url: str, payload: dict[st
 class ScanClient:
     session: aiohttp.ClientSession
     url: str
-
-    async def lookup_transfer_command_status(self, sender: str, nonce: int) -> Any:
-        payload = {"sender": sender, "nonce": nonce}
-        response = await session_get(
-            self.session,
-            f"{self.url}/api/scan/v0/transfer-command/status",
-            payload
-        )
-        return await response.json()
 
     async def get_transfer_factory(self, choice_arguments: Any) -> Any:
         payload={"choiceArguments": choice_arguments}
@@ -152,46 +142,6 @@ class ValidatorClient:
         )
         return await response.json()
 
-    async def prepare_transfer_preapproval_send(
-        self,
-        sender_party_id: str,
-        receiver_party_id: str,
-        amount: str,
-        expires_at: str,
-        nonce: int,
-    ) -> Any:
-        payload = {
-            "sender_party_id": sender_party_id,
-            "receiver_party_id": receiver_party_id,
-            "amount": amount,
-            "expires_at": expires_at,
-            "nonce": nonce,
-        }
-        response = await session_post(
-            self.session,
-            f"{self.url}/api/validator/v0/admin/external-party/transfer-preapproval/prepare-send",
-            payload,
-        )
-        return await response.json()
-
-    async def submit_transfer_preapproval_send(
-        self, party_id: str, transaction: Any, signed_tx_hash: str, public_key: str
-    ) -> None:
-        payload = {
-            "submission": {
-                "party_id": party_id,
-                "transaction": transaction,
-                "signed_tx_hash": signed_tx_hash,
-                "public_key": public_key,
-            }
-        }
-        await session_post(
-            self.session,
-            f"{self.url}/api/validator/v0/admin/external-party/transfer-preapproval/submit-send",
-            payload,
-        )
-
-
 async def handle_generate_key_pair(args: argparse.Namespace) -> None:
     private_key = ECC.generate(curve="ed25519")
     public_key = private_key.public_key()
@@ -252,36 +202,6 @@ async def handle_setup_party(args: argparse.Namespace, validator_client: Validat
     logger.debug(f"Completed party setup, party id is: {party_id}")
 
 
-async def lookup_transfer_command_status(party_id: str, nonce: int, contract_id_prefix: str, scan_client: ScanClient) -> Any:
-    response = await scan_client.lookup_transfer_command_status(party_id, nonce)
-    for contract_id, contract_with_status in response["transfer_commands_by_contract_id"].items():
-        if contract_id.startswith(contract_id_prefix):
-            return contract_with_status
-    return None
-
-
-async def poll_for_transfer_command_status(
-    party_id: str, nonce: int, contract_id_prefix: str,
-    scan_client: ScanClient, timeout: float = 30, poll_interval: float = 1
-) -> Any:
-    async with asyncio.timeout(timeout):
-        while True:
-            try:
-                contract_with_status = await lookup_transfer_command_status(
-                    party_id,
-                    nonce,
-                    contract_id_prefix,
-                    scan_client
-                )
-                status = contract_with_status["status"]
-                logger.debug(f"Transfer command status: {status}")
-                if status["status"] in ["sent", "failed"]:
-                    return contract_with_status
-            except HttpException:
-                logger.debug("Transfer command not found yet.")
-            await asyncio.sleep(poll_interval)
-
-
 async def handle_setup_transfer_preapproval(args: argparse.Namespace, validator_client: ValidatorClient) -> None:
     logger.debug(f"Setting up TransferPreapproval for {args.party_id}")
     [private_key, public_key] = read_key_pair(args.key_directory, args.key_name)
@@ -306,37 +226,6 @@ async def handle_setup_transfer_preapproval(args: argparse.Namespace, validator_
 def signed_by_from_key(public_key: ECC.EccKey) -> str:
     fingerprint = hashlib.sha256(bytes.fromhex(f"0000000C{public_key.export_key(format="raw").hex()}")).hexdigest()
     return f"1220{fingerprint}"
-
-
-async def handle_transfer_preapproval_send(args: argparse.Namespace, validator_client: ValidatorClient, scan_client: ScanClient) -> None:
-    logger.debug(
-        f"Exercise choice TransferPreapproval_Send to transfer {args.amount} \
-        from {args.sender_party_id} to {args.receiver_party_id}"
-    )
-    [private_key, public_key] = read_key_pair(args.key_directory, args.key_name)
-    public_key_hex = public_key.export_key(format="raw").hex()
-    expires_at = (
-        f"{(datetime.now() + timedelta(hours=24)).isoformat()}Z"
-    )
-    response = await validator_client.prepare_transfer_preapproval_send(
-        args.sender_party_id,
-        args.receiver_party_id,
-        args.amount,
-        expires_at,
-        args.nonce,
-    )
-    signer = eddsa.new(private_key, "rfc8032")
-    signed_hash = signer.sign(bytes.fromhex(response["tx_hash"])).hex()
-    await validator_client.submit_transfer_preapproval_send(
-        args.sender_party_id, response["transaction"], signed_hash, public_key_hex
-    )
-    await poll_for_transfer_command_status(
-        args.sender_party_id,
-        args.nonce,
-        response['transfer_command_contract_id_prefix'],
-        scan_client
-    )
-    logger.debug("Transfer complete.")
 
 
 def parse_cli_args() -> argparse.Namespace:

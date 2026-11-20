@@ -27,7 +27,7 @@
           "targetAudience": "https://canton.network.global",
           "user": "validator1-client-id@clients"
         },
-        "disableAuth": false
+        "disableAuth": true
       },
       "affinity": {
         "nodeAffinity": {

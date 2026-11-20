@@ -68,7 +68,7 @@ function do_scan() {
   success=0
   for i in {1..10}; do
     set +e
-    bash <(curl -s https://detect.blackduck.com/detect10.sh) \
+    bash <(curl -s https://detect.blackduck.com/detect12.sh) \
       --blackduck.url=https://digitalasset.blackducksoftware.com/ \
       --blackduck.api.token="$BLACKDUCK_HUBDETECT_TOKEN" \
       --detect.docker.tar="${image_dir}/image.tar" \
