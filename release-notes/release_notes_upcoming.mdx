@@ -33,6 +33,14 @@
       pass through the `Range` and `Content-Range` headers; otherwise interrupted downloads start again
       from the beginning.
 
+  - Daml
+
+    - `splice-wallet` now depends on `splice-util-batched-markers` and `splice-util-token-standard-wallet`.
+      Validators no longer vet the latest versions of these packages, and of `splice-token-standard-utils`,
+      independently of the package config. Instead, they vet the versions that the voted `splice-wallet` version
+      depends on. Until that `splice-wallet` version is voted in, they keep vetting
+      `splice-util-batched-markers` 1.0.5 and `splice-util-token-standard-wallet` 1.1.2.
+
   - Deployment
 
     - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting

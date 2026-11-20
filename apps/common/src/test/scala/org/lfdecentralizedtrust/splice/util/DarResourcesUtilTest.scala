@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.daml.lf.data.Ref.PackageId
-import org.lfdecentralizedtrust.splice.environment.DarResources
+import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
 import org.scalatest.wordspec.AnyWordSpec
 
 class DarResourcesUtilTest extends AnyWordSpec with BaseTest {
@@ -29,6 +29,33 @@ class DarResourcesUtilTest extends AnyWordSpec with BaseTest {
             .copy(upgradedPackageId = Some(PackageId.assertFromString(unrelatedPackageId)))
         )
         .identification should not be wallet.identification
+    }
+  }
+
+  "splice-wallet" should {
+    // Validators vet these packages only as dependencies of the voted `splice-wallet` version.
+    "depend on the token standard workflow utility packages" in {
+      wallet.dependencyPackageIds should contain allOf (
+        DarResources.utilBatchedMarkers.latest.packageId,
+        DarResources.TokenStandard.utilTokenStandardWallet.latest.packageId
+      )
+    }
+  }
+
+  "PackageIdResolver.readPackageVersion" should {
+    "pin the auto-vetted utility packages to versions that are part of the release" in {
+      val packageConfig = SpliceUtil.readPackageConfig()
+      forEvery(
+        Seq(
+          PackageIdResolver.Package.SpliceUtilBatchedMarkers,
+          PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet,
+        )
+      ) { pkg =>
+        DarResourcesUtil.lookupPackageMetadata(
+          pkg.packageName,
+          PackageIdResolver.readPackageVersion(packageConfig, pkg),
+        ) should not be empty
+      }
     }
   }
 
