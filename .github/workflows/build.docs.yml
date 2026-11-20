@@ -8,7 +8,7 @@ on:
 
 jobs:
   docs:
-    runs-on: self-hosted-k8s-small
+    runs-on: self-hosted-k8s-medium
     container:
       image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
 
@@ -39,6 +39,16 @@ jobs:
           # We Test/compile here as the docs job is the one that pushes to the SBT cache
           # as it finishes fastest and we want to ensure that it includes test sources.
           cmd: "Test/compile docs/bundle"
+
+      - name: Checks that need the build
+        uses: ./.github/actions/sbt/execute_sbt_command
+        with:
+          cmd: "lintCompiled updateTestConfigForParallelRuns updateDarResources"
+
+      - name: Verify no changes in SBT test files
+        uses: ./.github/actions/nix/run
+        with:
+          cmd: git add . && git diff --staged --exit-code test*.log '**/DarResources.scala'
 
       - name: Upload documentation artifacts
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
