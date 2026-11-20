@@ -356,18 +356,18 @@ class ScanHistoryBackfillingIntegrationTest
       sv2ScanTxLogBackfillTrigger.retrieveTasks().futureValue should be(empty)
     }
 
-    actAndCheck(
-      "Run trigger that checks for corrupt snapshots once on all scans", {
-        runUntilTaskSucceeds(sv1DeleteSnapshotsTrigger)
-        runUntilTaskSucceeds(sv2DeleteSnapshotsTrigger)
-      },
-    )(
-      "History marked as free of corrupt snapshots",
-      _ => {
+    clue(
+      "Run the trigger that deletes corrupt snapshots until the history is marked as free of them"
+    ) {
+      // Without corrupt snapshots, the trigger marks the history when retrieving its tasks and
+      // returns no task, so there is no task outcome to wait for.
+      runTasksUntil(sv1DeleteSnapshotsTrigger) {
         sv1ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
+      }
+      runTasksUntil(sv2DeleteSnapshotsTrigger) {
         sv2ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
-      },
-    )
+      }
+    }
 
     clue(
       "Backfilling triggers state. SV1+SV2: update is about to initialize, txlog is not doing anything yet"
