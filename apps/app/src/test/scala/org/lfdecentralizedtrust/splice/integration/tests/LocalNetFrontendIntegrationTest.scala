@@ -156,11 +156,9 @@ class LocalNetFrontendIntegrationTest
               .singleRequest(
                 Get(s"http://localhost:$port/v2/state/connected-synchronizers")
                   .withHeaders(
-                    Seq(
-                      // java can't resolve the *.localhost domain, so we need to set the Host header manually
-                      Host("json-ledger-api.localhost"),
-                      Authorization(OAuth2BearerToken(token)),
-                    )
+                    // java can't resolve the *.localhost domain, so we need to set the Host header manually
+                    Host("json-ledger-api.localhost"),
+                    Authorization(OAuth2BearerToken(token)),
                   )
               )
               .futureValue
