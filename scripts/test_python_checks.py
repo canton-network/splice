@@ -96,6 +96,25 @@ class PythonChecksTest(unittest.TestCase):
             ["keep.py", "nested/vendor/keep.py"],
         )
 
+    def test_selection_skips_deleted_extensionless_files(self) -> None:
+        self.write("keep.py", "")
+        self.write("command", "#!/usr/bin/env python3\n")
+        self.write("LICENSE", "license text\n").unlink()
+        self.write("nested/README", "documentation\n").unlink()
+        self.write("missing.py", "").unlink()
+        self.assertEqual(
+            checks.python_files(self.root, self.config, None),
+            ["command", "keep.py", "missing.py"],
+        )
+
+    def test_selection_reports_unreadable_extensionless_files(self) -> None:
+        self.write("command", "#!/usr/bin/env python3\n")
+        with patch.object(checks, "Repo", return_value=self.repo), patch.object(
+            Path, "open", side_effect=PermissionError("unreadable"),
+        ):
+            with self.assertRaises(PermissionError):
+                checks.python_files(self.root, self.config, None)
+
     def test_config_validates_import_paths_rule_names_and_reasons(self) -> None:
         self.write("lib/helper.py", "")
         path = self.write("config.json", json.dumps({

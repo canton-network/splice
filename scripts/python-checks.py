@@ -134,11 +134,13 @@ def python_files(root: Path, config: Config, target: Path | None) -> list[str]:
             and metadata.startswith(("100644 ", "100755 "))
             and not path.is_symlink()
         ):
-            with path.open("rb") as source:
-                if source.readline(128).rstrip(b"\r\n") in (
-                    b"#!/usr/bin/env python", b"#!/usr/bin/env python3",
-                ):
-                    files.add(name)
+            try:
+                with path.open("rb") as source:
+                    header = source.readline(128).rstrip(b"\r\n")
+            except FileNotFoundError:
+                continue
+            if header in (b"#!/usr/bin/env python", b"#!/usr/bin/env python3"):
+                files.add(name)
     if not files:
         raise ValueError(f"no covered Python files found under {selected}")
     return sorted(files)
