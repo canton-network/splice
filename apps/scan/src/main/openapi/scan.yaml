@@ -3923,6 +3923,15 @@ components:
           format: int32
         transaction_views:
           $ref: '#/components/schemas/TransactionViews'
+        round_number:
+          description: |
+            The oldest open mining round active at record_time. Same as the round assigned to the `app_activity_records` associated with this verdict, if there are any.
+            This field is omitted in the following scenarios:
+              - The record_time is before the SVs have started serving this field.
+              - The verdict is served by a newly onboarded SV. In this case the `app_activity_records` will also be absent.
+          type: integer
+          format: int64
+          x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullLong
     TransactionViews:
       type: object
       required:

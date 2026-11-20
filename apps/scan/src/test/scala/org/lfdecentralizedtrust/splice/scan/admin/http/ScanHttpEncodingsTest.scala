@@ -18,7 +18,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentUpdate,
   TransactionTreeUpdate,
 }
-import org.lfdecentralizedtrust.splice.http.OmitNullString
+import org.lfdecentralizedtrust.splice.http.{OmitNullLong, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent.members.CreatedEvent as HttpCreatedEvent
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItem.members.{
@@ -30,7 +30,7 @@ import org.lfdecentralizedtrust.splice.store.{StoreTestBase, TreeUpdateWithMigra
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.VerdictResultDbValue
-import org.lfdecentralizedtrust.splice.util.EventId
+import org.lfdecentralizedtrust.splice.util.{EventId, SwitchOverTimes, SwitchOverTimesTest}
 import org.scalatest.matchers.should.Matchers
 
 import java.time.Instant
@@ -711,7 +711,7 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
 
     val viewsIn = Seq(view2, view0, view1, view6, view4, view5, view3)
 
-    val encodedVerdict = ScanHttpEncodings.encodeVerdict(verdictBase, viewsIn)
+    val encodedVerdict = ScanHttpEncodings.encodeVerdict(verdictBase, viewsIn, dsoRulesO = None)
 
     encodedVerdict.updateId shouldBe verdictBase.updateId
     encodedVerdict.migrationId shouldBe verdictBase.migrationId
@@ -794,6 +794,7 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
       ScanHttpEncodings.encodeVerdict(
         verdictBase.copy(verdictResult = VerdictResultDbValue.Accepted),
         viewsIn,
+        dsoRulesO = None,
       )
     encodedAccepted.verdictResult shouldBe httpApi.VerdictResult.VerdictResultAccepted
 
@@ -801,8 +802,26 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
       ScanHttpEncodings.encodeVerdict(
         verdictBase.copy(verdictResult = VerdictResultDbValue.Rejected),
         viewsIn,
+        dsoRulesO = None,
       )
     encodedRejected.verdictResult shouldBe httpApi.VerdictResult.VerdictResultRejected
+
+    val withRound = verdictBase.copy(roundNumber = Some(11L))
+
+    def switchOverAt(time: CantonTimestamp) =
+      SwitchOverTimesTest.mkDsoRules(Map(SwitchOverTimes.AlwaysServeVerdictRoundNumber -> time))
+
+    ScanHttpEncodings
+      .encodeVerdict(withRound, viewsIn, dsoRulesO = None)
+      .roundNumber shouldBe None
+
+    ScanHttpEncodings
+      .encodeVerdict(withRound, viewsIn, Some(switchOverAt(withRound.recordTime.plusSeconds(1))))
+      .roundNumber shouldBe None
+
+    ScanHttpEncodings
+      .encodeVerdict(withRound, viewsIn, Some(switchOverAt(withRound.recordTime)))
+      .roundNumber shouldBe Some(OmitNullLong(11L))
   }
 
   "encode traffic summary" in {

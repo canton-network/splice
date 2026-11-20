@@ -524,6 +524,7 @@ MAY_BE_ABSENT = {
     ("UpdateHistoryTransactionV2", "external_transaction_hash"),  # for transactions not signed externally
     ("EventHistoryItem", "asset_activity_records"),  # omitted when the event has no asset activity
     ("EventHistoryItem", "submitting_app_provider"),  # omitted when the submitter is not a featured-app
+    ("EventHistoryVerdict", "round_number"),  # omitted when the round is not known or not served yet
 }
 
 
