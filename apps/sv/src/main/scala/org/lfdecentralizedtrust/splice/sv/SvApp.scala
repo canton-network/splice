@@ -1186,7 +1186,7 @@ object SvApp {
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[Unit] = {
     val store = dsoStoreWithIngestion.store
     val svParty = store.key.svParty
-    logger.debug("Receiving or creating validator license for SV party")
+    logger.info("Receiving or creating validator license for SV party")
     for {
       _ <- retryProvider.retry(
         RetryFor.WaitingOnInitDependency,
@@ -1202,7 +1202,7 @@ object SvApp {
               logger.info("Validator license for SV party already exists")
               Future.unit
             case QueryResult(offset, None) =>
-              logger.debug("Trying to create validator license for SV party")
+              logger.info("Trying to create validator license for SV party")
               val dsoParty = store.key.dsoParty
               val cmd = dsoRules.exercise(
                 _.exerciseDsoRules_OnboardValidator(

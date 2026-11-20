@@ -217,11 +217,11 @@ class PackageVetting(
         .toSeq
     } else packages
     if (latestPackagesOnly) {
-      logger.debug(
+      logger.info(
         s"Vetting only the latest packages: ${packagesToProcess.mkString(", ")} on $domainId valid from $validFrom"
       )
     } else {
-      logger.debug(
+      logger.info(
         s"Vetting packages: ${packages.mkString(", ")} on $domainId valid from $validFrom"
       )
     }

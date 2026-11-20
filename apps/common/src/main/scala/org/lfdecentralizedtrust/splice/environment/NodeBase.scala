@@ -200,7 +200,7 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
     withSpan(s"init $description")(implicit tc =>
       _ => {
         val startTime = Instant.now()
-        logger.debug(s"$appInitMessage: $description started")(tc)
+        logger.info(s"$appInitMessage: $description started")(tc)
         // Here we could pass on the trace context to inner function to make sure all log lines
         // produced by this initialization step are tagged with the same trace id.
         // However, some of our helper methods hold onto the trace context and use it for all future

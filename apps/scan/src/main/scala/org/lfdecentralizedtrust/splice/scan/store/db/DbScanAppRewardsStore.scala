@@ -726,7 +726,7 @@ class DbScanAppRewardsStore(
           _ <- assertCombinedMintingAllowanceWithinIssuanceBudget(roundNumber, params)
           _ <- computeRewardHashesAction(roundNumber, batchSize)
         } yield ())
-          .map(_ => logger.debug(s"Computed and stored rewards for round $roundNumber."))
+          .map(_ => logger.info(s"Computed and stored rewards for round $roundNumber."))
           .transactionally,
         "appRewards.computeAndStoreRewards",
       )
@@ -1185,7 +1185,7 @@ class DbScanAppRewardsStore(
         batchHashes = batchHashes.toLong,
         rootHashes = rootHashes.toLong,
       )).map { summary =>
-        logger.debug(s"Pruned reward accounting data for round $roundNumber: $summary")
+        logger.info(s"Pruned reward accounting data for round $roundNumber: $summary")
         summary
       }.transactionally,
       "appRewards.deleteRewardAccountingDataForRound",

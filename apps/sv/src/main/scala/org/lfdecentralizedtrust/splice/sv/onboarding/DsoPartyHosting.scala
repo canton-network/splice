@@ -92,7 +92,7 @@ class DsoPartyHosting(
           )
           .asRuntimeException()
       ) { mapping =>
-        logger.debug(show"the party to participant authorization $mapping has been observed")
+        logger.info(show"the party to participant authorization $mapping has been observed")
         mapping.base.validFrom
       },
     logger,

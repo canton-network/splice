@@ -265,7 +265,7 @@ class BulkStorageCommitFromStaging[T](
       .via(waitForBftAgreement)
       .via(copyToCommitted)
       .via(deleteFromStaging)
-      .wireTap(ts => logger.debug(s"Successfully committed objects for timestamp $ts"))
+      .wireTap(ts => logger.info(s"Successfully committed objects for timestamp $ts"))
 }
 
 object BulkStorageCommitFromStaging {

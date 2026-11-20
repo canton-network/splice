@@ -100,7 +100,7 @@ class AuthTokenManager(
       case Success(Some(authToken)) =>
         val nextState = HaveToken(authToken)
         state.set(nextState)
-        logger.debug(s"Token refresh complete, new token expires at: ${authToken.expiresAt}")
+        logger.info(s"Token refresh complete, new token expires at: ${authToken.expiresAt}")
         scheduleRefreshBefore(authToken.expiresAt)
         promise.success(nextState)
     }

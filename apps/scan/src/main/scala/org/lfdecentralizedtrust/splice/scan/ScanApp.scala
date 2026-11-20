@@ -199,7 +199,7 @@ class ScanApp(
       initialRound <- appInitStep("Get initial round from user metadata") {
         appInitConnection.getInitialRoundFromUserMetadata(config.svUser)
       }
-      _ = logger.debug(s"Started with initial round $initialRound")
+      _ = logger.info(s"Started with initial round $initialRound")
       participantAdminConnection = createParticipantAdminConnection()
       participantId <- appInitStep("Get participant id") {
         participantAdminConnection.getParticipantId()

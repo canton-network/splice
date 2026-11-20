@@ -229,7 +229,7 @@ abstract class NodeBootstrapBase[
         val instances =
           List(httpAdminService) ++ grpcAdminServers ++ getNode.toList ++ stores ++ List(clock)
         LifeCycle.close(instances*)(logger)
-        logger.debug(s"Successfully completed shutdown of $name")
+        logger.info(s"Successfully completed shutdown of $name")
       } else {
         logger.warn(
           s"Unnecessary second close of node $name invoked. Ignoring it.",

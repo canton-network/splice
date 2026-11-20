@@ -459,7 +459,7 @@ class SV1Initializer(
           mediatorDeduplicationTimeout =
             NonNegativeFiniteDuration.fromConfig(config.mediatorDeduplicationTimeout),
           onboardingRestriction = if (config.permissionedSynchronizer) {
-            logger.debug("Using RestrictedOpen onboarding restriction for the synchronizer")
+            logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
             RestrictedOpen
           } else {
             UnrestrictedOpen
@@ -505,7 +505,7 @@ class SV1Initializer(
                   )
                 sv1PermissionTx <-
                   if (config.permissionedSynchronizer) {
-                    logger.debug(
+                    logger.info(
                       "Proposing ParticipantSynchronizerPermission topology transaction for the SV1"
                     )
                     participantAdminConnection

@@ -776,7 +776,7 @@ class HttpWalletHandler(
                   val dedupOffset = Ordering[Long].min(preapprovalOffset, proposalOffSet)
                   createTransferPreapprovalProposal(userWallet, domain, dedupOffset)
               }
-              _ = logger.debug(
+              _ = logger.info(
                 s"Created TransferPreapprovalProposal with contract ID $proposalCid. Now waiting for automation to create the TransferPreapproval."
               )
               preapproval <- retryProvider.retry(
