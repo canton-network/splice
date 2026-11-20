@@ -228,15 +228,15 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
   }
 }
 
-/** Tests that expiry triggers fall back to V1 choices when alice's validator
-  * has only vetted minimal package versions (not splice-amulet 0.1.17+).
+/** Check that TAPS succeeds in expiring dust amulets when alice's validator
+  * has only vetted the minimal package versions, while the DSO uses newer ones.
   */
-class AmuletExpiryV1FallbackIntegrationTest
+class AmuletExpiryWithMinimalVettedPackagesIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
   override protected val enablePersistedUnavailableParties: Boolean = true
 
-  "Amulet expiry falls back to V1 choices when alice's validator has not vetted splice-amulet 0.1.17" in {
+  "Amulet expiry works when alice's validator has only vetted the minimal package versions" in {
     implicit env =>
       setupAliceWithDustAmulets()
       actAndCheck(timeUntilSuccess = 60.seconds)(
@@ -250,7 +250,7 @@ class AmuletExpiryV1FallbackIntegrationTest
           }
         },
       )(
-        "Dust amulets are expired via V1 choices",
+        "Dust amulets are expired",
         _ => {
           aliceWalletClient.list().amulets shouldBe empty withClue "dust amulets"
           aliceWalletClient.list().lockedAmulets shouldBe empty withClue "dust lockedAmulets"

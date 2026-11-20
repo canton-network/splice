@@ -56,7 +56,7 @@ class ExpireRewardCouponV2Trigger(
   ): Future[TaskOutcome] = {
     val expiredCoupons = task.work.expiredContracts
     // The batch is already split by the amulet version so we skip the whole batch.
-    // The amulet version here is same as supportsTrafficBasedAppRewards.
+    // RewardCouponV2 was introduced in amulet 0.1.19.
     if (task.work.vettedVersion < DarResources.amulet_0_1_19.metadata.version) {
       Future.successful(
         TaskSuccess(

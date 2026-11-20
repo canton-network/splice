@@ -1506,6 +1506,10 @@ abstract class MultiDomainAcsStoreTest[
       val versionSupport = new PackageVersionSupport {
         override def loggerFactory: NamedLoggerFactory = outerLoggerFactory
         // Not actually relevant, but required by the trait
+        override def preferredPackageIds(
+            packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
+            at: CantonTimestamp,
+        )(implicit tc: TraceContext): Future[Seq[String]] = Future.successful(Seq.empty)
         override def isPackageSupported(
             packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
             at: CantonTimestamp,
