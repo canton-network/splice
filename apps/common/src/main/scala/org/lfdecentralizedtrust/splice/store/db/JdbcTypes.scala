@@ -7,6 +7,8 @@ import com.digitalasset.canton.config.CantonRequireTypes.String2066
 import com.digitalasset.canton.topology.PartyId
 import slick.jdbc.*
 
+import java.nio.ByteBuffer
+import java.nio.charset.{CodingErrorAction, StandardCharsets}
 import java.sql.JDBCType
 
 trait JdbcTypes {
@@ -16,9 +18,26 @@ trait JdbcTypes {
 
   /** The DB may truncate strings of unbounded length, so it's advised to use a LengthLimitedString instead.
     * We use String2066 because it's the max length of an [[com.digitalasset.canton.protocol.LfTemplateId]].
-    * Truncates instead of failing, as ingestion must not stop on an over-long value.
+    * Truncates instead of failing, as ingestion must not stop on an over-long value. The bound is in
+    * UTF-8 bytes rather than characters because these values are indexed, and Postgres rejects btree
+    * entries above 2704 bytes.
     */
-  protected def lengthLimited(s: String): String2066 = String2066.createWithTruncation(s)
+  protected def lengthLimited(s: String): String2066 =
+    String2066.createWithTruncation(truncateToMaxIndexBytes(s))
+
+  private val maxIndexColumnBytes = 2000
+
+  private def truncateToMaxIndexBytes(s: String): String = {
+    val bytes = s.getBytes(StandardCharsets.UTF_8)
+    if (bytes.length <= maxIndexColumnBytes) s
+    else
+      StandardCharsets.UTF_8
+        .newDecoder()
+        .onMalformedInput(CodingErrorAction.IGNORE)
+        .onUnmappableCharacter(CodingErrorAction.IGNORE)
+        .decode(ByteBuffer.wrap(bytes, 0, maxIndexColumnBytes))
+        .toString
+  }
 
   protected implicit def partyIdGetResult[T]: GetResult[PartyId] =
     GetResult.GetString.andThen(PartyId.tryFromProtoPrimitive)

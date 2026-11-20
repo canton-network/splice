@@ -288,6 +288,21 @@ testSvOnboardingTextTooLong = do
   requests <- query @SvOnboardingRequest dso
   requests === []
 
+  -- text of exactly the configured maximum is still accepted
+  let maxLengthText = T.implode (replicate dsoRules.config.maxTextLength "x")
+  submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding maxLengthText svX "svX-participant-id" "mock-token" sv2
+
+  [(_, request)] <- query @SvOnboardingRequest dso
+  request === SvOnboardingRequest with
+    candidateName = maxLengthText
+    candidateParty = svX
+    candidateParticipantId = "svX-participant-id"
+    token = "mock-token"
+    sponsor = sv2
+    dso
+    expiresAt = request.expiresAt
+
 
 testSvOnboardingRequestExpiry : Script ()
 testSvOnboardingRequestExpiry = do

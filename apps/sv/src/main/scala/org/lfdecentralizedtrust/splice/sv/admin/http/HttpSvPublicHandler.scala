@@ -189,33 +189,39 @@ class HttpSvPublicHandler(
   )(extracted: TraceContext): Future[r0.StartSvOnboardingResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.startSvOnboarding") { _ => _ =>
-      SvOnboardingToken.verifyAndDecode(body.token) match {
-        case Left(error) =>
-          Future.failed(
-            HttpErrorHandler.badRequest(s"Could not verify and decode token: $error")
-          )
-        case Right(token) =>
-          for {
-            dsoRules <- dsoStore.getDsoRules()
-            maxTextLength = dsoRules.payload.config.maxTextLength.longValue
-            isCandidatePartyHostedOnParticipant <- participantAdminConnection
+      for {
+        dsoRules <- dsoStore.getDsoRules()
+        maxTextLength = dsoRules.payload.config.maxTextLength.longValue
+        outcome <-
+          if (body.token.length > maxTextLength)
+            Future.failed(
+              HttpErrorHandler.badRequest(
+                s"Onboarding token is longer than the maximum of $maxTextLength characters."
+              )
+            )
+          else
+            SvOnboardingToken.verifyAndDecode(body.token) match {
+              case Left(error) =>
+                Future.failed(
+                  HttpErrorHandler.badRequest(s"Could not verify and decode token: $error")
+                )
+              case Right(token) =>
+                for {
+                  isCandidatePartyHostedOnParticipant <- participantAdminConnection
               .listPartyToParticipant(
                 TopologyStoreId.Synchronizer(dsoRules.domain).some,
                 filterParty = token.candidateParty.filterString,
                 filterParticipant = token.candidateParticipantId.toProtoPrimitive,
               )
               .map(_.nonEmpty)
-            res <-
-              if (
-                body.token.length > maxTextLength ||
-                token.candidateName.length > maxTextLength
-              ) {
-                Future.failed(
-                  HttpErrorHandler.badRequest(
-                    s"Onboarding token or candidate name is longer than the maximum of $maxTextLength characters."
-                  )
-                )
-              } else if (
+                  res <-
+                    if (token.candidateName.length > maxTextLength) {
+                      Future.failed(
+                        HttpErrorHandler.badRequest(
+                          s"Candidate name is longer than the maximum of $maxTextLength characters."
+                        )
+                      )
+                    } else if (
                 !SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)
               ) {
                 Future.failed(
@@ -272,8 +278,9 @@ class HttpSvPublicHandler(
                           Future.successful(r0.StartSvOnboardingResponseOK)
                       }
                 }
-          } yield res
-      }
+                } yield res
+            }
+      } yield outcome
     }
   }
 

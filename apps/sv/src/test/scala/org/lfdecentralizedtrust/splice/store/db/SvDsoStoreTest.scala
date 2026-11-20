@@ -3125,6 +3125,19 @@ class DbSvDsoStoreTest
         result <- store.lookupSvOnboardingRequestByCandidateParty(userParty(1))
       } yield result should be(Some(created))
     }
+
+    "be found by the columns that were truncated" in {
+      val created = request
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(created)(store.multiDomainAcsStore)
+        byToken <- store.lookupSvOnboardingRequestByTokenWithOffset(longText)
+        byName <- store.lookupSvOnboardingRequestByCandidateName(longText)
+      } yield {
+        byToken.value should be(Some(created))
+        byName should be(Some(created))
+      }
+    }
   }
 
   "listProvisionalGovernanceLocksWithFeaturedAppRightSample" should {
