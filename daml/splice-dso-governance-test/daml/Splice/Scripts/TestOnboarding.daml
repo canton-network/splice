@@ -284,6 +284,8 @@ testSvOnboardingTextTooLong = do
     DsoRules_StartSvOnboarding "svX" svX "svX-participant-id" tooLongText sv2
   submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
     DsoRules_StartSvOnboarding tooLongText svX "svX-participant-id" "mock-token" sv2
+  submitMustFail (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid $
+    DsoRules_StartSvOnboarding "svX" svX tooLongText "mock-token" sv2
 
   requests <- query @SvOnboardingRequest dso
   requests === []
