@@ -44,13 +44,10 @@ abstract class PollingParallelTaskExecutionTrigger[T: Pretty]()(implicit
         .runWith(Sink.seq)
     } yield tasksSucceeded.exists(succeeded => succeeded)
 
-  override def rawRunOnce()(implicit traceContext: TraceContext): Future[Boolean] =
-    runOnceWithOutcome().map(_.exists(TaskbasedTrigger.isWorkDone))
-
   /** Runs the trigger once on the first task that is ready, and returns that task's outcome,
     * or None if no task was ready.
     */
-  def runOnceWithOutcome()(implicit traceContext: TraceContext): Future[Option[TaskOutcome]] =
+  def runOnceWithTaskOutcome()(implicit traceContext: TraceContext): Future[Option[TaskOutcome]] =
     for {
       tasks <- retrieveTasks()
       outcome <- tasks.headOption match {

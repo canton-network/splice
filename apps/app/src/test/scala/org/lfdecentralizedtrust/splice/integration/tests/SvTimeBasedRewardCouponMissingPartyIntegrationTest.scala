@@ -74,7 +74,7 @@ class SvTimeBasedRewardCouponMissingPartyIntegrationTest
                 advanceRoundsToNextRoundOpening
                 // The outcome is not asserted: the test only checks the logged warnings, and the
                 // run is retried together with the round advancement.
-                sv1RewardCouponTrigger.runOnceWithOutcome().futureValue.discard
+                sv1RewardCouponTrigger.runOnceWithTaskOutcome().futureValue.discard
                 eventually() {
                   val openRounds = sv1ScanBackend
                     .getOpenAndIssuingMiningRounds()

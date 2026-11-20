@@ -65,7 +65,7 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
     def trigger = sv1Backend.dsoAutomation.trigger[FollowAmuletConversionRateFeedTrigger]
     // The outcome is not asserted: callers check the resulting price vote instead, and some of them
     // retry the run until the trigger sees the updated feed.
-    def runTrigger(): Unit = trigger.runOnceWithOutcome().futureValue.discard
+    def runTrigger(): Unit = trigger.runOnceWithTaskOutcome().futureValue.discard
 
     val publisher = aliceValidatorBackend.getValidatorPartyId()
 

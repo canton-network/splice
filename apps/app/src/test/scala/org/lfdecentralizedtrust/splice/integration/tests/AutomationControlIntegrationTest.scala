@@ -206,13 +206,13 @@ class AutomationControlIntegrationTest
     // Resuming the trigger
     // ------------------------------------------------------------------------
 
-    // Note: aliceMergeAmuletsTrigger.rawRunOnce().futureValue guarantees that the amulets have been merged
+    // Note: runOnePollingIteration() returning true means that the amulets have been merged
     // on the ledger, but this might not immediately be visible in the wallet app.
     actAndCheck(
       "Run merge amulets automation once",
-      // Note: rawRunOnce() does nothing if there is no work to be done, but in this case we know
+      // Note: runOnePollingIteration() does nothing if there is no work to be done, but in this case we know
       // that the user wallet store knows about 2 amulets
-      aliceMergeAmuletsTrigger.rawRunOnce().futureValue,
+      aliceMergeAmuletsTrigger.runOnePollingIteration().futureValue,
     )(
       "Verify that amulets were merged",
       workDone => {

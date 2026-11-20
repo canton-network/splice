@@ -452,7 +452,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           // may legitimately be archived by this run.
           sv1Backend.dsoDelegateBasedAutomation
             .trigger[ExpireRewardCouponV2Trigger]
-            .runOnceWithOutcome()
+            .runOnceWithTaskOutcome()
             .futureValue
             .discard
           val remaining = sv1Backend.appState.dsoStore
@@ -477,7 +477,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           // may already have archived the coupons; this run only speeds things up.
           sv1Backend.dsoDelegateBasedAutomation
             .trigger[ExpireRewardCouponV2Trigger]
-            .runOnceWithOutcome()
+            .runOnceWithTaskOutcome()
             .futureValue
             .discard
           val remaining = sv1Backend.appState.dsoStore

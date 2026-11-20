@@ -163,7 +163,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         svBackends.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
       val calculateRewardsTriggers =
         svBackends.map(_.dsoAutomation.trigger[CalculateRewardsTrigger])
-      // Paused so we can drive it deterministically via rawRunOnce; it owns the
+      // Paused so we can drive it deterministically via runOnePollingIteration; it owns the
       // calculate_rewards_v2/process_rewards_v2 active_contracts gauges.
       val sv1RewardMetricsTrigger = sv1Backend.dsoAutomation.trigger[RewardMetricsTrigger]
       val processRewardsTriggers =
@@ -226,7 +226,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
               mintingTasks should contain(8)
               mintingTasks should not contain (6)
 
-              sv1RewardMetricsTrigger.rawRunOnce().futureValue
+              sv1RewardMetricsTrigger.runOnePollingIteration().futureValue
 
               val dryRunMetric =
                 metricValue(
@@ -280,7 +280,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
         clue("ProcessRewardsV2 are created and RewardMetricsTrigger reports active counts") {
           eventually() {
-            sv1RewardMetricsTrigger.rawRunOnce().futureValue
+            sv1RewardMetricsTrigger.runOnePollingIteration().futureValue
             metricValue(
               sv1Backend,
               "process_rewards_v2.active_contracts",
@@ -343,7 +343,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
           triggersToPauseAtStart = Seq(sv1RewardMetricsTrigger)
         ) {
           eventually() {
-            sv1RewardMetricsTrigger.rawRunOnce().futureValue
+            sv1RewardMetricsTrigger.runOnePollingIteration().futureValue
             metricValue(
               sv1Backend,
               "reward_coupon_v2.active_contracts",
@@ -845,7 +845,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     def pruneUntilNothingLeftToPrune(trigger: PruneRewardAccountingTrigger): Unit = {
       @tailrec def go(runs: Int): Unit = {
         runs should be < 30
-        if (trigger.runOnceWithOutcome().futureValue.isDefined) go(runs + 1) else ()
+        if (trigger.runOnceWithTaskOutcome().futureValue.isDefined) go(runs + 1) else ()
       }
       go(0)
     }

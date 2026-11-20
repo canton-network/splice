@@ -311,7 +311,8 @@ abstract class WalletSweepIntegrationTest
         .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
         .futureValue
         .trigger[WalletPreapprovalSweepTrigger]
-        .runOnceWithOutcome()
+        // Not a TriggerTestUtil helper, as retrieving the tasks fails, so there is no task outcome.
+        .runOnceWithTaskOutcome()
         .failed
         .futureValue
     ) { case ex: StatusRuntimeException =>

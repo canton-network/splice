@@ -46,8 +46,8 @@ trait TriggerTestUtil { self: BaseTest =>
 
   /** Runs the (paused) trigger until it completes a task successfully.
     *
-    * Use this instead of `rawRunOnce()` whenever the test relies on the task being done afterwards:
-    * `rawRunOnce()` also reports work done if the task failed and was skipped as stale, e.g.,
+    * Use this instead of `runOnePollingIteration()` whenever the test relies on the task being done afterwards:
+    * `runOnePollingIteration()` also reports work done if the task failed and was skipped as stale, e.g.,
     * because a contract it used was archived concurrently. Do not call this within another
     * `eventually`, as retries of the outer block would run the trigger again.
     */
@@ -56,7 +56,7 @@ trait TriggerTestUtil { self: BaseTest =>
       timeUntilSuccess: FiniteDuration = BaseTest.DefaultEventuallyTimeUntilSuccess,
   ): Unit =
     eventually(timeUntilSuccess) {
-      trigger.runOnceWithOutcome().futureValue match {
+      trigger.runOnceWithTaskOutcome().futureValue match {
         case Some(_: TaskSuccess) => ()
         case outcome =>
           fail(s"Expected a task to complete successfully, but the outcome was $outcome")
@@ -75,13 +75,13 @@ trait TriggerTestUtil { self: BaseTest =>
       timeUntilSuccess: FiniteDuration = BaseTest.DefaultEventuallyTimeUntilSuccess,
   )(check: => Unit): Unit =
     eventually(timeUntilSuccess) {
-      trigger.runOnceWithOutcome().futureValue.discard
+      trigger.runOnceWithTaskOutcome().futureValue.discard
       check
     }
 
   /** Runs the (paused) trigger once and checks that no task was ready. */
   def runExpectingNoTask(trigger: PollingParallelTaskExecutionTrigger[?]): Unit =
-    trigger.runOnceWithOutcome().futureValue shouldBe None
+    trigger.runOnceWithTaskOutcome().futureValue shouldBe None
 
   def advanceRoundsByOneTickViaAutomation(
       timeUntilSuccess: FiniteDuration = BaseTest.DefaultEventuallyTimeUntilSuccess

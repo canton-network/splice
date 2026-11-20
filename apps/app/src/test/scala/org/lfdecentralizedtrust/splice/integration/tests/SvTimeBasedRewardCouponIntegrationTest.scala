@@ -326,7 +326,7 @@ class SvTimeBasedRewardCouponIntegrationTest
             advanceRoundsToNextRoundOpening
             // The outcome is not asserted: the checks below concern the rounds and coupons,
             // and a retry advances to the next round and runs the trigger again.
-            sv4RewardCouponTrigger.runOnceWithOutcome().futureValue.discard
+            sv4RewardCouponTrigger.runOnceWithTaskOutcome().futureValue.discard
             val openRounds = eventually() {
               val openRounds = sv1ScanBackend
                 .getOpenAndIssuingMiningRounds()
