@@ -3,6 +3,7 @@
 import { Optional } from '@daml/types';
 import {
   AmuletConfig,
+  CredentialRegistryConfig,
   GovernanceLockConfig,
   PackageConfig,
   RewardConfig,
@@ -142,6 +143,11 @@ export function buildAmuletConfigChanges(
     },
 
     ...buildGovernanceLockConfigChanges(before?.governanceLockConfig, after?.governanceLockConfig),
+
+    ...buildCredentialRegistryConfigChanges(
+      before?.credentialRegistryConfig,
+      after?.credentialRegistryConfig
+    ),
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);
@@ -524,6 +530,28 @@ function buildGovernanceLockConfigChanges(
       currentValue: before?.featuredAppLockVestingDuration?.microseconds || '',
       newValue: after?.featuredAppLockVestingDuration?.microseconds || '',
       description: 'Vesting duration for featured app governance locks (default: 60 days)',
+    },
+  ] as ConfigChange[];
+}
+
+function buildCredentialRegistryConfigChanges(
+  before: Optional<CredentialRegistryConfig> | undefined,
+  after: Optional<CredentialRegistryConfig> | undefined
+) {
+  return [
+    {
+      fieldName: 'credentialRegistryConfigFreePeriod',
+      label: 'Credential registry: free period (microseconds)',
+      currentValue: before?.freePeriod.microseconds || '',
+      newValue: after?.freePeriod.microseconds || '',
+      description: 'Free registry lease added on issuance and extension (recommended: 90 days)',
+    },
+    {
+      fieldName: 'credentialRegistryConfigExtensionUsdPerYear',
+      label: 'Credential registry: extension fee (USD per year)',
+      currentValue: before?.extensionUsdPerYear || '',
+      newValue: after?.extensionUsdPerYear || '',
+      description: 'USD price of one extra year of registry lease (recommended: 1.0)',
     },
   ] as ConfigChange[];
 }

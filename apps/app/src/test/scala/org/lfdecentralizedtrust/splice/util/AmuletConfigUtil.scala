@@ -74,6 +74,7 @@ trait AmuletConfigUtil extends TestCommon {
       existingAmuletConfig.minDevelopmentFundMintingDelay,
       existingAmuletConfig.amuletSwitchOverTimes,
       existingAmuletConfig.governanceLockConfig,
+      existingAmuletConfig.credentialRegistryConfig,
     )
   }
 
@@ -97,6 +98,7 @@ trait AmuletConfigUtil extends TestCommon {
       config.minDevelopmentFundMintingDelay,
       config.amuletSwitchOverTimes,
       config.governanceLockConfig,
+      config.credentialRegistryConfig,
     )
 
   def setAmuletConfig(

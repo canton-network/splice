@@ -635,7 +635,7 @@ testExpireAmuletTransferInstruction = do
 
   submitMustFail (actAs sv1 <> readAs app.dso) $
     exerciseCmd dsoRulesCid DsoRules_Amulet_ExpireTransferInstructions with
-      amuletRulesCid = amuletRulesCid
+      amuletRulesCid
       transferInsts = expireBatchChoice
       sv = sv1
 
@@ -643,7 +643,7 @@ testExpireAmuletTransferInstruction = do
 
   submit (actAs sv1 <> readAs app.dso) $
     exerciseCmd dsoRulesCid DsoRules_Amulet_ExpireTransferInstructions with
-      amuletRulesCid = amuletRulesCid
+      amuletRulesCid
       transferInsts = expireBatchChoice
       sv = sv1
 
@@ -725,7 +725,7 @@ testExpireTransferInstructionAlreadyUnlocked = do
 
   submitMustFail (actAs sv1 <> readAs app.dso) $
     exerciseCmd dsoRulesCid DsoRules_Amulet_ExpireTransferInstructions with
-      amuletRulesCid = amuletRulesCid
+      amuletRulesCid
       transferInsts = expireBatchChoiceTrue
       sv = sv1
 
@@ -738,7 +738,7 @@ testExpireTransferInstructionAlreadyUnlocked = do
 
   submit (actAs sv1 <> readAs app.dso) $
     exerciseCmd dsoRulesCid DsoRules_Amulet_ExpireTransferInstructions with
-      amuletRulesCid = amuletRulesCid
+      amuletRulesCid
       transferInsts = expireBatchChoiceFalse
       sv = sv1
 
@@ -773,7 +773,7 @@ testExpireAmuletAllocation = do
       expectedAdmin = app.dso
       allocation = AllocationV1.AllocationSpecification with
         settlement = AllocationV1.SettlementInfo with
-          executor = executor
+          executor
           settlementRef = AllocationV1.Reference "test-settlement" None
           requestedAt = now
           allocateBefore = now `addRelTime` minutes 30
@@ -782,7 +782,7 @@ testExpireAmuletAllocation = do
         transferLegId = "leg-1"
         transferLeg = AllocationV1.TransferLeg with
           sender = sender.primaryParty
-          receiver = receiver
+          receiver
           amount = totalBalance
           instrumentId = registry.instrumentId
           meta = emptyMetadata
@@ -868,7 +868,7 @@ testExpireAmuletAllocationAlreadyUnlocked = do
       expectedAdmin = app.dso
       allocation = AllocationV1.AllocationSpecification with
         settlement = AllocationV1.SettlementInfo with
-          executor = executor
+          executor
           settlementRef = AllocationV1.Reference "test-settlement" None
           requestedAt = now
           allocateBefore = now `addRelTime` minutes 30
@@ -877,7 +877,7 @@ testExpireAmuletAllocationAlreadyUnlocked = do
         transferLegId = "leg-1"
         transferLeg = AllocationV1.TransferLeg with
           sender = sender.primaryParty
-          receiver = receiver
+          receiver
           amount = totalBalance
           instrumentId = registry.instrumentId
           meta = emptyMetadata
@@ -958,7 +958,7 @@ testExpireAmuletAllocationV2 = do
   WalletClientV2.allocateV1 registries
        AllocationV1.AllocationSpecification with
         settlement = AllocationV1.SettlementInfo with
-          executor = executor
+          executor
           settlementRef = AllocationV1.Reference "test-settlement" None
           requestedAt = now
           allocateBefore = now `addRelTime` minutes 30
@@ -966,8 +966,8 @@ testExpireAmuletAllocationV2 = do
           meta = emptyMetadata
         transferLegId = "leg-1"
         transferLeg = AllocationV1.TransferLeg with
-          sender = sender
-          receiver = receiver
+          sender
+          receiver
           amount = 10.0
           instrumentId = registry.instrumentId
           meta = emptyMetadata

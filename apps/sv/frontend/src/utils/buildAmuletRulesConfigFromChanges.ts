@@ -25,6 +25,30 @@ function nullIfAllNull<A extends Record<string, unknown>>(a: A): A | null {
   return Object.values(a).some(v => v !== null) ? a : null;
 }
 
+// Both fields of the credential registry config are required. Empty fields disable the registry.
+// The form rejects a submission with only one of them set, see credentialRegistryConfigError.
+function credentialRegistryConfig(
+  freePeriodMicroseconds: string | null,
+  extensionUsdPerYear: string | null
+): { freePeriod: { microseconds: string }; extensionUsdPerYear: string } | null {
+  return freePeriodMicroseconds !== null && extensionUsdPerYear !== null
+    ? { freePeriod: { microseconds: freePeriodMicroseconds }, extensionUsdPerYear }
+    : null;
+}
+
+/**
+ * The error to show when only one of the two credential registry fields is set.
+ * Takes all config changes, changed or not.
+ */
+export function credentialRegistryConfigError(changes: ConfigChange[]): string | undefined {
+  const isEmpty = (fieldName: string) =>
+    (changes.find(change => change.fieldName === fieldName)?.newValue ?? '') === '';
+  return isEmpty('credentialRegistryConfigFreePeriod') !==
+    isEmpty('credentialRegistryConfigExtensionUsdPerYear')
+    ? 'Credential registry: set both the free period and the extension fee, or leave both empty'
+    : undefined;
+}
+
 /**
  * Given a list of config changes, build and return an AmuletConfig<'USD'>.
  * The config changes should have all fields, whether they have been changed or not.
@@ -228,6 +252,11 @@ export function buildAmuletRulesConfigFromChanges(
         getValue('governanceLockConfigFeaturedAppLockVestingDuration', true)
       ),
     }),
+
+    credentialRegistryConfig: credentialRegistryConfig(
+      getValue('credentialRegistryConfigFreePeriod', true),
+      getValue('credentialRegistryConfigExtensionUsdPerYear', true)
+    ),
   };
 
   return amuletConfig;
