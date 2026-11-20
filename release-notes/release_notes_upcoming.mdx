@@ -14,6 +14,12 @@
       endpoints. Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0,
       this removes the remaining parts.
 
+  - Helm charts
+
+    - The values schemas of all Helm charts now set `unevaluatedProperties: false`:
+      unknown Helm values keys (i.e., keys that are not part of the schema) now cause
+      `helm template` / `lint` / `install` to fail instead of being silently ignored.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,
