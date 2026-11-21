@@ -137,7 +137,8 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppAndAssetActivityRecordT
 
 import scala.collection.immutable.SortedMap
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanAppRewardsStore, DbVotesStore}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.VotesBackfillCursor
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.util.{
   Codec,
@@ -175,6 +176,7 @@ class HttpScanHandler(
     snapshotStore: AcsSnapshotStore,
     eventStore: ScanEventStore,
     historicalVotesStore: HistoricalVotesStore,
+    votesStore: DbVotesStore,
     bulkStorage: Option[BulkStorageReader],
     scanApiMetrics: ScanHttpApiMetrics,
     dsoAnsResolver: DsoAnsResolver,
@@ -2490,6 +2492,7 @@ class HttpScanHandler(
   )()(extracted: TraceContext): Future[ScanResource.GetBackfillingStatusResponse] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getBackfillingStatus") { _ => _ =>
+      // TODO(#7728) include the votes store backfilling once we switch over the HTTP endpoints
       for {
         updateHistoryStatus <- updateHistory.getBackfillingState()
         txLogStatus <- store.multiDomainAcsStore.getTxLogBackfillingState()
@@ -2502,6 +2505,97 @@ class HttpScanHandler(
       )
     }
   }
+
+  /** Whether this Scan holds all vote results before `before`: its own backfilling must be
+    * complete (for the votes before its first ingested one), and its ingestion must have reached
+    * `before` (for the votes after it). The votes are ingested together with the ACS store, so
+    * it is the progress of that store that counts, not the progress of the update history.
+    */
+  private def votesAvailability(before: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[definitions.VotesAvailability] =
+    votesStore.isBackfillingComplete().map {
+      case false => definitions.VotesAvailability.Backfilling
+      case true =>
+        val acsStore = store.multiDomainAcsStore
+        if (acsStore.lastIngestedRecordTimes.get(acsStore.synchronizerId).exists(_ >= before))
+          definitions.VotesAvailability.Available
+        else definitions.VotesAvailability.Ingesting
+    }
+
+  override def getVotesBackfillingStatus(
+      respond: ScanResource.GetVotesBackfillingStatusResponse.type
+  )(beforeRecordTime: OffsetDateTime)(
+      extracted: TraceContext
+  ): Future[ScanResource.GetVotesBackfillingStatusResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getVotesBackfillingStatus") { _ => _ =>
+      votesAvailability(CantonTimestamp.assertFromInstant(beforeRecordTime.toInstant)).map(
+        availability =>
+          ScanResource.GetVotesBackfillingStatusResponse.OK(
+            definitions.GetVotesBackfillingStatusResponse(availability)
+          )
+      )
+    }
+  }
+
+  override def getVotesBefore(respond: ScanResource.GetVotesBeforeResponse.type)(
+      body: definitions.GetVotesBeforeRequest
+  )(extracted: TraceContext): Future[ScanResource.GetVotesBeforeResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getVotesBefore") { _ => _ =>
+      val before = VotesBackfillCursor(
+        CantonTimestamp.assertFromInstant(body.beforeRecordTime.toInstant),
+        body.beforeEventNumber,
+      )
+      val limit = PageLimit.tryCreate(body.count)
+      votesAvailability(before.recordTime).flatMap {
+        case definitions.VotesAvailability.Available =>
+          votesStore
+            .listBackfillPage(before, limit)
+            .map(rows =>
+              ScanResource.GetVotesBeforeResponse.OK(
+                definitions.GetVotesBeforeResponse(
+                  rows.map(encodeVoteResultForBackfilling).toVector
+                )
+              )
+            )
+        case availability =>
+          Future.failed(
+            Status.FAILED_PRECONDITION
+              .withDescription(
+                s"This Scan cannot serve vote results before ${before.recordTime} yet: $availability"
+              )
+              .asRuntimeException()
+          )
+      }
+    }
+  }
+
+  private def encodeVoteResultForBackfilling(
+      row: DbVotesStore.ServedVoteResult
+  ): definitions.VoteResultForBackfilling =
+    definitions.VoteResultForBackfilling(
+      recordTime = row.recordTime.toInstant.atOffset(ZoneOffset.UTC),
+      synchronizerId = row.synchronizerId,
+      updateId = row.updateId,
+      eventNumber = row.eventNumber,
+      // Failing here makes peers backfill this page from other Scans, instead of spreading the gap.
+      contractId = row.contractId.getOrElse(
+        throw new IllegalStateException(
+          s"The stored vote result at ${row.recordTime} has no contract id"
+        )
+      ),
+      choiceResult = io.circe.parser
+        .parse(row.choiceResult)
+        .fold(
+          error =>
+            throw new IllegalStateException(
+              s"The stored vote result at ${row.recordTime} is not valid JSON: $error"
+            ),
+          identity,
+        ),
+    )
 
   override def featureSupport(respond: ScanResource.FeatureSupportResponse.type)()(
       extracted: TraceContext
