@@ -26,9 +26,8 @@ import scala.util.{Failure, Success}
 /** Backfills `votes_store_results` with the vote results from before the first transaction that
   * the votes store ingested (see `DbVotesStore.getFirstIngestedRecordTime`).
   *
-  * - A Scan that already has a txlog is migrated by the Flyway migration `V084__votes_store_from_txlog.sql`,
-  *   which copies the vote results of the txlog (and sets the backfilling cursor to where the txlog starts),
-  *   and marks backfilling as complete if the txlog is.
+  * - A Scan whose txlog is fully backfilled is migrated by the Flyway migration `V084__votes_store_from_txlog.sql`,
+  *   which copies the vote results of the txlog and marks backfilling as complete.
   * - The Scan of the founding SV ingests everything from the start of the network, so there is nothing
   *   to backfill: it is complete right away.
   * - All other Scans read from peer Scans, until the peers say that there is nothing older.
