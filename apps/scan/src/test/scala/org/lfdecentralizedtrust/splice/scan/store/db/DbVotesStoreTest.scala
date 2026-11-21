@@ -821,6 +821,16 @@ class DbVotesStoreTest
         }
       }
 
+      "extract the same rows from a transaction of the update history as the ingestion does" in {
+        val storeId = 42
+        forAll(voteFixtures) { fixture =>
+          val tx = mkFixtureTx(fixture)(1L)
+          val backfilled = DbVotesStore.backfilledVoteResults(tx).map(_.toInsert(storeId))
+          backfilled should have size fixture.votes.size.toLong
+          backfilled shouldBe DbVotesStore.parseTransaction(tx, storeId)
+        }
+      }
+
       "refuse to decode a result that cannot be decoded, instead of storing a placeholder" in {
         val thrown = the[DbVotesStore.UndecodablePeerVoteResult] thrownBy DbVotesStore
           .EncodedPeerVoteResult(

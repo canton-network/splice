@@ -81,6 +81,7 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.scan.store.votesbackfilling.{
   BftPeerVotesSource,
+  UpdateHistoryVotesSource,
   VotesStoreBackfilling,
 }
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{
@@ -287,7 +288,13 @@ class ScanApp(
         new VotesStoreBackfilling(
           config.votesStoreBackfillingPollingInterval,
           config.votesStoreBackfillingPageSize,
-          config.isFirstSv,
+          config.votesStoreBackfillingMaxLocalHistory,
+          new UpdateHistoryVotesSource(
+            updateHistory,
+            store.key.dsoParty,
+            domainMigrationId,
+            loggerFactory,
+          ),
           peers,
           historicalVotesStore,
           loggerFactory,
