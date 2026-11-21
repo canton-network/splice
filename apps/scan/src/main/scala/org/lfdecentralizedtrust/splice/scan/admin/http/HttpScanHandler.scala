@@ -2477,17 +2477,19 @@ class HttpScanHandler(
 
   /** Whether this Scan holds all vote results before `before`: its own backfilling must be
     * complete (for the votes before its first ingested one), and its ingestion must have reached
-    * `before` (for the votes after it). Relies on votes only existing on the main synchronizer,
-    * as `UpdateHistory.lastIngestedRecordTime` does not distinguish synchronizers.
+    * `before` (for the votes after it). The votes are ingested together with the ACS store, so
+    * it is the progress of that store that counts, not the progress of the update history.
     */
   private def votesAvailability(before: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[definitions.VotesAvailability] =
     votesStore.isBackfillingComplete().map {
       case false => definitions.VotesAvailability.Backfilling
-      case true if updateHistory.lastIngestedRecordTime.exists(_ >= before) =>
-        definitions.VotesAvailability.Available
-      case true => definitions.VotesAvailability.Ingesting
+      case true =>
+        val acsStore = store.multiDomainAcsStore
+        if (acsStore.lastIngestedRecordTimes.get(acsStore.synchronizerId).exists(_ >= before))
+          definitions.VotesAvailability.Available
+        else definitions.VotesAvailability.Ingesting
     }
 
   override def getVotesBackfillingStatus(
