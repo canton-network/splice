@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.scan.store.votesbackfilling
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import org.apache.pekko.stream.scaladsl.Sink
@@ -113,16 +114,57 @@ class VotesStoreBackfillingTest
     }
   }
 
+  private val synchronizerId = SynchronizerId.tryFromString("synchronizer::id")
+
+  /** An update history that starts with the founding transaction at `foundingSeconds`. */
+  private def fromGenesis(foundingSeconds: Int, ingestedUpTo: Option[Int]) =
+    LocalVotesSource.FromGenesis(synchronizerId, ts(foundingSeconds), ingestedUpTo.map(ts))
+
+  /** Answers `historyStart` in order, staying at the last answer, and the page requests in order. */
+  private class ScriptedLocal(
+      starts: Seq[LocalVotesSource.HistoryStart],
+      pages: Try[LocalVotesSource.Page]*
+  ) extends LocalVotesSource {
+    private val remainingStarts = new AtomicReference(starts.toList)
+    private val remainingPages = new AtomicReference(pages.toList)
+    val calls = new AtomicReference(Vector.empty[(CantonTimestamp, Int)])
+
+    override def historyStart()(implicit tc: TraceContext) =
+      Future.successful(
+        remainingStarts.getAndUpdate(s => if (s.sizeIs > 1) s.drop(1) else s).headOption.value
+      )
+
+    override def votesBefore(
+        start: LocalVotesSource.FromGenesis,
+        before: CantonTimestamp,
+        count: Int,
+    )(implicit tc: TraceContext) = {
+      calls.updateAndGet(_ :+ (before -> count))
+      remainingPages.getAndUpdate(_.drop(1)).headOption match {
+        case Some(response) => Future.fromTry(response)
+        case None => Future.failed(new IllegalStateException("no more pages scripted"))
+      }
+    }
+  }
+
+  private def page(oldestSeconds: Int, votes: PeerVoteResult*) =
+    Success(LocalVotesSource.Page(votes, Some(ts(oldestSeconds))))
+  private val noOlderUpdates = Success(LocalVotesSource.Page(Seq.empty, None))
+
+  private val notFromGenesis = new ScriptedLocal(Seq(LocalVotesSource.NotFromGenesis))
+
   private def service(
       store: FakeStore,
       peers: PeerVotesSource,
-      isFirstSv: Boolean = false,
+      local: LocalVotesSource = notFromGenesis,
       pageSize: Int = 2,
+      maxLocalHistorySeconds: Int = 1000,
   ) =
     new VotesStoreBackfilling(
       NonNegativeFiniteDuration.ofMillis(10),
       pageSize,
-      isFirstSv,
+      NonNegativeFiniteDuration.ofSeconds(maxLocalHistorySeconds.toLong),
+      local,
       peers,
       store,
       loggerFactory,
@@ -130,27 +172,117 @@ class VotesStoreBackfillingTest
 
   "VotesStoreBackfilling" should {
 
-    "complete right away on the Scan of the founding SV, without asking peers" in {
-      val store = new FakeStore(firstIngested = None)
+    "copy from the update history if it starts with the founding transaction, without asking peers" in {
+      val store = new FakeStore(Some(ts(100)))
       val peers = new ScriptedPeers()
-      service(store, peers, isFirstSv = true).mksrc().runWith(Sink.seq).map { steps =>
-        steps shouldBe Seq(Completed)
+      val local = new ScriptedLocal(
+        Seq(fromGenesis(10, ingestedUpTo = Some(100))),
+        page(60, vote(90), vote(70, eventNumber = 2)),
+        // A page of updates without votes still moves the cursor
+        page(10),
+        noOlderUpdates,
+      )
+      service(store, peers, local).mksrc().runWith(Sink.seq).map { steps =>
+        steps shouldBe Seq(
+          Started(cursor(100)),
+          LocalPageBackfilled(2, cursor(60)),
+          LocalPageBackfilled(0, cursor(10)),
+          Completed,
+        )
+        local.calls.get() shouldBe Vector(ts(100) -> 2, ts(60) -> 2, ts(10) -> 2)
+        store.inserted.get() shouldBe Vector(
+          Seq(vote(90), vote(70, eventNumber = 2)) -> cursor(60),
+          Seq.empty -> cursor(10),
+        )
         store.completions.get() shouldBe 1
         peers.calls.get() shouldBe empty
       }
     }
 
-    "do nothing once complete, also on the Scan of the founding SV" in {
+    "complete on a new network, where the update history has nothing before the votes store started" in {
+      val store = new FakeStore(Some(ts(100)))
+      val local = new ScriptedLocal(Seq(fromGenesis(100, ingestedUpTo = Some(100))), noOlderUpdates)
+      service(store, new ScriptedPeers(), local).mksrc().runWith(Sink.seq).map { steps =>
+        steps shouldBe Seq(Started(cursor(100)), Completed)
+        store.inserted.get() shouldBe empty
+        store.completions.get() shouldBe 1
+      }
+    }
+
+    "backfill from peers if the founding transaction is too long ago to read the update history" in {
+      val store = new FakeStore(Some(ts(100)))
+      val peers = new ScriptedPeers(Success(Seq.empty))
+      val local = new ScriptedLocal(Seq(fromGenesis(10, ingestedUpTo = Some(100))))
+      service(store, peers, local, maxLocalHistorySeconds = 89).mksrc().runWith(Sink.seq).map {
+        steps =>
+          steps shouldBe Seq(Started(cursor(100)), Completed)
+          peers.calls.get().map(_._1) shouldBe Vector(cursor(100))
+          local.calls.get() shouldBe empty
+      }
+    }
+
+    "wait until the update history has ingested up to where the votes store started" in {
+      val store = new FakeStore(Some(ts(100)))
+      val local = new ScriptedLocal(
+        Seq(
+          LocalVotesSource.NotIngested,
+          fromGenesis(10, ingestedUpTo = None),
+          fromGenesis(10, ingestedUpTo = Some(99)),
+          fromGenesis(10, ingestedUpTo = Some(100)),
+        ),
+        noOlderUpdates,
+      )
+      service(store, new ScriptedPeers(), local).mksrc().runWith(Sink.seq).map { steps =>
+        steps shouldBe Seq(
+          WaitingForUpdateHistory,
+          WaitingForUpdateHistory,
+          WaitingForUpdateHistory,
+          Started(cursor(100)),
+          Completed,
+        )
+      }
+    }
+
+    "read a transaction again if the persisted cursor is in the middle of it" in {
+      val store = new FakeStore(Some(ts(100)), initialCursor = Some(cursor(50, 3)))
+      val local = new ScriptedLocal(Seq(fromGenesis(10, ingestedUpTo = Some(100))), noOlderUpdates)
+      service(store, new ScriptedPeers(), local).mksrc().runWith(Sink.seq).map { steps =>
+        steps shouldBe Seq(Resumed(cursor(50, 3)), Completed)
+        local.calls.get().map(_._1) shouldBe Vector(ts(50).immediateSuccessor)
+      }
+    }
+
+    "warn and read again at the same cursor if a vote result in the update history cannot be decoded" in {
+      val store = new FakeStore(Some(ts(100)))
+      val local = new ScriptedLocal(
+        Seq(fromGenesis(10, ingestedUpTo = Some(100))),
+        Failure(new UndecodablePeerVoteResult("the-update", ts(90), new RuntimeException("boom"))),
+        noOlderUpdates,
+      )
+      loggerFactory
+        .assertLogs(
+          service(store, new ScriptedPeers(), local).mksrc().runWith(Sink.seq),
+          _.warningMessage should (include("stuck") and include("the-update")),
+        )
+        .map { steps =>
+          steps shouldBe Seq(Started(cursor(100)), WaitingForUpdateHistory, Completed)
+          local.calls.get().map(_._1) shouldBe Vector(ts(100), ts(100))
+        }
+    }
+
+    "do nothing once complete" in {
       val store = new FakeStore(Some(ts(100)), initiallyComplete = true)
       val peers = new ScriptedPeers()
+      val local = new ScriptedLocal(Seq(fromGenesis(10, ingestedUpTo = Some(100))))
       for {
-        regular <- service(store, peers).mksrc().runWith(Sink.seq)
-        founding <- service(store, peers, isFirstSv = true).mksrc().runWith(Sink.seq)
+        fromPeers <- service(store, peers).mksrc().runWith(Sink.seq)
+        fromLocal <- service(store, peers, local).mksrc().runWith(Sink.seq)
       } yield {
-        regular shouldBe empty
-        founding shouldBe empty
+        fromPeers shouldBe empty
+        fromLocal shouldBe empty
         store.completions.get() shouldBe 1
         peers.calls.get() shouldBe empty
+        local.calls.get() shouldBe empty
       }
     }
 
@@ -273,8 +405,8 @@ class VotesStoreBackfillingTest
     }
 
     "keep the service stream open after completion, so the retrying service does not restart it" in {
-      val store = new FakeStore(firstIngested = None)
-      service(store, new ScriptedPeers(), isFirstSv = true)
+      val store = new FakeStore(Some(ts(100)))
+      service(store, new ScriptedPeers(Success(Seq.empty)))
         .serviceSource()
         .completionTimeout(300.millis)
         .runWith(Sink.ignore)

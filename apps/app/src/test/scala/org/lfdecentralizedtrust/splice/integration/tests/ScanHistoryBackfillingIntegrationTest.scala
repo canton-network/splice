@@ -292,7 +292,7 @@ class ScanHistoryBackfillingIntegrationTest
     }
 
     clue(
-      "SV1 (the founding SV) is complete right away, and SV2 backfills the vote from SV1 " +
+      "SV1 (the founding SV) completes from its own update history, and SV2 backfills the vote from SV1 " +
         "without waiting for its update history and txlog backfilling"
     ) {
       // The vote results of the two scans are compared once they are complete: when exactly SV2 fetches the

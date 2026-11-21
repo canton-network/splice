@@ -325,7 +325,7 @@ object DbVotesStore {
     )
   }
 
-  /** A vote result backfilled from a peer scan. Like for the votes that are ingested, all columns
+  /** A vote result backfilled from a peer scan or from the local update history. Like for the votes that are ingested, all columns
     * of `votes_store_results` are derived from the result.
     */
   final case class PeerVoteResult(
@@ -374,13 +374,47 @@ object DbVotesStore {
       }
   }
 
+  /** The vote results in a transaction of the local update history, for backfilling them from there.
+    * The same vote results as [[parseTransaction]] returns for the transaction, but like for the ones
+    * backfilled from a peer, a result that cannot be decoded is not replaced by a placeholder.
+    *
+    * Throws [[UndecodablePeerVoteResult]] if a result cannot be decoded.
+    */
+  def backfilledVoteResults(
+      tx: Transaction
+  )(implicit elc: ErrorLoggingContext): Seq[PeerVoteResult] = {
+    val mapping = Trees.getLocalEventIndices(tx)
+    val recordTime = CantonTimestamp.assertFromInstant(tx.getRecordTime)
+    tx.getEventsById.asScala.iterator.flatMap {
+      case (nodeId, exercised: ExercisedEvent) =>
+        Try(exercised match {
+          case DsoRulesCloseVoteRequest(node) =>
+            Some(
+              PeerVoteResult(
+                recordTime,
+                tx.getSynchronizerId,
+                tx.getUpdateId,
+                mapping(nodeId).intValue,
+                exercised.getContractId,
+                node.result.value,
+              )
+            )
+          case _ => None
+        }) match {
+          case Success(result) => result
+          case Failure(e) => throw new UndecodablePeerVoteResult(tx.getUpdateId, recordTime, e)
+        }
+      case _ => None
+    }.toSeq
+  }
+
   final class UndecodablePeerVoteResult(
       updateId: String,
       recordTime: CantonTimestamp,
       cause: Throwable,
   ) extends IllegalArgumentException(
         s"Failed to decode the vote result in update $updateId at record time $recordTime " +
-          "that the peers served, this app might be too old",
+          "that is being backfilled, this app might be too old",
         cause,
       )
 
