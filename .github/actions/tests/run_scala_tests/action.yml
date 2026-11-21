@@ -1,0 +1,84 @@
+name: Run Scala tests
+description: Run the given sbt test command, then check the logs for errors
+inputs:
+  cmd:
+    description: "The sbt command that runs the tests"
+    required: true
+  extra_env_vars:
+    description: "Extra environment variables to set before running the tests"
+    required: false
+    default: ""
+  extra_parameters:
+    description: "Extra parameters to pass to sbt"
+    required: false
+    default: ""
+  pre_sbt_cmd:
+    description: "Command to run before running the tests"
+    required: false
+    default: ""
+  post_sbt_cmd:
+    description: "Command to run after running the tests"
+    required: false
+    default: ""
+  retry_on_failure:
+    description: "Retry the tests once, against a fresh Canton instance and fresh databases, if they fail"
+    required: false
+    default: "false"
+  with_canton:
+    description: "Whether the tests use a shared Canton instance (restarted before a retry)"
+    required: false
+    default: "true"
+  start_canton_options:
+    description: "Options for start-canton.sh (used to restart Canton before a retry)"
+    required: false
+    default: ""
+  logs_artifact_name:
+    description: "Artifact name for the logs of the first attempt, if it is retried"
+    required: false
+    default: "logs"
+
+runs:
+  using: "composite"
+  steps:
+    # A retry covers only the tests, not checkErrors below: the flaky failures that motivate it fail tests
+    - name: Run tests
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        extra_env_vars: ${{ inputs.extra_env_vars }}
+        cmd: ${{ inputs.cmd }}
+        additional_nix_args: "--keep GITHUB_ACTION"
+        extra_parameters: ${{ inputs.extra_parameters }}
+        pre_sbt_cmd: ${{ inputs.pre_sbt_cmd }}
+        post_sbt_cmd: ${{ inputs.post_sbt_cmd }}
+        # fromJSON accepts both the string "true" and the boolean true
+        cmd_retry_count: ${{ fromJSON(inputs.retry_on_failure) && '1' || '0' }}
+        # The failed attempt may have made the repo dirty, which fails the next sbt start without CI_IGNORE_DIRTY_REPO
+        cmd_before_retry: >-
+          ./.github/actions/scripts/reset-canton-for-retry.sh /tmp/attempt-1/log
+          "${{ fromJSON(inputs.with_canton) && inputs.start_canton_options || '' }}"
+          && export CI_IGNORE_DIRTY_REPO=1
+
+    # After a retry, this checks only the logs of the last attempt
+    - name: Check logs for errors
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        # we don't care if some integration test happened to make the repo dirty
+        pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
+        cmd: checkErrors
+
+    - name: Check whether the tests were retried
+      id: retried
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        if [[ -d /tmp/attempt-1/log ]]; then
+          echo "retried=true" >> "$GITHUB_OUTPUT"
+          pigz -r /tmp/attempt-1/log/* || true
+        fi
+
+    - name: Upload logs of the first attempt
+      if: ${{ always() && steps.retried.outputs.retried == 'true' }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ inputs.logs_artifact_name }}-attempt-1
+        path: /tmp/attempt-1/log

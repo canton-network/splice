@@ -35,6 +35,14 @@ inputs:
     description: "Whether to fail if the SBT command output contains errors"
     required: false
     default: "true"
+  cmd_retry_count:
+    description: "How often to retry all of pre_sbt_cmd, cmd and post_sbt_cmd, if one of them fails"
+    required: false
+    default: "0"
+  cmd_before_retry:
+    description: "A bash command to run before each retry"
+    required: false
+    default: ""
   splice_root:
     description: "Path to splice repo"
     default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
@@ -46,6 +54,8 @@ runs:
       uses: ./.github/actions/nix/run
       with:
         additional_nix_args: "--keep GITHUB_ACTION_PATH ${{ inputs.additional_nix_args }}"
+        cmd_retry_count: ${{ inputs.cmd_retry_count }}
+        cmd_before_retry: ${{ inputs.cmd_before_retry }}
         cmd: |
             # This might help resolve https://github.com/DACH-NY/canton-network-node/issues/8146
             export PROTOCBRIDGE_NO_CLEANUP="1"
