@@ -552,6 +552,7 @@ class DbVotesStoreTest
           expected <- listAllRows(stores.votesStore)
           expectedFirstIngested <- stores.votesStore.getFirstIngestedRecordTime()
           _ <- clearVotesStore(stores)
+          _ <- markHistoriesComplete(stores)
           _ <- runTxLogMigration()
           actual <- listAllRows(stores.votesStore)
           firstIngested <- stores.votesStore.getFirstIngestedRecordTime()
@@ -564,12 +565,11 @@ class DbVotesStoreTest
           all(expected.map(_.contractId)) shouldBe Some(dsoRulesCid)
           actual shouldBe expected.map(_.copy(contractId = None))
           expectedFirstIngested should not be empty
-          // Where live ingestion started is not up to the migration, backfilling continues
-          // from where the txlog starts
-          firstIngested shouldBe empty
-          cursor shouldBe expectedFirstIngested.map(DbVotesStore.VotesBackfillCursor(_, 0))
-          // The txlog backfilling was never initialized, so there may be older votes
-          complete shouldBe false
+          // Where live ingestion started is not up to the migration
+          firstIngested shouldBe expectedFirstIngested
+          // The txlog has every vote, so there is nothing to backfill
+          cursor shouldBe empty
+          complete shouldBe true
         }
       }
 
@@ -584,6 +584,7 @@ class DbVotesStoreTest
             insertExercise(historyId, updateId, 0, "DsoRules_CloseVoteRequest", s"cid-$i")
           }
           _ <- clearVotesStore(stores)
+          _ <- markHistoriesComplete(stores)
           _ <- runTxLogMigration()
           contractIds <- listContractIds()
         } yield {
@@ -597,29 +598,58 @@ class DbVotesStoreTest
         }
       }
 
-      "mark the votes store as complete if the txlog backfilling is" in {
-        for {
-          stores <- mkStores()
-          _ <- ingestAll(stores, txLogVoteFixtures)
-          _ <- clearVotesStore(stores)
-          _ <- setTxLogBackfillingComplete(stores, complete = true)
-          _ <- runTxLogMigration()
-          complete <- stores.votesStore.isBackfillingComplete()
-        } yield complete shouldBe true
-      }
-
-      "not mark the votes store as complete while the txlog backfilling is in progress" in {
-        for {
-          stores <- mkStores()
-          _ <- ingestAll(stores, txLogVoteFixtures)
-          _ <- clearVotesStore(stores)
-          _ <- setTxLogBackfillingComplete(stores, complete = false)
-          _ <- runTxLogMigration()
-          complete <- stores.votesStore.isBackfillingComplete()
-          rows <- listAllRows(stores.votesStore)
-        } yield {
-          complete shouldBe false
-          rows should have size txLogVoteFixtures.flatMap(_.votes).size.toLong
+      // Each of these breaks one of the conditions under which the migration copies the votes
+      Seq[(String, (Stores, CantonTimestamp) => Future[Unit])](
+        "the txlog backfilling is in progress" -> ((stores, _) =>
+          setTxLogBackfillingComplete(stores, complete = false)
+        ),
+        "the txlog backfilling was never initialized" -> ((stores, _) =>
+          futureUnlessShutdownToFuture(
+            storage.update(
+              sqlu"delete from txlog_backfilling_status where store_id = ${stores.votesStore.storeId}",
+              "test.clearTxLogBackfillingStatus",
+            )
+          ).map(_ => ())
+        ),
+        "the update history backfilling is in progress" -> ((_, _) =>
+          setUpdateHistoryState(participantName, complete = false)
+        ),
+        "the update history has not ingested up to where the votes store started" -> (
+          (_, firstIngested) =>
+            setUpdateHistoryState(
+              participantName,
+              complete = true,
+              ingestedUpTo = firstIngested.minusSeconds(1),
+            )
+        ),
+        "the votes store has not started ingesting" -> ((_, _) =>
+          futureUnlessShutdownToFuture(
+            storage.update(
+              sqlu"delete from key_value_store where key like 'votes_store_first_ingested_%'",
+              "test.clearFirstIngested",
+            )
+          ).map(_ => ())
+        ),
+      ).foreach { case (condition, prepare) =>
+        s"not copy anything if $condition" in {
+          for {
+            stores <- mkStores()
+            _ <- ingestAll(stores, txLogVoteFixtures)
+            firstIngested <- stores.votesStore
+              .getFirstIngestedRecordTime()
+              .map(_.getOrElse(fail("not ingested")))
+            _ <- clearVotesStore(stores)
+            _ <- markHistoriesComplete(stores)
+            _ <- prepare(stores, firstIngested)
+            _ <- runTxLogMigration()
+            complete <- stores.votesStore.isBackfillingComplete()
+            cursor <- stores.votesStore.getBackfillingCursor()
+            rows <- listAllRows(stores.votesStore)
+          } yield {
+            complete shouldBe false
+            cursor shouldBe empty
+            rows shouldBe empty
+          }
         }
       }
 
@@ -632,17 +662,14 @@ class DbVotesStoreTest
             .map(_.getOrElse(fail("not ingested")))
           // Live ingestion started after the txlog did
           _ <- setFirstIngestedRecordTime(stores, txLogFirstIngested.plusSeconds(100))
+          _ <- markHistoriesComplete(stores)
           _ <- runTxLogMigration()
           firstIngested <- stores.votesStore.getFirstIngestedRecordTime()
-          cursor <- stores.votesStore.getBackfillingCursor()
-        } yield {
-          firstIngested shouldBe Some(txLogFirstIngested.plusSeconds(100))
-          cursor shouldBe Some(DbVotesStore.VotesBackfillCursor(txLogFirstIngested, 0))
-        }
+        } yield firstIngested shouldBe Some(txLogFirstIngested.plusSeconds(100))
       }
 
       "migrate every txlog store on its own, and pair it with the key value store of its participant" in {
-        val keyPattern = "votes_store_backfill_cursor_%"
+        val keyPattern = "votes_store_backfill_complete_%"
         for {
           kv <- ScanKeyValueStore(
             dsoParty,
@@ -668,19 +695,19 @@ class DbVotesStoreTest
           _ <- ingestAll(other, txLogVoteFixtures.take(1))
           all = Seq(stores, resetTxLog, other)
           expectedRows <- MonadUtil.sequentialTraverse(all)(s => listAllRows(s.votesStore))
-          firstIngested <- MonadUtil.sequentialTraverse(all)(s =>
-            s.votesStore.getFirstIngestedRecordTime()
-          )
           _ <- MonadUtil.sequentialTraverse(all)(clearVotesStore)
+          _ <- markHistoriesComplete(stores)
+          _ <- markHistoriesComplete(resetTxLog)
+          _ <- markHistoriesComplete(other, "DbVotesStoreTestOther")
           _ <- runTxLogMigration()
           actualRows <- MonadUtil.sequentialTraverse(all)(s => listAllRows(s.votesStore))
-          cursors <- MonadUtil.sequentialTraverse(all)(s => s.votesStore.getBackfillingCursor())
-          cursorKeys <- futureUnlessShutdownToFuture(
+          completes <- MonadUtil.sequentialTraverse(all)(s => s.votesStore.isBackfillingComplete())
+          completeKeys <- futureUnlessShutdownToFuture(
             storage.query(
               sql"select store_id, key from key_value_store where key like $keyPattern".as[
                 (Int, String)
               ],
-              "test.cursorKeys",
+              "test.completeKeys",
             )
           )
         } yield {
@@ -689,14 +716,42 @@ class DbVotesStoreTest
           // Each store gets exactly its own votes, and the txlog of the reset ACS store is not affected
           // The contract id is not in the txlog, and there is no update history to fill it from
           actualRows shouldBe expectedRows.map(_.map(_.copy(contractId = None)))
-          cursors shouldBe firstIngested.map(_.map(DbVotesStore.VotesBackfillCursor(_, 0)))
+          completes shouldBe Seq(true, true, true)
           // The keys are in the key value store of the participant of the txlog store, once per txlog store
-          cursorKeys.toSet shouldBe Set(
-            kv.storeId -> DbVotesStore.backfillCursorKey(stores.votesStore.storeId),
-            kv.storeId -> DbVotesStore.backfillCursorKey(resetTxLog.votesStore.storeId),
-            otherKv.storeId -> DbVotesStore.backfillCursorKey(other.votesStore.storeId),
+          completeKeys.toSet shouldBe Set(
+            kv.storeId -> DbVotesStore.backfillCompleteKey(stores.votesStore.storeId),
+            kv.storeId -> DbVotesStore.backfillCompleteKey(resetTxLog.votesStore.storeId),
+            otherKv.storeId -> DbVotesStore.backfillCompleteKey(other.votesStore.storeId),
           )
-          cursorKeys should have size 3
+          completeKeys should have size 3
+        }
+      }
+
+      "succeed without copying anything if a vote in the txlog cannot be copied" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          _ <- markHistoriesComplete(stores)
+          _ <- clearVotesStore(stores)
+          // One row without an update id, which violates a not null constraint of votes_store_results
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              sqlu"""update scan_txlog_store set event_id = 'malformed'
+                     where entry_number = (select min(entry_number) from scan_txlog_store
+                                           where entry_type = 'vot' and store_id = ${stores.votesStore.storeId})""",
+              "test.corruptTxLog",
+            )
+          )
+          _ <- runTxLogMigration()
+          rows <- listAllRows(stores.votesStore)
+          cursor <- stores.votesStore.getBackfillingCursor()
+          complete <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          txLogVoteFixtures.size should be > 1
+          // All or nothing: the other votes are not copied either, and backfilling starts from scratch
+          rows shouldBe empty
+          cursor shouldBe empty
+          complete shouldBe false
         }
       }
 
@@ -992,15 +1047,15 @@ class DbVotesStoreTest
       )
     )
 
-  /** Brings the votes store into the state that it had before the migration: without rows and without
-    * the data that the ingestion of the votes store keeps in the key value store.
+  /** Brings the votes store into the state that it had before the migration: live ingestion has started
+    * (the first ingested record time is kept), but there are no rows and no backfilling state.
     */
   private def clearVotesStore(stores: Stores): Future[Unit] =
     futureUnlessShutdownToFuture(
       storage.update(
         DBIO.seq(
           sqlu"delete from votes_store_results where store_id = ${stores.votesStore.storeId}",
-          sqlu"delete from key_value_store where key like 'votes_store_%'",
+          sqlu"delete from key_value_store where key like 'votes_store_backfill_%'",
         ),
         "test.clearVotesStore",
       )
@@ -1015,6 +1070,51 @@ class DbVotesStoreTest
         "test.setTxLogBackfillingComplete",
       )
     ).map(_ => ())
+
+  private val farFuture: CantonTimestamp = CantonTimestamp.ofEpochSecond(4102444800L) // 2100-01-01
+
+  /** Sets the state of the update history of the given participant, as the migration reads it:
+    * whether its backfilling is complete, and up to which record time it has ingested.
+    */
+  private def setUpdateHistoryState(
+      participantName: String,
+      complete: Boolean,
+      ingestedUpTo: CantonTimestamp = farFuture,
+  ): Future[Unit] =
+    for {
+      historyId <- insertHistory(participantName, dsoParty.toProtoPrimitive)
+      _ <- futureUnlessShutdownToFuture(
+        storage.underlying.queryAndUpdate(
+          DBIO
+            .seq(
+              sqlu"""delete from update_history_backfilling where history_id = $historyId""",
+              sqlu"""delete from update_history_transactions
+                     where history_id = $historyId and update_id = 'last-ingested'""",
+              sqlu"""insert into update_history_transactions
+                       (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
+                        effective_at, root_event_ids)
+                     values ($historyId, 'last-ingested', ${ingestedUpTo.toMicros}, 'last-ingested',
+                             $dummyDomain, $domainMigrationId, ${ingestedUpTo.toMicros}, array[]::text[])""",
+              sqlu"""insert into update_history_backfilling
+                       (history_id, joining_migration_id, joining_domain_id, joining_update_id, complete,
+                        import_updates_complete)
+                     values ($historyId, $domainMigrationId, $dummyDomain, 'last-ingested', $complete, $complete)""",
+            )
+            .map(_ => ()),
+          "test.setUpdateHistoryState",
+        )
+      )
+    } yield ()
+
+  /** The state of an SV on a long-running network, for which the migration copies the votes. */
+  private def markHistoriesComplete(
+      stores: Stores,
+      participantName: String = participantName,
+  ): Future[Unit] =
+    for {
+      _ <- setTxLogBackfillingComplete(stores, complete = true)
+      _ <- setUpdateHistoryState(participantName, complete = true)
+    } yield ()
 
   private def setFirstIngestedRecordTime(
       stores: Stores,
@@ -1143,17 +1243,26 @@ class DbVotesStoreTest
       )
     ).map(_ => ())
 
-  private def insertHistory(participantName: String, party: String): Future[Int] =
+  /** Returns the id of the update history of the given participant, creating it if there is none. */
+  private def insertHistory(participantName: String, party: String): Future[Int] = {
+    val participant = mkParticipantId(participantName).toProtoPrimitive
     futureUnlessShutdownToFuture(
-      storage
-        .querySingle(
-          sql"""insert into update_history_descriptors (party, participant_id, store_name)
-              values ($party, ${mkParticipantId(participantName).toProtoPrimitive}, 'DbScanStore')
-              returning id""".as[Int].headOption,
-          "test.insertHistory",
-        )
-        .value
+      storage.underlying.queryAndUpdate(
+        sql"""select id from update_history_descriptors
+              where party = $party and participant_id = $participant and store_name = 'DbScanStore'"""
+          .as[Int]
+          .headOption
+          .flatMap {
+            case Some(id) => DBIO.successful(Some(id))
+            case None =>
+              sql"""insert into update_history_descriptors (party, participant_id, store_name)
+                    values ($party, $participant, 'DbScanStore')
+                    returning id""".as[Int].headOption
+          },
+        "test.insertHistory",
+      )
     ).map(_.getOrElse(fail("No history inserted")))
+  }
 
   /** Inserts an update with a single exercise on a DsoRules contract into the update history.
     * The row of the update is shared by all exercises of the same history.
