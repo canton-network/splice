@@ -75,6 +75,55 @@ class DbUnavailablePartiesStoreTest
         }
       }
 
+      "spread the ignore duration of new parties by the configured jitter" in {
+        val parties = (1 to 100).map(userParty)
+        for {
+          store <- DbUnavailablePartiesStore(
+            storeDescriptor.copy(version = 3),
+            storage,
+            baseDuration,
+            NonNegativeFiniteDuration(1.hour),
+            wallClock,
+            Set.empty,
+            loggerFactory,
+            baseJitter = NonNegativeFiniteDuration(10.seconds),
+          )
+          _ <- store.addPartiesAt(parties, atSeconds(0))
+          beforeBase <- store.listPartiesAt(atSeconds(1) - 1)
+          midWindow <- store.listPartiesAt(atSeconds(6))
+          afterMax <- store.listPartiesAt(atSeconds(11))
+        } yield {
+          // every party is ignored for at least the base duration and less than base + jitter
+          beforeBase should contain theSameElementsAs parties
+          afterMax shouldBe empty
+          // with 100 uniform samples in [1s, 11s) the durations are not all on one side of 6s
+          midWindow should not be empty
+          midWindow.size should be < parties.size
+        }
+      }
+
+      "cap the jittered ignore duration of new parties at the maximum" in {
+        val parties = (1 to 50).map(userParty)
+        for {
+          store <- DbUnavailablePartiesStore(
+            storeDescriptor.copy(version = 4),
+            storage,
+            baseDuration,
+            maxIgnoreDuration,
+            wallClock,
+            Set.empty,
+            loggerFactory,
+            baseJitter = NonNegativeFiniteDuration(1.hour),
+          )
+          _ <- store.addPartiesAt(parties, atSeconds(0))
+          beforeMax <- store.listPartiesAt(atSeconds(4) - 1)
+          afterMax <- store.listPartiesAt(atSeconds(4))
+        } yield {
+          beforeMax.size should be > 0
+          afterMax shouldBe empty
+        }
+      }
+
       "double the ignore duration when a party is re-added later" in {
         for {
           store <- mkStore()

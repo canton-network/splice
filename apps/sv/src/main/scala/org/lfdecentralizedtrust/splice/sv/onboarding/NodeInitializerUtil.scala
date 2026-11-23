@@ -226,6 +226,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
           clock,
           protectedPartiesWithDso,
           loggerFactory,
+          config.unavailablePartiesBackoffParameters.baseIgnoreDurationJitter,
         )
       }
     } else {
