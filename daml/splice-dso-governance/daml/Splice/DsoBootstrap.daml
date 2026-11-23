@@ -3,8 +3,10 @@
 
 module Splice.DsoBootstrap where
 
+import DA.Action (void)
 import qualified DA.Map as Map
 import qualified DA.Set as Set
+import qualified DA.TextMap as TextMap
 import DA.Time
 import DA.Optional (fromOptional, isSome)
 
@@ -83,14 +85,20 @@ template DsoBootstrap with
         -- create initial per-sv and per-operator contracts for sv1
         case sv1RightOwnerName of
           Some rightOwnerName -> do
-            let info = SvRightOwnerInfo with
-                    rightOwnerParty = sv1Party
+            let svNodeAssignmentId = rightOwnerName <> "-1"
+                assignment = SvNodeAssignment with
+                    svNodeName = sv1Name
                     rewardWeight = sv1RewardWeight
-                    rewardNodeOperatorName = sv1Name
+                    escrowBeneficiaries = []
                     beneficiaries = Map.empty
+                    defaultBeneficiary = sv1Party
+                info = SvRightOwnerInfo with
+                    rightOwnerParty = sv1Party
+                    description = ""
+                    svNodeAssignments = TextMap.fromList [(svNodeAssignmentId, assignment)]
             create SvRightOwner with dso; name = rightOwnerName; info
-            createSvRewardState dso rightOwnerName sv1SvInfo.joinedAsOfRound
+            void $ createSvRightsOwnerRewardStates dso rightOwnerName [svNodeAssignmentId] sv1SvInfo.joinedAsOfRound
           None ->
-            createSvRewardState dso sv1Name sv1SvInfo.joinedAsOfRound
+            void $ createSvRewardState dso sv1Name sv1SvInfo.joinedAsOfRound
         createPerSvPartyContracts dso sv1Party sv1Name sv1SynchronizerNodes (Some amuletPrice) (getVoteCooldownTime config)
         return DsoBootstrap_BootstrapResult

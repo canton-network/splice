@@ -6,9 +6,11 @@ module Splice.Amulet.SvRightOwner where
 import Prelude hiding (all, sum)
 
 import DA.Foldable (forA_, all, sum)
+import DA.List (unique)
 import DA.Map (Map)
 import qualified DA.Map as Map
 import DA.TextMap (TextMap)
+import qualified DA.TextMap as TextMap
 import Splice.Types (ForDso(..))
 import Splice.Util (HasCheckedFetch(..), Patchable(..), patchScalar, require)
 
@@ -19,7 +21,7 @@ data SvRightsOwnerKey = SvRightsOwnerKey with
 
 -- | An SV right owner, i.e., an entity that owns SV rights and thereby earns SV rewards.
 --
--- SV right owners are hosted by an SV node operator, which mints their rewards on their
+-- SV rights owners are hosted by one or more SV nodes, which mint their rewards on their
 -- behalf. Multiple SV right owners can be hosted by the same SV node operator, and an SV
 -- node operator is not required to be an SV right owner itself.
 template SvRightOwner
@@ -42,8 +44,9 @@ data SvRightOwnerInfo = SvRightOwnerInfo
     rightOwnerParty : Party
       -- ^ The party of the SV right owner; manages the SV right owner controlled information.
     description : Text
+      -- ^ Human-readable description, e.g., the company and the CIPs that granted the weight.
     svNodeAssignments : TextMap SvNodeAssignment
-      -- ^ Keyed by the name of the SV node through which rewards are minted.
+      -- ^ Keyed by a stable id, unique per SV rights owner, so the reward state of an assignment is kept when it moves to another SV node.
   deriving (Eq, Show, Serializable)
 
 instance Patchable SvRightOwnerInfo where
@@ -55,6 +58,8 @@ instance Patchable SvRightOwnerInfo where
 
 data SvNodeAssignment = SvNodeAssignment
   with
+    svNodeName : Text
+      -- ^ The name of the SV node through which rewards are minted.
     rewardWeight : Int
       -- ^ The weight of the SV rights owner at this SV node.
     escrowBeneficiaries : [EscrowBeneficiary]
@@ -70,6 +75,7 @@ data SvNodeAssignment = SvNodeAssignment
 instance Patchable SvNodeAssignment where
   patch new base current = SvNodeAssignment
     with
+      svNodeName = patch new.svNodeName base.svNodeName current.svNodeName
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
       escrowBeneficiaries = patchScalar new.escrowBeneficiaries base.escrowBeneficiaries current.escrowBeneficiaries
       beneficiaries = patch new.beneficiaries base.beneficiaries current.beneficiaries
@@ -98,7 +104,9 @@ instance Patchable BeneficiaryInfo where
 
 svRightOwnerInfoChecks : [(SvRightOwnerInfo -> Bool, Text)]
 svRightOwnerInfoChecks =
-  map (\(check, message) -> (all check . (.svNodeAssignments), message)) svNodeAssignmentChecks
+  [ (\SvRightOwnerInfo{..} -> not $ TextMap.null svNodeAssignments, "SV rights owner has at least one SV node assignment")
+  , (\SvRightOwnerInfo{..} -> unique $ map ((.svNodeName) . snd) $ TextMap.toList svNodeAssignments, "SV rights owner has at most one SV node assignment per SV node")
+  ] <> map (\(check, message) -> (all check . (.svNodeAssignments), message)) svNodeAssignmentChecks
 
 svNodeAssignmentChecks : [(SvNodeAssignment -> Bool, Text)]
 svNodeAssignmentChecks =
