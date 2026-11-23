@@ -189,7 +189,6 @@ class CachingScanStore(
   ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
     store.listGovernanceLocksByKey(key, limit)
 
-
   override def listVoteRequestResults(
       filters: VoteResultsFilters,
       limit: Limit,
