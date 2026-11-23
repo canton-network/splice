@@ -9,6 +9,7 @@ import DA.Time
 import qualified DA.Foldable as Foldable
 
 import Splice.Round
+import Splice.TextLimits qualified as TextLimits
 import Splice.Types
 import Splice.Util
 
@@ -184,7 +185,7 @@ validValidatorLicense license =
   optional True validValidatorLicenseMetadata license.metadata
 
 maxIdentifierLength : Int
-maxIdentifierLength = 255
+maxIdentifierLength = TextLimits.maxIdentifierLength
 
 validValidatorLicenseMetadata : ValidatorLicenseMetadata -> Bool
 validValidatorLicenseMetadata metadata =

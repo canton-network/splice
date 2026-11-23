@@ -10,11 +10,13 @@ import DA.Time
 import Daml.Script
 import DA.List
 import DA.Optional
+import DA.Text qualified as Text
 import DA.TextMap as TextMap
 
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.AmuletConfig (defaultTransferPreapprovalFee, defaultTransferPreapprovalBaseDuration)
+import Splice.TextLimits (textTooLongFailure)
 import Splice.Types
 import Splice.Schedule
 import Splice.DecentralizedSynchronizer
@@ -1070,3 +1072,42 @@ calculateTransferPreapprovalFee app duration0 = do
   let amuletPrice = openRound.amuletPrice
   let preapprovalFeeAmulet = preapprovalFeeUsd / amuletPrice
   return (preapprovalFeeAmulet, preapprovalFeeUsd)
+
+testBuyTrafficRequestTrackingIdLimit : Script ()
+testBuyTrafficRequestTrackingIdLimit = script do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+  install <- submit (actAs alice.primaryParty <> actAs aliceValidator.primaryParty) $ createCmd $ WalletAppInstall with
+    endUserParty = alice.primaryParty
+    endUserName = "alice_wallet_user"
+    dsoParty = app.dso
+    validatorParty = aliceValidator.primaryParty
+  now <- getTime
+  -- the limit is spelled out to notice accidental changes
+  let maxTrackingId = Text.implode (replicate 279 "t")
+      viaInstall trackingId = exerciseCmd install WalletAppInstall_CreateBuyTrafficRequest with
+        trafficAmount = 1000000
+        memberId = "alice_participant_id"
+        synchronizerId = "synchronizer-id"
+        migrationId = 0
+        trackingId
+        expiresAt = now `addRelTime` minutes 1
+      direct trackingId = createCmd BuyTrafficRequest with
+        dso = app.dso
+        endUserParty = alice.primaryParty
+        expiresAt = now `addRelTime` minutes 1
+        trackingId
+        trafficAmount = 1000000
+        memberId = "alice_participant_id"
+        synchronizerId = "synchronizer-id"
+        migrationId = 0
+
+  -- via the wallet install
+  _ <- submit (actAs aliceValidator.primaryParty <> readAs alice.primaryParty) $ viaInstall maxTrackingId
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "trackingId" 279 280))
+    (actAs aliceValidator.primaryParty <> readAs alice.primaryParty) $ void $ viaInstall (maxTrackingId <> "t")
+
+  -- via a direct create
+  _ <- submit alice.primaryParty $ direct maxTrackingId
+  -- the `ensure` clause rejects it
+  submitMustFail alice.primaryParty $ direct (maxTrackingId <> "t")
+  pure ()

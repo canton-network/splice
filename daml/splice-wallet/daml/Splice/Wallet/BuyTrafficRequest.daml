@@ -3,9 +3,12 @@
 
 module Splice.Wallet.BuyTrafficRequest where
 
+import DA.Text qualified as Text
+
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.DecentralizedSynchronizer (MemberTraffic)
+import Splice.TextLimits (maxTrackingIdLength)
 import Splice.Types (ForOwner(..))
 import Splice.Util
 
@@ -44,6 +47,8 @@ template BuyTrafficRequest
     migrationId : Int
   where
     signatory endUserParty
+    ensure Text.length trackingId <= maxTrackingIdLength
+      -- The request can be created directly, so this is the only place to bound its tracking id.
 
     choice BuyTrafficRequest_Complete : BuyTrafficRequest_CompleteResult
       with

@@ -122,6 +122,12 @@ governanceLock_transferFactoryV1_transferImpl dso actors arg@V1.TransferFactory_
 
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
   request <- parseGovernanceLockRequestTSv1 dso transfer.receiver state.governanceLockConfig transfer.meta
+  requireGovernanceLockKindWithinTextLimits $ case request of
+    GLR_CreateGovernanceLock{fullSpecification} -> fullSpecification.kind
+    GLR_UnlockGovernanceLock{fullSpecification} -> fullSpecification.kind
+    GLR_TransferLock{specification} -> governanceLockKind specification
+    GLR_WithdrawVestingLock{vestingSpecification} -> vestingSpecification.kind
+    GLR_SubstituteLock{target} -> governanceLockKind target.specification
 
   case request of
     GLR_CreateGovernanceLock{fullSpecification} ->

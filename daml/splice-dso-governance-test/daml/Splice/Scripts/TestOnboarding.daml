@@ -3,6 +3,7 @@
 
 module Splice.Scripts.TestOnboarding where
 
+import DA.Action (void)
 import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional (fromSome)
@@ -10,6 +11,7 @@ import qualified DA.Map as Map
 import Daml.Script
 import DA.Time
 import DA.List
+import DA.Text qualified as Text
 
 import Splice.ValidatorLicense
 
@@ -21,6 +23,8 @@ import Splice.SvOnboarding
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)
 import Splice.AmuletRules (AmuletRules)
+import Splice.Testing.Utils (expectFailureStatus, submitMustFail'')
+import Splice.TextLimits (invalidTokenCharactersFailure, textTooLongFailure)
 import Splice.Types
 
 
@@ -395,6 +399,60 @@ testConfirmSvOnboardingRejectsExistingParticipant = do
 
   -- a fresh participant can be used
   _ <- submit dso $ confirm "svX-participant-id"
+  pure ()
+
+
+testSvOnboardingTextLimits : Script ()
+testSvOnboardingTextLimits = do
+  (_, dso, (_, sv2, _, _)) <- initMainNet
+
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  svX <- allocateParty "svX"
+  svY <- allocateParty "svY"
+  -- the limits are spelled out to notice accidental changes
+  let maxName = Text.implode (replicate 255 "n")
+      maxToken = Text.implode (replicate 1900 "t")
+      startOnboarding candidateName token = exerciseCmd dsoRulesCid DsoRules_StartSvOnboarding with
+        candidateName
+        candidateParty = svX
+        candidateParticipantId = "svX-participant-id"
+        token
+        sponsor = sv2
+      confirm newSvName = exerciseCmd dsoRulesCid DsoRules_ConfirmSvOnboarding with
+        newSvParty = svX
+        newSvName
+        newParticipantId = "svX-participant-id"
+        newSvRewardWeight = 19
+        reason = "because"
+      addSv newSvName = exerciseCmd dsoRulesCid DsoRules_AddSv with
+        newSvParty = svY
+        newSvName
+        newSvRewardWeight = 19
+        newSvParticipantId = "svY-participant-id"
+        joinedAsOfRound = Round 3
+
+  -- the candidate name and token are bounded
+  _ <- submit (actAs sv2 <> readAs dso) $ startOnboarding maxName maxToken
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "candidateName" 255 256)) (actAs sv2 <> readAs dso) $
+    void $ startOnboarding (maxName <> "n") maxToken
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "token" 1900 1901)) (actAs sv2 <> readAs dso) $
+    void $ startOnboarding maxName (maxToken <> "t")
+
+  -- the token only contains the characters of a JWT
+  _ <- submit (actAs sv2 <> readAs dso) $ startOnboarding "svX" "azAZ09-_.azAZ09-_.azAZ09-_"
+  forA_ ["=", "+", "/", " ", "\x00e9", "\x1F600"] $ \char ->
+    submitMustFail'' (expectFailureStatus (== invalidTokenCharactersFailure)) (actAs sv2 <> readAs dso) $
+      void $ startOnboarding "svX" ("header.payload" <> char <> ".signature")
+
+  -- the name of a confirmed SV is bounded
+  _ <- submit dso $ confirm maxName
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "newSvName" 255 256)) (actAs dso) $
+    void $ confirm (maxName <> "n")
+
+  -- the name of an added SV is bounded
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "newSvName" 255 256)) (actAs dso) $
+    void $ addSv (Text.implode (replicate 256 "m"))
+  _ <- submit dso $ addSv (Text.implode (replicate 255 "m"))
   pure ()
 
 

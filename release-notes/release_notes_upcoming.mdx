@@ -42,6 +42,21 @@
       to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
       Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
 
+  - Daml
+
+    - The following `Text` values are now bounded in length, using the limits in the new `Splice.TextLimits`
+      module of `splice-amulet`. The limits are far above the values that the Splice apps produce.
+
+      | Where | Value | Maximum length (characters) |
+      |---|---|---|
+      | `AnsRules_RequestEntry` | `name` | 255 |
+      | `DsoRules_StartSvOnboarding` | `candidateName` | 255 |
+      | `DsoRules_StartSvOnboarding` | `token` (JWT characters only) | 1900 |
+      | `DsoRules_ConfirmSvOnboarding`, `DsoRules_AddSv` | `newSvName` | 255 |
+      | SV governance lock requests | SV name in the `lock-subject` metadata | 255 |
+      | `WalletAppInstall_CreateBuyTrafficRequest` | `trackingId` | 279 |
+      | `BuyTrafficRequest` template | `trackingId` | 279 |
+
   - Scan App
 
     - Add the `ledger_api_json` option to the `DamlValueEncoding` enum, used by the `daml_value_encoding`
