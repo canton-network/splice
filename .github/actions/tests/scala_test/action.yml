@@ -280,6 +280,25 @@ runs:
           done
         done
 
+    # The localnet and docker-compose tests reach the services through *.localhost hostnames, also from the JVM of the
+    # tests, e.g. the remote apps in apps/app/src/test/resources/localnet-topology.conf. The self-hosted-k8s-* runners
+    # resolved them with hostAliases (localnetHostAliases in cluster/pulumi/gha/src/runners.ts).
+    # TODO(tech-debt): set these hostAliases on the canton-network-splice runners instead
+    - name: Resolve the localnet hostnames
+      shell: bash
+      run: |
+        for host in ans.localhost canton.localhost scan.localhost sv.localhost wallet.localhost json-ledger-api.localhost grpc-ledger-api.localhost; do
+          if grep -qE "^127\.0\.0\.1\s(.*\s)?${host//./\\.}(\s|$)" /etc/hosts; then
+            echo "$host is already in /etc/hosts"
+          elif echo "127.0.0.1 $host" | sudo tee -a /etc/hosts > /dev/null; then
+            echo "Added $host to /etc/hosts"
+          else
+            # Don't fail the job: the tests that do not use the hostname still work
+            echo "::warning::Could not add $host to /etc/hosts, tests that resolve it will fail"
+          fi
+        done
+        getent ahostsv4 wallet.localhost || echo "::warning::wallet.localhost does not resolve"
+
     # Install QEMU to support building multi-arch images
     - name: Set up QEMU
       if: ${{ fromJson(inputs.with_docker_images) }}
