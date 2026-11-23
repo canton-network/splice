@@ -47,6 +47,7 @@ import org.scalactic.source.Position
 
 import java.util.Optional
 import scala.annotation.nowarn
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -297,7 +298,8 @@ class ScanHistoryBackfillingIntegrationTest
     ) {
       // The vote results of the two scans are compared once they are complete: when exactly SV2 fetches the
       // vote from SV1 is up to timing, the cases in between are covered by VotesStoreBackfillingTest.
-      eventually() {
+      // SV2 waits for its own ingestion, then for SV1 to finish its local walk, and retries every polling interval.
+      eventually(timeUntilSuccess = 1.minute) {
         sv1ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
         sv2ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
       }
