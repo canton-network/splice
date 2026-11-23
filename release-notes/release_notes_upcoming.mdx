@@ -16,6 +16,14 @@
       endpoints. Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0,
       this removes the remaining parts.
 
+  - Deployment
+
+    - The SV charts (`splice-sv-node`, `splice-scan`, `splice-global-domain` and `splice-splitwell-app`) now honour
+      `persistence.user` and `persistence.bootstrapDatabaseName`, as the validator and participant charts already do. The
+      `pg-init` and wait containers, the Postgres exporter sidecar and the mediator and sequencer nodes themselves no
+      longer hardcode the `cnadmin` role and the `cantonnet` bootstrap database. They default to those values, so
+      rendered output is unchanged unless you set them.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,
