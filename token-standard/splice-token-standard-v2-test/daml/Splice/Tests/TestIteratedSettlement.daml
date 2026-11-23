@@ -39,13 +39,13 @@ amulet_test_locked_funds = mkAmuletTestCase >>= test_locked_funds
 amulet_test_refresh_and_withdrawal : Script ()
 amulet_test_refresh_and_withdrawal = mkAmuletTestCase >>= test_refresh_and_withdrawal
 
-amulet_test_allowed_instruments : Script ()
-amulet_test_allowed_instruments = mkAmuletTestCase >>= test_allowed_instruments False
+amulet_test_zero_funding : Script ()
+amulet_test_zero_funding = mkAmuletTestCase >>= test_zero_funding False
 
 -- | Amulet treats an empty `nextIterationFunding` map as allowing Amulet, which
 -- keeps allocations working that were created before `{"Amulet": 0.0}` could be settled.
-amulet_test_allowed_instruments_emptyFunding : Script ()
-amulet_test_allowed_instruments_emptyFunding = mkAmuletTestCase >>= test_allowed_instruments True
+amulet_test_zero_funding_emptyMap : Script ()
+amulet_test_zero_funding_emptyMap = mkAmuletTestCase >>= test_zero_funding True
 
 
 testTokenV2_test_locked_funds : Script ()
@@ -55,7 +55,10 @@ testTokenV2_test_refresh_and_withdrawal : Script ()
 testTokenV2_test_refresh_and_withdrawal = mkTestTokenV2TestCase >>= test_refresh_and_withdrawal
 
 testTokenV2_test_allowed_instruments : Script ()
-testTokenV2_test_allowed_instruments = mkTestTokenV2TestCase >>= test_allowed_instruments False
+testTokenV2_test_allowed_instruments = mkTestTokenV2TestCase >>= test_allowed_instruments
+
+testTokenV2_test_zero_funding : Script ()
+testTokenV2_test_zero_funding = mkTestTokenV2TestCase >>= test_zero_funding False
 
 mkAmuletTestCase : Script TestCase
 mkAmuletTestCase = do
@@ -269,58 +272,53 @@ test_locked_funds TestCase {..} = do
   pure ()
 
 
--- | Test that the instrument ids in an allocation's `nextIterationFunding` limit
--- the instruments that the executors can use in iterated settlement, that the
--- executors can narrow but not widen that set, and that a funding amount of
--- `0.0` allows an instrument without reserving funds for it.
---
--- If `useEmptyFunding` is set, the authorizer uses an empty `nextIterationFunding`
--- map, which only single-instrument registries like Amulet treat as allowing
--- their instrument.
-test_allowed_instruments : Bool -> TestCase -> Script ()
-test_allowed_instruments useEmptyFunding TestCase {..} = do
-  let allowedInstrId :: otherInstrIds = instrIds
+-- | Infrastructure for testing payments from alice to the provider, which the
+-- provider receives using an iterated allocation.
+data PaymentsEnv = PaymentsEnv with
+  createProviderAllocation : Optional (TextMap.TextMap Decimal) -> Script (ContractId V2.Allocation, V2.AllocationView)
+  allocatePayment : Text -> V2.InstrumentId -> Script (V2.TransferLeg, ContractId V2.Allocation)
+    -- ^ Allocate a payment by alice with the given transfer leg id and instrument.
+  settle : ContractId V2.Allocation -> [(V2.TransferLeg, ContractId V2.Allocation)] -> Optional (TextMap.TextMap Decimal) -> Script (EnrichedFactoryChoice V2.SettlementFactory V2.SettlementFactory_SettleBatch)
+    -- ^ Prepare the settlement of the payments against the provider's allocation.
+  settleAndGetNext : ContractId V2.Allocation -> [(V2.TransferLeg, ContractId V2.Allocation)] -> Optional (TextMap.TextMap Decimal) -> Script (ContractId V2.Allocation, V2.AllocationView)
+    -- ^ Settle the payments and return the provider's allocation for the next iteration.
+
+mkPaymentsEnv : TestCase -> Script PaymentsEnv
+mkPaymentsEnv TestCase {..} = do
+  now <- getTime
   let settlement = V2.SettlementInfo with
         executors = [provider]
         id = "payments/<uuid>"
         cid = None
         meta = emptyMetadata
-  let allowOnly instrId = Some (TextMap.fromList [(instrId.id, 0.0 : Decimal)])
-  now <- getTime
-
-  -- the provider allows receiving payments in only one instrument, without reserving any funds
-  enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
-    settlement
-    allocation = V2.AllocationSpecification with
-      authorizer = basicAccount provider
-      admin
-      transferLegSides = []
-      settlementDeadline = None
-      nextIterationFunding = if useEmptyFunding then Some TextMap.empty else allowOnly allowedInstrId
-      committed = False
-      meta = emptyMetadata
-    requestedAt = now
-    inputHoldingCids = []
-    actors = [provider]
-    extraArgs = emptyExtraArgs
-  result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
-    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-  let V2.AllocationInstructionResult_Completed providerAllocationCid = result.output
-
-  -- the allocation reports the allowed instruments explicitly
-  Some providerAllocView <- queryInterfaceContractId provider providerAllocationCid
-  providerAllocView.allocation.nextIterationFunding === allowOnly allowedInstrId
-
-  -- alice allocates payments to the provider
-  let paymentLeg legId instrId = V2.TransferLeg with
-        transferLegId = legId
-        sender = basicAccount alice
-        receiver = basicAccount provider
-        amount = 1.0
-        instrumentId = instrId.id
-        meta = emptyMetadata
-  let allocatePayment leg = do
-        let Some instrId = find (\instrId -> instrId.id == leg.instrumentId) instrIds
+  let createProviderAllocation nextIterationFunding = do
+        enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+          settlement
+          allocation = V2.AllocationSpecification with
+            authorizer = basicAccount provider
+            admin
+            transferLegSides = []
+            settlementDeadline = None
+            nextIterationFunding
+            committed = False
+            meta = emptyMetadata
+          requestedAt = now
+          inputHoldingCids = []
+          actors = [provider]
+          extraArgs = emptyExtraArgs
+        result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+          exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+        let V2.AllocationInstructionResult_Completed allocationCid = result.output
+        Some allocView <- queryInterfaceContractId provider allocationCid
+        pure (allocationCid, allocView)
+  let allocatePayment legId instrId = do
+        let leg = V2.TransferLeg with
+              transferLegId = legId
+              sender = basicAccount alice
+              receiver = basicAccount provider
+              amount = 1.0
+              instrumentId = instrId.id
+              meta = emptyMetadata
         inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
         enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
           settlement
@@ -339,9 +337,7 @@ test_allowed_instruments useEmptyFunding TestCase {..} = do
         result <- WalletClientV2.submitAndCheckTxHistory admins (actAs alice <> discloseMany' enrichedChoice.disclosures) $
           exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
         let V2.AllocationInstructionResult_Completed allocationCid = result.output
-        pure allocationCid
-
-  -- settle a list of payments against the provider's iterated allocation
+        pure (leg, allocationCid)
   let settle providerCid payments nextIterationFunding = do
         let legs = map fst payments
         V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
@@ -363,52 +359,71 @@ test_allowed_instruments useEmptyFunding TestCase {..} = do
         let Some nextProviderCid = WalletClientV2.extractNextIterationAllocationCid providerSettleResult
         Some nextProviderAllocView <- queryInterfaceContractId provider nextProviderCid
         pure (nextProviderCid, nextProviderAllocView)
+  pure PaymentsEnv with ..
 
-  let allowedLeg1 = paymentLeg "payment-1" allowedInstrId
-  allowedAllocCid1 <- allocatePayment allowedLeg1
+-- | Test that the instrument ids in an allocation's `nextIterationFunding` limit
+-- the instruments that the executors can use in iterated settlement, and that
+-- the executors can narrow but not widen that set.
+--
+-- Requires a registry with two instruments.
+test_allowed_instruments : TestCase -> Script ()
+test_allowed_instruments testCase@TestCase {..} = do
+  let [xId, yId] = instrIds
+  let allowXY = Some (TextMap.fromList [(xId.id, 0.0), (yId.id, 0.0)])
+  let allowX = Some (TextMap.fromList [(xId.id, 0.0)])
+  PaymentsEnv {..} <- mkPaymentsEnv testCase
 
-  -- the executors cannot widen the set of allowed instruments
-  forA_ otherInstrIds $ \otherInstrId -> do
-    let otherLeg = paymentLeg ("payment-" <> otherInstrId.id) otherInstrId
-    otherAllocCid <- allocatePayment otherLeg
-    enrichedChoice <- settle providerAllocationCid [(otherLeg, otherAllocCid)] (allowOnly allowedInstrId)
-    submitMustFail''
-      (expectMessageContains "'finalizedAllocation.extraTransferLegSides.instrumentId' is not a member of 'allowed instrument ids'")
-      (actAs provider <> discloseMany' enrichedChoice.disclosures) $
-        exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-    enrichedChoice <- settle providerAllocationCid [(allowedLeg1, allowedAllocCid1)]
-      (Some (TextMap.fromList [(allowedInstrId.id, 0.0), (otherInstrId.id, 0.0)]))
-    submitMustFail''
-      (expectMessageContains "'finalizedAllocation.nextIterationFunding.instrumentId' is not a member of 'allowed instrument ids'")
-      (actAs provider <> discloseMany' enrichedChoice.disclosures) $
-        exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  -- the provider allows receiving payments in X and Y, without reserving any funds
+  (providerCid, providerView) <- createProviderAllocation allowXY
+  providerView.allocation.nextIterationFunding === allowXY
 
-  -- the executors can settle payments in the allowed instrument, and keep the limit for the next iteration
-  (providerAllocationCid, providerAllocView) <-
-    settleAndGetNext providerAllocationCid [(allowedLeg1, allowedAllocCid1)] (allowOnly allowedInstrId)
-  WalletClientV2.checkBalance provider allowedInstrId 1.0
-  providerAllocView.allocation.nextIterationFunding === allowOnly allowedInstrId
+  -- the executors settle a payment in Y and narrow the allowed instruments to X
+  paymentY1 <- allocatePayment "payment-y1" yId
+  (providerCid, providerView) <- settleAndGetNext providerCid [paymentY1] allowX
+  WalletClientV2.checkBalance provider yId 1.0
+  providerView.allocation.nextIterationFunding === allowX
 
-  -- the executors can narrow the set of allowed instruments, here to the empty set
-  (providerAllocationCid, providerAllocView) <-
-    settleAndGetNext providerAllocationCid [] (Some TextMap.empty)
-  let allowedLeg2 = paymentLeg "payment-2" allowedInstrId
-  allowedAllocCid2 <- allocatePayment allowedLeg2
-  if admin == env.amuletV2.instrumentId.admin
-    then do
-      -- Amulet treats the empty map as allowing Amulet, so narrowing it to the
-      -- empty set has no effect. The executors can use `None` to end iterated
-      -- settlement instead.
-      providerAllocView.allocation.nextIterationFunding === allowOnly allowedInstrId
-      _ <- settleAndGetNext providerAllocationCid [(allowedLeg2, allowedAllocCid2)] (allowOnly allowedInstrId)
-      WalletClientV2.checkBalance provider allowedInstrId 2.0
-    else do
-      providerAllocView.allocation.nextIterationFunding === Some TextMap.empty
-      enrichedChoice <- settle providerAllocationCid [(allowedLeg2, allowedAllocCid2)] (Some TextMap.empty)
-      submitMustFail''
-        (expectMessageContains "'finalizedAllocation.extraTransferLegSides.instrumentId' is not a member of 'allowed instrument ids'")
-        (actAs provider <> discloseMany' enrichedChoice.disclosures) $
-          exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  -- payments in Y are now rejected
+  paymentY2 <- allocatePayment "payment-y2" yId
+  enrichedChoice <- settle providerCid [paymentY2] allowX
+  submitMustFail''
+    (expectMessageContains "'finalizedAllocation.extraTransferLegSides.instrumentId' is not a member of 'allowed instrument ids'")
+    (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- the executors cannot widen the allowed instruments again
+  paymentX <- allocatePayment "payment-x" xId
+  enrichedChoice <- settle providerCid [paymentX] allowXY
+  submitMustFail''
+    (expectMessageContains "'finalizedAllocation.nextIterationFunding.instrumentId' is not a member of 'allowed instrument ids'")
+    (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- payments in X still settle, and the limit is kept for the next iteration
+  (_, providerView) <- settleAndGetNext providerCid [paymentX] allowX
+  WalletClientV2.checkBalance provider xId 1.0
+  providerView.allocation.nextIterationFunding === allowX
+
+-- | Test that a funding amount of `0.0` allows receiving an instrument without
+-- reserving funds for it.
+--
+-- If `useEmptyMap` is set, the authorizer uses an empty `nextIterationFunding`
+-- map instead, which only single-instrument registries like Amulet treat as
+-- allowing their instrument.
+test_zero_funding : Bool -> TestCase -> Script ()
+test_zero_funding useEmptyMap testCase@TestCase {..} = do
+  let instrId :: _ = instrIds
+  let allowInstr = Some (TextMap.fromList [(instrId.id, 0.0)])
+  PaymentsEnv {..} <- mkPaymentsEnv testCase
+
+  (providerCid, providerView) <- createProviderAllocation (if useEmptyMap then Some TextMap.empty else allowInstr)
+  -- the allocation reports the allowed instruments explicitly
+  providerView.allocation.nextIterationFunding === allowInstr
+
+  payment <- allocatePayment "payment" instrId
+  (_, providerView) <- settleAndGetNext providerCid [payment] allowInstr
+  WalletClientV2.checkBalance provider instrId 1.0
+  providerView.allocation.nextIterationFunding === allowInstr
 
 
 -- | Test that refresh on settlement and withdrawal of iterated allocations works as expected.
