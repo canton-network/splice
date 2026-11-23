@@ -219,30 +219,23 @@ terminatedSubscriptionCanBeCleanedUp = script do
   terminatedSubscriptions === []
   pure ()
 
-testRequestEntryTextLimits : Script ()
-testRequestEntryTextLimits = script do
+testRequestEntryNameLimit : Script ()
+testRequestEntryNameLimit = script do
   DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
 
   ansRulesCid <- submit (actAs app.dso) $ createCmd AnsRules with
     dso = app.dso
     config = defaultAnsRulesConfig
 
-  let requestEntry name url description =
+  let requestEntry name =
         exerciseCmd ansRulesCid AnsRules_RequestEntry with
           name
-          url
-          description
+          url = "https://example.com"
+          description = "description"
           user = alice.primaryParty
-      -- the limits are spelled out to notice accidental changes
+      -- the limit is spelled out to notice accidental changes
       maxName = Text.implode (replicate 255 "n")
-      maxUrl = Text.implode (replicate 4096 "u")
-      maxDescription = Text.implode (replicate 4096 "d")
 
-  -- values at the limit are accepted
-  _ <- submit (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName maxUrl maxDescription
-
-  -- values one over the limit are rejected
-  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry (maxName <> "n") maxUrl maxDescription
-  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName (maxUrl <> "u") maxDescription
-  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName maxUrl (maxDescription <> "d")
+  _ <- submit (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName
+  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry (maxName <> "n")
   pure ()

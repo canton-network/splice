@@ -11,7 +11,6 @@ module Splice.TextLimits
 (
   maxIdentifierLength,
   maxTrackingIdLength,
-  maxFreeFormTextLength,
   maxSvOnboardingTokenLength,
 
   requireMaxLength,
@@ -31,10 +30,6 @@ maxIdentifierLength = 255
 -- without making existing transfer offers unusable.
 maxTrackingIdLength : Int
 maxTrackingIdLength = 279
-
--- | Maximum length of free-form text, e.g., descriptions and URLs.
-maxFreeFormTextLength : Int
-maxFreeFormTextLength = 4096
 
 -- | Maximum length of the signed token with which an SV candidate requests to be onboarded.
 -- The token is a JWT, whose characters `requireSvOnboardingTokenCharacters` restricts to ASCII.

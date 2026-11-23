@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.admin.http
 
 import cats.syntax.either.*
+import com.digitalasset.canton.config.CantonRequireTypes.String185
 import com.digitalasset.canton.config.{
   NonNegativeDuration,
   NonNegativeFiniteDuration,
@@ -13,7 +14,7 @@ import com.digitalasset.canton.daml.lf.value.json.ApiCodecCompressed
 import com.digitalasset.canton.lifecycle.{AsyncCloseable, AsyncOrSyncCloseable, FlagCloseableAsync}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.topology.{PartyId, UniqueIdentifier}
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import com.digitalasset.canton.util.{ErrorUtil, Mutex}
 import io.opentelemetry.api.trace.Tracer
@@ -44,13 +45,7 @@ import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.util.{
-  Codec,
-  Contract,
-  DsoInfo,
-  TemplateJsonDecoder,
-  TextLimits,
-}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, DsoInfo, TemplateJsonDecoder}
 
 import java.util.Optional
 import scala.concurrent.{blocking, ExecutionContextExecutor, Future}
@@ -301,13 +296,18 @@ class HttpSvOperatorHandler(
   ): Future[r0.PrepareValidatorOnboardingResponse] = {
     implicit val ActAsKnownUserRequest(traceContext) = extracted
     withSpan(s"$workflowId.prepareValidatorOnboarding") { _ => _ =>
-      body.partyHint.foreach(
-        TextLimits.requireMaxLength("party_hint", TextLimits.maxIdentifierLength, _)
-      )
       val secret = generateRandomOnboardingSecret(svStore.key.svParty, body.partyHint)
       val expiresIn = NonNegativeFiniteDuration.ofSeconds(body.expiresIn.toLong)
-      dsoStore
-        .getDsoRules()
+      // The party hint becomes part of the stored onboarding secret, and must match the
+      // identifier of the validator's party, so we reject hints that cannot be one.
+      body.partyHint
+        .map(UniqueIdentifier.verifyValidString(_).flatMap(String185.create(_)))
+        .fold(Future.unit) {
+          case Left(error) =>
+            Future.failed(HttpErrorHandler.badRequest(s"Invalid party hint: $error"))
+          case Right(_) => Future.unit
+        }
+        .flatMap(_ => dsoStore.getDsoRules())
         .flatMap { dsoRules =>
           SvApp
             .prepareValidatorOnboarding(
