@@ -2201,6 +2201,8 @@ class UpdateHistory private (
           "update_history_unassignments",
         )
       ) { table =>
+        // Index-only scan of updt_hist_*_hi_mi_rt_di with LIMIT 1 (min): a few pages whatever the table size, also when
+        // nothing matches. No table scan.
         storage.query(
           sql"""
             select min(record_time) from #$table
@@ -2230,6 +2232,9 @@ class UpdateHistory private (
             "update_history_unassignments",
           )
         ) { table =>
+          // Range scan of updt_hist_*_hi_mi_rt_di filtering on update_id, or, for transactions with a wide range or a
+          // generic plan, one probe of updt_hist_tran_hi_ui per id filtering on the rest. No table scan; cost is bounded
+          // by the ids and by the rows in the range, which callers keep to one batch of consecutive updates.
           storage.query(
             sql"""
               select update_id from #$table
