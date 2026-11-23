@@ -10,8 +10,11 @@
 --      the ingestion of the votes store took over,
 --   2. copies the vote results of the txlog, with the contract ids from the update history,
 --   3. marks the votes store as complete.
--- A scan for which a check fails is skipped: its votes store stays as it is, and VotesStoreBackfilling fetches
--- the vote results from peers. A skipped scan is logged at info level with the reason.
+-- A scan for which a check of its state fails is skipped: its votes store stays as it is, and VotesStoreBackfilling
+-- fetches the vote results from peers. A skipped scan is logged at info level with the reason (SQLSTATE VS001).
+-- If the copied data does not pass the check after the copy, the copy is rolled back, and the failure is logged
+-- as a warning (SQLSTATE VS002): this is not expected on any scan, and needs to be investigated.
+-- (Codes ending in 000 cannot be used: in an exception handler, they match every code of their class.)
 --
 -- This migration must never fail, as that would prevent the app from starting. We do not expect any data that
 -- the statements below cannot handle, but if there is, the error is logged as a warning and the scan is skipped
@@ -62,7 +65,7 @@ begin
                                from txlog_backfilling_status
                                where store_id = scan.txlog_store_id
                                  and backfilling_complete) then
-                    raise exception using errcode = 'VS000',
+                    raise exception using errcode = 'VS001',
                         message = 'the backfilling of the txlog is not complete';
                 end if;
 
@@ -72,7 +75,7 @@ begin
                                from update_history_backfilling
                                where history_id = scan.history_id
                                  and complete) then
-                    raise exception using errcode = 'VS000',
+                    raise exception using errcode = 'VS001',
                         message = 'the backfilling of the update history is not complete';
                 end if;
 
@@ -84,7 +87,7 @@ begin
                 where store_id = scan.kv_store_id
                   and key = 'votes_store_first_ingested_record_time_' || scan.txlog_store_id;
                 if first_ingested is null then
-                    raise exception using errcode = 'VS000',
+                    raise exception using errcode = 'VS001',
                         message = 'the votes store has not started ingesting';
                 end if;
 
@@ -106,7 +109,7 @@ begin
                                where u.history_id = scan.history_id
                                  and u.migration_id = current_migration_id
                                  and u.record_time >= first_ingested) then
-                    raise exception using errcode = 'VS000',
+                    raise exception using errcode = 'VS001',
                         message = 'the update history has not ingested up to where the votes store started';
                 end if;
 
@@ -199,7 +202,8 @@ begin
                 where v.store_id = scan.txlog_store_id
                   and v.contract_id is null;
                 if num_without_contract_id > 0 then
-                    raise exception '% vote results have no contract id', num_without_contract_id;
+                    raise exception using errcode = 'VS002',
+                        message = format('%s vote results have no contract id', num_without_contract_id);
                 end if;
 
                 -- Mark the votes store as complete: it now has every vote result since the start of the network.
@@ -211,11 +215,16 @@ begin
                 raise info 'votes_store_from_txlog: copied % vote results for txlog store %, the votes store is complete',
                     num_copied, scan.txlog_store_id;
             exception
-                -- A failed check
-                when sqlstate 'VS000' then
+                -- A failed check of the state of the scan: the migration is not meant for it
+                when sqlstate 'VS001' then
                     raise info 'votes_store_from_txlog: skipping txlog store %, its vote results will be backfilled from peers: %',
                         scan.txlog_store_id, sqlerrm;
-                -- query_canceled (e.g., a statement timeout) is not covered by "others", so it is listed explicitly.
+                -- A failed check of the copied data: not expected on any scan
+                when sqlstate 'VS002' then
+                    raise warning 'votes_store_from_txlog: the copied data for txlog store % failed a check, the copy is rolled back and its vote results will be backfilled from peers: %',
+                        scan.txlog_store_id, sqlerrm;
+                -- Any other error. query_canceled (e.g., a statement timeout) is not covered by "others", so it is
+                -- listed explicitly.
                 when query_canceled or others then
                     raise warning 'votes_store_from_txlog: failed for txlog store %, nothing was copied and its vote results will be backfilled from peers. Cause: % (SQLSTATE %)',
                         scan.txlog_store_id, sqlerrm, sqlstate;
