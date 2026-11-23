@@ -93,19 +93,24 @@
 
     - Daml Model Changes:
 
-      - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
-        that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
-        SV apps pass the node states once this version is vetted.
+      - Token standard V2, iterated settlement only: the instrument ids in an allocation's
+        `AllocationSpecification.nextIterationFunding` are now the only instruments that the executors can use
+        to settle it iteratively. The default implementations in `splice-token-standard-utils`, from version 2.0.2,
+        reject extra transfer leg sides and next-iteration funding for any other instrument. The executors can
+        narrow, but not widen, this set for later iterations. A funding amount of `0.0` allows an instrument
+        without reserving funds for it.
+        This change only affects allocations that enable iterated settlement. Allocations with
+        `nextIterationFunding = None`, including all receipt allocations, are not affected.
 
-      - Security hardening: add extra assertions to the `WalletAppInstall` choices.
+        **Trading apps that use iterated allocations**: we recommend that you review your code and ensure
+        that your allocations always list all instrument ids that will be used in later settlement iterations,
+        with amount `0.0` for instruments that need no funding, e.g., `nextIterationFunding = Some {"X": 0.0}`.
+        You must make this change as soon as the registries you use enforce this rule.
 
-      - Token standard V2: the instrument ids in `AllocationSpecification.nextIterationFunding` now limit the
-        instruments that the executors can use in iterated settlement. Canton Coin allocations and the
-        `splice-token-standard-utils` implementations reject extra transfer leg sides and next-iteration funding for
-        instruments that are not keys of the allocation's `nextIterationFunding`, and accept a funding amount of `0.0`
-        to allow an instrument without reserving funds for it. For backwards compatibility, Canton Coin allocations
-        treat an empty `nextIterationFunding` map as `{"Amulet": 0.0}` and report it as such in their allocation view.
-        New allocations should list the instrument explicitly, e.g., `nextIterationFunding = Some {"Amulet": 0.0}`.
+      - Canton Coin, iterated settlement only: Canton Coin allocations enforce the rule above. For backwards
+        compatibility, they treat an empty `nextIterationFunding` map as `{"Amulet": 0.0}` and report it as such in
+        their allocation view, so existing Canton Coin allocations keep working. New allocations should list
+        Amulet explicitly, i.e., `nextIterationFunding = Some {"Amulet": 0.0}`.
 
       - All Canton Coin transactions now emit token standard V2 transaction-history events, i.e.,
         `EventLog_HoldingsChange` events reported by the DSO party. Clients can rely on these events
@@ -125,3 +130,9 @@
 
         Nodes no longer upload or vet older versions of these packages, and downgrading the Daml models
         below these versions is no longer supported.
+
+      - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
+        that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
+        SV apps pass the node states once this version is vetted.
+
+      - Security hardening: add extra assertions to the `WalletAppInstall` choices.
