@@ -26,7 +26,11 @@ declare
     scan           record;
     -- The record time (in microseconds) of the first transaction that the votes store ingested
     first_ingested bigint;
+    -- The current migration id of the update history
+    current_migration_id bigint;
     num_copied     bigint;
+    -- The number of vote results in the votes store without a contract id, after the copy
+    num_without_contract_id bigint;
 begin
     for scan in
         -- The txlog stores of the scan app (the version distinguishes them from its ACS stores, which have
@@ -85,11 +89,20 @@ begin
                 end if;
 
                 -- Check 4: the update history has ingested up to that point as well.
-                -- Uses the index updt_hist_tran_hi_rt_di.
+                -- The votes store started ingesting in the current migration id, so it is enough to look at
+                -- that one. Including it in the query lets both statements use a prefix of the index
+                -- updt_hist_tran_hi_mi_rt_di (history_id, migration_id, record_time, domain_id): the max is a
+                -- short backward scan, and the exists a single probe. Without the migration id, Postgres versions
+                -- before 18 (which cannot skip-scan) would walk the entries of all older migration ids.
+                select max(u.migration_id)
+                into current_migration_id
+                from update_history_transactions u
+                where u.history_id = scan.history_id;
                 if not exists (select 1
-                               from update_history_transactions
-                               where history_id = scan.history_id
-                                 and record_time >= first_ingested) then
+                               from update_history_transactions u
+                               where u.history_id = scan.history_id
+                                 and u.migration_id = current_migration_id
+                                 and u.record_time >= first_ingested) then
                     raise exception using errcode = 'VS000',
                         message = 'the update history has not ingested up to where the votes store started';
                 end if;
@@ -99,9 +112,17 @@ begin
                 -- - The event id in the txlog has format '#<update id>:<node id>'.
                 -- - Timestamps are ISO-8601 strings (e.g., 2024-03-01T10:00:00.123456Z), converted to microseconds
                 --   since the epoch.
+                -- - The rows are read with the index scan_txlog_store_sid_et_ei (store_id, entry_type, event_id),
+                --   which only touches the vote entries of this store.
                 -- - The contract id of the DsoRules on which the choice was exercised is not in the txlog. It is
-                --   looked up in the update history, using the indexes updt_hist_tran_hi_ui and updt_hist_exer_uri.
-                --   It stays null if the update is not found.
+                --   looked up in the update history, per vote:
+                --   - the transaction by the unique index updt_hist_tran_hi_mi_ui_u
+                --     (history_id, migration_id, domain_id, update_id), a single row,
+                --   - its exercises by a prefix of the index updt_hist_exer_unique (update_row_id, event_id).
+                --   The txlog and the update history are ingested from the same updates, so the migration id and the
+                --   synchronizer id of a vote are the same in both. The record time is not needed to find the row.
+                --   The contract id stays null if the update is not found, which does not make the copy fail
+                --   (the column is nullable). Such rows are counted and logged below.
                 -- - Votes that are in votes_store_results already (ingested live) are skipped.
                 insert
                 into votes_store_results(store_id, record_time, synchronizer_id, update_id, event_number,
@@ -117,8 +138,9 @@ begin
                         from update_history_transactions u
                                  join update_history_exercises e on e.update_row_id = u.row_id
                         where u.history_id = scan.history_id
-                          and u.update_id = vote.update_id
+                          and u.migration_id = t.migration_id
                           and u.domain_id = t.domain_id
+                          and u.update_id = vote.update_id
                           and e.choice = 'DsoRules_CloseVoteRequest'
                           and e.template_id_module_name = 'Splice.DsoRules'
                           and e.template_id_entity_name = 'DsoRules'
@@ -145,8 +167,22 @@ begin
                 values ('votes_store_backfill_complete_' || scan.txlog_store_id, to_jsonb(true), scan.kv_store_id)
                 on conflict on constraint uc_key_value_store do update set value = excluded.value;
 
-                raise info 'votes_store_from_txlog: copied % vote results for txlog store %, the votes store is complete',
-                    num_copied, scan.txlog_store_id;
+                -- A vote result without a contract id is not served to peers (see HttpScanHandler.encodeVoteResultForBackfilling).
+                -- If every migrated Scan lacks the contract id of the same vote, the backfilling of joining Scans
+                -- stops at that vote, so make it visible right after the upgrade.
+                -- Uses a prefix of the primary key (store_id, record_time, event_number).
+                select count(*)
+                into num_without_contract_id
+                from votes_store_results v
+                where v.store_id = scan.txlog_store_id
+                  and v.contract_id is null;
+
+                raise info 'votes_store_from_txlog: copied % vote results for txlog store %, the votes store is complete. Vote results without a contract id: %',
+                    num_copied, scan.txlog_store_id, num_without_contract_id;
+                if num_without_contract_id > 0 then
+                    raise warning 'votes_store_from_txlog: % vote results of txlog store % have no contract id, they will not be served to peers that backfill their votes',
+                        num_without_contract_id, scan.txlog_store_id;
+                end if;
             exception
                 -- A failed check
                 when sqlstate 'VS000' then
