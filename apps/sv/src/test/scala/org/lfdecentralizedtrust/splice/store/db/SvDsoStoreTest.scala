@@ -3126,6 +3126,23 @@ class DbSvDsoStoreTest
       } yield result should be(Some(created))
     }
 
+    "be ingested and found when the text is multi-byte" in {
+      // A CJK ideograph takes 3 bytes in UTF-8, so this is well within the bound that
+      // DsoRules_StartSvOnboarding enforces on code points but far above the byte budget of
+      // the index columns, and the truncation lands in the middle of a character.
+      val multiByteText = "本" * 1024
+      val created = svOnboardingRequest(multiByteText, userParty(2), "pid", multiByteText)
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(created)(store.multiDomainAcsStore)
+        byParty <- store.lookupSvOnboardingRequestByCandidateParty(userParty(2))
+        byName <- store.lookupSvOnboardingRequestByCandidateName(multiByteText)
+      } yield {
+        byParty should be(Some(created))
+        byName should be(Some(created))
+      }
+    }
+
     "be found by the columns that were truncated" in {
       val created = request
       for {

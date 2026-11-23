@@ -192,19 +192,9 @@ class HttpSvPublicHandler(
       for {
         dsoRules <- dsoStore.getDsoRules()
         maxTextLength = dsoRules.payload.config.maxTextLength.longValue
-        outcome <-
-          if (body.token.length > maxTextLength)
-            Future.failed(
-              HttpErrorHandler.badRequest(
-                s"Onboarding token is longer than the maximum of $maxTextLength characters."
-              )
-            )
-          else
-            SvOnboardingToken.verifyAndDecode(body.token) match {
+        outcome <- validateStartSvOnboardingBody(body, maxTextLength) match {
               case Left(error) =>
-                Future.failed(
-                  HttpErrorHandler.badRequest(s"Could not verify and decode token: $error")
-                )
+                Future.failed(HttpErrorHandler.badRequest(error))
               case Right(token) =>
                 for {
                   isCandidatePartyHostedOnParticipant <- participantAdminConnection
@@ -215,21 +205,7 @@ class HttpSvPublicHandler(
                     )
                     .map(_.nonEmpty)
                   res <-
-                    if (token.candidateName.length > maxTextLength) {
-                      Future.failed(
-                        HttpErrorHandler.badRequest(
-                          s"Candidate name is longer than the maximum of $maxTextLength characters."
-                        )
-                      )
-                    } else if (
-                      !SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)
-                    ) {
-                      Future.failed(
-                        HttpErrorHandler.badRequest(
-                          s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."
-                        )
-                      )
-                    } else if (!isCandidatePartyHostedOnParticipant)
+                    if (!isCandidatePartyHostedOnParticipant)
                       // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
                       // and the client can just retry on that.
                       Future.failed(
@@ -282,6 +258,38 @@ class HttpSvPublicHandler(
             }
       } yield outcome
     }
+  }
+
+  /** Validates the request body and decodes its token. The length of the unbounded body is
+    * checked before it is parsed and its signature verified. Lengths are counted in code points
+    * to match the bound that DsoRules_StartSvOnboarding enforces.
+    */
+  private def validateStartSvOnboardingBody(
+      body: definitions.StartSvOnboardingRequest,
+      maxTextLength: Long,
+  ): Either[String, SvOnboardingToken] = {
+    def textLength(text: String): Long = text.codePointCount(0, text.length).toLong
+    for {
+      _ <- Either.cond(
+        textLength(body.token) <= maxTextLength,
+        (),
+        s"Onboarding token is longer than the maximum of $maxTextLength characters.",
+      )
+      token <- SvOnboardingToken
+        .verifyAndDecode(body.token)
+        .left
+        .map(error => s"Could not verify and decode token: $error")
+      _ <- Either.cond(
+        textLength(token.candidateName) <= maxTextLength,
+        (),
+        s"Candidate name is longer than the maximum of $maxTextLength characters.",
+      )
+      _ <- Either.cond(
+        SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId),
+        (),
+        s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}.",
+      )
+    } yield token
   }
 
   /** Intended use: Used by other SV operators

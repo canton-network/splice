@@ -144,9 +144,9 @@ class DbVotesStore private (
   ): NonEmptyList[SQLActionBuilderChain] = NonEmptyList(
     toSQLActionBuilderChain(sql"store_id = $storeId"),
     List(
-      f.actionName.map(n => sql"vote_action_name like ${lengthLimited(s"%$n%")}"),
+      f.actionName.map(n => sql"vote_action_name like ${lengthLimitedContainsPattern(n)}"),
       f.accepted.map(a => sql"vote_accepted = $a"),
-      f.requester.map(r => sql"vote_requester_name like ${lengthLimited(s"%$r%")}"),
+      f.requester.map(r => sql"vote_requester_name like ${lengthLimitedContainsPattern(r)}"),
       (
         f.effectiveFrom.map(parseMicros("effective_from", _)),
         f.effectiveTo.map(parseMicros("effective_to", _)),
