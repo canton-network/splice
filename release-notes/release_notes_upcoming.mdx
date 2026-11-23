@@ -9,6 +9,10 @@
       the remaining parts.
     - Removed the deprecated `/v0/amulet-config-for-round` endpoint. Use the `transferConfigUsd` and `amuletPrice`
       fields of the `OpenMiningRound` contracts returned by `/v0/open-and-issuing-mining-rounds` instead.
+    - Added the option to load the update history before a Scan's history start from its own bulk storage,
+      `bulkStorage.updateHistoryBackfilling.enabled` in the Scan Helm chart. It is off by default, still in
+      development, and only takes effect when update history backfilling from peers is off
+      (`updateHistoryBackfilling.enabled: false`).
 
   - Validator App
 
