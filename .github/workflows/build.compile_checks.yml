@@ -53,15 +53,37 @@ jobs:
           save_caches: true
           setup_sbt_cache_hits: ${{ steps.setup.outputs.sbt_cache_hits }}
 
+      - name: Look up whether DarResources was already checked for these inputs
+        id: dar_resources_checked
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/dar-resources-checked
+          key: dar-resources-checked-1 ${{ hashFiles('daml/dars/**', 'daml/dars.lock', 'apps/dar-resources-generator/src/**', 'apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/DarResources.scala', 'build.sbt', 'project/*.scala', 'project/*.sbt', 'project/build.properties', '.scalafmt.conf', 'nix/canton-sources.json') }}
+          lookup-only: true
+
       - name: Checks that need the build
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
-          cmd: "lintCompiled updateTestConfigForParallelRuns updateDarResources"
+          cmd: "lintCompiled updateTestConfigForParallelRuns${{ steps.dar_resources_checked.outputs.cache-hit != 'true' && ' updateDarResources' || '' }}"
 
       - name: Verify no changes in SBT test files
         uses: ./.github/actions/nix/run
         with:
           cmd: git add . && git diff --staged --exit-code test*.log '**/DarResources.scala'
+
+      - name: Mark DarResources as checked for these inputs
+        if: steps.dar_resources_checked.outputs.cache-hit != 'true' && github.event_name == 'push'
+        shell: bash
+        run: |
+          mkdir -p /tmp/dar-resources-checked
+          echo "${GITHUB_SHA}" > /tmp/dar-resources-checked/checked
+
+      - name: Save the DarResources check marker
+        if: steps.dar_resources_checked.outputs.cache-hit != 'true' && github.event_name == 'push'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/dar-resources-checked
+          key: ${{ steps.dar_resources_checked.outputs.cache-primary-key }}
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
