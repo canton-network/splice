@@ -253,6 +253,33 @@ runs:
           sudo chown "$(id -u):$(id -g)" "$HOME/.docker"
         fi
 
+    # TODO(tech-debt): remove once we know why downloads in docker builds hang on the canton-network-splice runners.
+    # The self-hosted-k8s-* runners needed an MTU of 1400 for the docker network, see cluster/pulumi/gha/src/runners.ts.
+    - name: Diagnose the docker network
+      if: ${{ fromJson(inputs.with_docker_images) }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        print_mtus='for i in /sys/class/net/*; do echo "  $(basename "$i") mtu=$(cat "$i/mtu")"; done'
+        echo "Runner:"
+        sh -c "$print_mtus"
+        echo "Options of the docker bridge network:"
+        docker network inspect bridge --format '{{json .Options}}'
+        for net in bridge host; do
+          echo "Container on the $net network:"
+          docker run --rm --network "$net" alpine sh -c "$print_mtus"
+        done
+        url=https://github.com/fullstorydev/grpcurl/releases/download/v1.9.2/grpcurl_1.9.2_linux_amd64.deb
+        for net in bridge host; do
+          for attempt in 1 2 3; do
+            docker run --rm --network "$net" alpine sh -c '
+              start=$(date +%s)
+              if wget -q -T 30 -O /dev/null "$1"; then result=ok; else result=failed; fi
+              echo "Download on the $2 network, attempt $3: $result after $(($(date +%s) - start))s"
+            ' sh "$url" "$net" "$attempt"
+          done
+        done
+
     # Install QEMU to support building multi-arch images
     - name: Set up QEMU
       if: ${{ fromJson(inputs.with_docker_images) }}

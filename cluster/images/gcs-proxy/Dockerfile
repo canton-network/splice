@@ -9,9 +9,10 @@ LABEL org.opencontainers.image.base.name="debian:trixie-slim"
 WORKDIR /tmp
 ENV GCSPROXY_VERSION=0.3.1
 
+# The download sometimes hangs after connecting, so time it out quickly and retry
 RUN apt-get update \
     && apt-get install --no-install-suggests --no-install-recommends --yes ca-certificates wget \
-    && wget https://github.com/daichirata/gcsproxy/releases/download/v${GCSPROXY_VERSION}/gcsproxy-${GCSPROXY_VERSION}-linux-amd64.tar.gz \
+    && wget --timeout=30 --tries=5 --waitretry=5 --retry-connrefused https://github.com/daichirata/gcsproxy/releases/download/v${GCSPROXY_VERSION}/gcsproxy-${GCSPROXY_VERSION}-linux-amd64.tar.gz \
     && tar zxf gcsproxy-${GCSPROXY_VERSION}-linux-amd64.tar.gz \
     && cp ./gcsproxy-${GCSPROXY_VERSION}-linux-amd64/gcsproxy /
 
