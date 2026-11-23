@@ -13,6 +13,7 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.List (sort)
 import DA.Map qualified as Map
+import DA.TextMap qualified as TextMap
 import DA.Time
 
 import Daml.Script
@@ -129,6 +130,39 @@ test_allocationV1_settleMultiExecutors = do
   submit (actAs provider1 <> actAs provider2 <> discloseMany' enrichedChoice.disclosures) $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   pure ()
+
+-- An iterated allocation whose next iteration funding has a zero amount can be settled via the
+-- settlement factory, and continues into the next iteration with that zero amount.
+test_settleBatchV2_iterated_zeroNextIterationFunding : Script ()
+test_settleBatchV2_iterated_zeroNextIterationFunding = do
+  TestEnv {..} <- setupTest
+  let zeroFunding = Some $ TextMap.fromList [(instrId.id, 0.0)]
+  -- The test settles `legV2` (2.0 from Alice to Bob). Alice allocates her side of it upfront,
+  -- as zero next iteration funding cannot pay for an extra outgoing leg.
+  let aliceAllocationV2 = allocationV2 with
+        transferLegSides = [TSU.senderSide legV2]
+        nextIterationFunding = zeroFunding
+  WalletClientV2.allocateV2 registries alice settlementV2 aliceAllocationV2
+  WalletClientV2.allocateV2 registries bob settlementV2 allocationV2 with
+    authorizer = bobAccount
+    transferLegSides = [TSU.receiverSide legV2]
+    nextIterationFunding = None
+  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  [(bobAllocCid, _)] <- WalletClientV2.listAllocationsV2 bobAccount bob
+  let settleArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        transferLegs = [legV2]
+        allocations =
+          [ V2.FinalizedAllocation aliceAllocCid [] zeroFunding
+          , TSU.nonIteratedAllocation bobAllocCid
+          ]
+        actors = [provider1, provider2]
+        extraArgs = emptyExtraArgs
+  enrichedChoice <- V2.getSettlementFactory registryV2 settleArg
+  submit (actAs provider1 <> actAs provider2 <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  [(_, aliceNextAllocView)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  aliceNextAllocView.allocation === aliceAllocationV2 with transferLegSides = []
 
 
 -- Expiry via V2.Allocation_Cancel of V1 and V2 amulet allocations
