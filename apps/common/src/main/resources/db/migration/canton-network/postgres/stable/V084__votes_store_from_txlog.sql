@@ -186,19 +186,12 @@ begin
                 on conflict do nothing;
                 get diagnostics num_copied = row_count;
 
-                -- Mark the votes store as complete: it now has every vote result since the start of the network.
-                insert
-                into key_value_store(key, value, store_id)
-                values ('votes_store_backfill_complete_' || scan.txlog_store_id, to_jsonb(true), scan.kv_store_id)
-                on conflict on constraint uc_key_value_store do update set value = excluded.value;
-
                 -- Check 5: every vote result has a contract id, the copied ones as well as the ones that were in the
                 -- votes store already. With the checks above, all of them are expected to be found in the update
-                -- history. A missing one means that one of our assumptions is
-                -- wrong, and a vote result without a contract id cannot be served to peers (see
-                -- HttpScanHandler.encodeVoteResultForBackfilling). So fail instead of marking the votes store as
-                -- complete: the copy is rolled back, the txlog stays as the source of the vote results, and the
-                -- failure is logged as a warning below.
+                -- history. A missing one means that one of our assumptions is wrong, and a vote result without a
+                -- contract id cannot be served to peers (see HttpScanHandler.encodeVoteResultForBackfilling).
+                -- So fail instead of marking the votes store as complete: the copy is rolled back, the txlog stays
+                -- the source of the vote results, and the failure is logged as a warning by the handler below.
                 -- Uses a prefix of the primary key (store_id, record_time, event_number).
                 select count(*)
                 into num_without_contract_id
@@ -215,22 +208,8 @@ begin
                 values ('votes_store_backfill_complete_' || scan.txlog_store_id, to_jsonb(true), scan.kv_store_id)
                 on conflict on constraint uc_key_value_store do update set value = excluded.value;
 
-                -- A vote result without a contract id is not served to peers (see HttpScanHandler.encodeVoteResultForBackfilling).
-                -- If every migrated Scan lacks the contract id of the same vote, the backfilling of joining Scans
-                -- stops at that vote, so make it visible right after the upgrade.
-                -- Uses a prefix of the primary key (store_id, record_time, event_number).
-                select count(*)
-                into num_without_contract_id
-                from votes_store_results v
-                where v.store_id = scan.txlog_store_id
-                  and v.contract_id is null;
-
-                raise info 'votes_store_from_txlog: copied % vote results for txlog store %, the votes store is complete. Vote results without a contract id: %',
-                    num_copied, scan.txlog_store_id, num_without_contract_id;
-                if num_without_contract_id > 0 then
-                    raise warning 'votes_store_from_txlog: % vote results of txlog store % have no contract id, they will not be served to peers that backfill their votes',
-                        num_without_contract_id, scan.txlog_store_id;
-                end if;
+                raise info 'votes_store_from_txlog: copied % vote results for txlog store %, the votes store is complete',
+                    num_copied, scan.txlog_store_id;
             exception
                 -- A failed check
                 when sqlstate 'VS000' then
