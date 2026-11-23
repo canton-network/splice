@@ -110,6 +110,29 @@ begin
                         message = 'the update history has not ingested up to where the votes store started';
                 end if;
 
+                -- Fill the contract ids of the vote results that were ingested before V081__votes_store_contract_id.sql
+                -- added the column, and that V081 could not find. The ingestion always writes the contract id, so
+                -- this is the only way that a row can be without one. This can happen without any data issue:
+                -- the votes store and the update history are ingested by separate subscriptions, so when the app
+                -- was stopped for the upgrade that ran V081, the update history might not have ingested the latest
+                -- votes yet. It has ingested them since. Same lookup as for the copy below, without the migration id,
+                -- which votes_store_results does not have: the transaction by the index updt_hist_tran_hi_ui
+                -- (history_id, update_id).
+                update votes_store_results v
+                set contract_id = (select e.contract_id
+                                   from update_history_transactions u
+                                            join update_history_exercises e on e.update_row_id = u.row_id
+                                   where u.history_id = scan.history_id
+                                     and u.domain_id = v.synchronizer_id
+                                     and u.update_id = v.update_id
+                                     and e.choice = 'DsoRules_CloseVoteRequest'
+                                     and e.template_id_module_name = 'Splice.DsoRules'
+                                     and e.template_id_entity_name = 'DsoRules'
+                                     and e.consuming = false
+                                   limit 1)
+                where v.store_id = scan.txlog_store_id
+                  and v.contract_id is null;
+
                 -- Copy the vote results.
                 -- - As of now, completing a vote is always the root exercise of a transaction, so its event number is 0.
                 -- - The event id in the txlog has format '#<update id>:<node id>'.
@@ -169,9 +192,9 @@ begin
                 values ('votes_store_backfill_complete_' || scan.txlog_store_id, to_jsonb(true), scan.kv_store_id)
                 on conflict on constraint uc_key_value_store do update set value = excluded.value;
 
-                -- Check 5: every vote result has a contract id, including the ones that were in the votes store
-                -- already (filled by V081__votes_store_contract_id.sql). With the checks above, all of them are
-                -- expected to be found in the update history. A missing one means that one of our assumptions is
+                -- Check 5: every vote result has a contract id, the copied ones as well as the ones that were in the
+                -- votes store already. With the checks above, all of them are expected to be found in the update
+                -- history. A missing one means that one of our assumptions is
                 -- wrong, and a vote result without a contract id cannot be served to peers (see
                 -- HttpScanHandler.encodeVoteResultForBackfilling). So fail instead of marking the votes store as
                 -- complete: the copy is rolled back, the txlog stays as the source of the vote results, and the

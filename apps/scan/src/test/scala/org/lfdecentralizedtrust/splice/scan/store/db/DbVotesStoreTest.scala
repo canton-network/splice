@@ -573,6 +573,25 @@ class DbVotesStoreTest
         }
       }
 
+      "fill the contract ids that V081 could not find for votes that were ingested before" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          expected <- listAllRows(stores.votesStore)
+          // As if the update history had not ingested these votes yet when V081 ran
+          _ <- clearContractIds()
+          _ <- markHistoriesComplete(stores)
+          _ <- runTxLogMigration()
+          actual <- listAllRows(stores.votesStore)
+          complete <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          expected should not be empty
+          all(expected.map(_.contractId)) shouldBe Some(dsoRulesCid)
+          actual shouldBe expected
+          complete shouldBe true
+        }
+      }
+
       "not copy anything if the update history does not have the contract id of a vote" in {
         for {
           stores <- mkStores()
