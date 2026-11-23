@@ -48,8 +48,6 @@ data RewardState = RewardState with
 template SvRewardState with
     dso : Party
     svName : Text
-      -- ^ Name of the SV right owner collecting the rewards; the name of the SV node operator
-      -- before the migration to on-ledger SV right owners.
     state : RewardState
   where
     signatory dso

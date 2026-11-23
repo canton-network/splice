@@ -278,7 +278,7 @@ data DsoRules_MigrateToOnLedgerSvRightOwnersResult = DsoRules_MigrateToOnLedgerS
 
 data DsoRules_ExecuteMigrateToOnLedgerSvRightOwnersInstructionResult = DsoRules_ExecuteMigrateToOnLedgerSvRightOwnersInstructionResult with
     newDsoRules : ContractId DsoRules
-    svRightOwners : TextMap (ContractId SvRightOwner, ContractId SvRightsOwnerRewardState)
+    svRightOwners : TextMap (ContractId SvRightOwner, TextMap (ContractId SvRightsOwnerRewardState))
   deriving (Serializable)
 
 data DsoRules_ExpireMigrateToOnLedgerSvRightOwnersInstructionResult = DsoRules_ExpireMigrateToOnLedgerSvRightOwnersInstructionResult
@@ -1978,8 +1978,6 @@ template DsoRules with
         forA_ (TextMap.toList offboardedSvRewardStateCids) $ \(svName, rewardStateCid) -> do
           require ("Leftover SvRewardState of offboarded SV " <> show svName <> " must belong to an SV in offboardedSvs") $
             any (\info -> info.name == svName) (Map.values offboardedSvs)
-          require "SvRewardState must not belong to a live SV right owner" $
-            svName `Set.notMember` getSvRightOwners this
           void $ fetchAndArchive (ForSv with dso; svName) rewardStateCid
         pure DsoRules_PurgeStaleSvRewardStatesResult
 
@@ -2148,8 +2146,6 @@ template DsoRules with
     choice DsoRules_ExecuteMigrateToOnLedgerSvRightOwnersInstruction : DsoRules_ExecuteMigrateToOnLedgerSvRightOwnersInstructionResult
       with
         instructionCid : ContractId MigrateToOnLedgerSvRightOwnersInstruction
-        openMiningRoundTriple : OpenMiningRoundTriple
-          -- ^ Determines the latest usable round. SV right owners without an SV node operator of the same name start collecting in the round after it, as the operator that hosted them before the migration may already have minted it for them.
         svOperatorRewardStateCids : TextMap (ContractId SvRewardState)
           -- ^ The `SvRewardState` contracts of the SV node operators, keyed by the operator's name.
         offboardedSvRewardStateCids : TextMap (ContractId SvRewardState)
@@ -2163,11 +2159,9 @@ template DsoRules with
         requireMigratableToOnLedgerSvRightOwners this instruction.svRightOwners
         require "Reward states are provided for exactly the SV node operators" $
           Set.fromList (map fst $ TextMap.toList svOperatorRewardStateCids) == getSvOperatorNames this
-        validatedRounds <- validateOpenMiningRoundTriple dso openMiningRoundTriple
-        -- Archive only the reward states of SV node operators that do not continue as an SV right owner of the same name.
-        forA_ (TextMap.toList svOperatorRewardStateCids) $ \(svName, rewardStateCid) ->
-          unless (svName `TextMap.member` instruction.svRightOwners) $
-            void $ fetchAndArchive (ForSv with dso; svName) rewardStateCid
+        svOperatorRewardStates <- forA (TextMap.toList svOperatorRewardStateCids) $ \(svName, rewardStateCid) -> do
+          rewardState <- fetchAndArchive (ForSv with dso; svName) rewardStateCid
+          pure (svName, rewardState.state)
         forA_ (TextMap.toList offboardedSvRewardStateCids) $ \(svName, rewardStateCid) -> do
           require ("Leftover SvRewardState of offboarded SV " <> show svName <> " must belong to an SV in offboardedSvs") $
             any (\info -> info.name == svName) (Map.values offboardedSvs)
@@ -2176,13 +2170,14 @@ template DsoRules with
           void $ fetchAndArchive (ForSv with dso; svName) rewardStateCid
         svRightOwners <- forA (TextMap.toList instruction.svRightOwners) $ \(name, info) -> do
           svRightOwner <- create SvRightOwner with dso; name; info
-          -- Reuse the reward state of the SV node operator of the same name to preserve the round it last minted for.
-          svRewardState <- case TextMap.lookup name svOperatorRewardStateCids of
-            Some rewardStateCid -> do
-              void $ fetchChecked (ForSv with dso; svName = name) rewardStateCid
-              pure rewardStateCid
-            None -> createSvRewardState dso name (Round $ validatedRounds.latestUsableRound.round.number + 1)
-          pure (name, (svRightOwner, svRewardState))
+          -- Carry over the reward state of the SV node operator to preserve the round it last minted for.
+          svRewardStates <- forA (TextMap.toList info.svNodeAssignments) $ \(svNodeAssignmentId, assignment) -> do
+            state <- case lookup assignment.svNodeName svOperatorRewardStates of
+              None -> fail ("Reward state of SV node operator " <> show assignment.svNodeName <> " is provided")
+              Some state -> pure state
+            svRewardState <- create SvRightsOwnerRewardState with dso; svRightsOwnerName = name; svNodeAssignmentId; state
+            pure (svNodeAssignmentId, svRewardState)
+          pure (name, (svRightOwner, TextMap.fromList svRewardStates))
         newDsoRules <- create this with
           svs = fmap (\info -> info with svRewardWeight = 0) svs
           svRightOwners = Some $ Set.fromList $ map fst svRightOwners
@@ -2475,8 +2470,12 @@ requireMigratableToOnLedgerSvRightOwners this svRightOwners = do
   require "There is at least one SV right owner" (not $ TextMap.null svRightOwners)
   forA_ svRightOwners requireValidSvRightOwnerInfo
   require "The total SV reward weight is preserved" $
-    sum (fmap (.svRewardWeight) this.svs) == sum (fmap (.rewardWeight) svRightOwners)
+    sum (fmap (.svRewardWeight) this.svs) == sum (fmap (sum . fmap (.rewardWeight) . (.svNodeAssignments)) svRightOwners)
   forA_ svRightOwners $ requireRewardNodeOperatorExists this
+  let assignments = [assignment | info <- TextMap.toList svRightOwners, assignment <- TextMap.toList (snd info).svNodeAssignments]
+  forA_ this.svs $ \svInfo ->
+    require ("The SV reward weight of SV node " <> show svInfo.name <> " is preserved") $
+      svInfo.svRewardWeight == sum [assignment.rewardWeight | (_, assignment) <- assignments, assignment.svNodeName == svInfo.name]
 
 template MigrateToOnLedgerSvRightOwnersInstruction with
     dso : Party
