@@ -41,8 +41,8 @@ class HttpExternalAnsHandler(
     val partyId = endUserWallet.store.key.endUserParty
     withSpan(s"$workflowId.createAnsEntry") { implicit traceContext => _ =>
       TextLimits.requireMaxLength("name", TextLimits.maxIdentifierLength, body.name)
-      TextLimits.requireMaxLength("url", TextLimits.maxDescriptionLength, body.url)
-      TextLimits.requireMaxLength("description", TextLimits.maxDescriptionLength, body.description)
+      TextLimits.requireMaxLength("url", TextLimits.maxFreeFormTextLength, body.url)
+      TextLimits.requireMaxLength("description", TextLimits.maxFreeFormTextLength, body.description)
       retryProvider.retryForClientCalls(
         "createAnsEntry",
         "create ANS entry",

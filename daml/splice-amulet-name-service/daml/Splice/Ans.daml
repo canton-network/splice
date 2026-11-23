@@ -87,8 +87,8 @@ template AnsRules
       controller user
       do
         requireMaxLength "name" maxIdentifierLength name
-        requireMaxLength "url" maxDescriptionLength url
-        requireMaxLength "description" maxDescriptionLength description
+        requireMaxLength "url" maxFreeFormTextLength url
+        requireMaxLength "description" maxFreeFormTextLength description
         let subscriptionData = SubscriptionData with
               sender = user
               receiver = dso

@@ -44,18 +44,24 @@
 
   - Daml
 
-    - Bound the length of `Text` values that the Splice apps index and that parties other than the DSO party choose,
-      using the limits in the new `Splice.TextLimits` module of `splice-amulet`:
-      ANS entry names (255), URLs and descriptions (1024) in `AnsRules_RequestEntry`;
-      SV names (255) in `DsoRules_StartSvOnboarding`, `DsoRules_ConfirmSvOnboarding`, `DsoRules_AddSv` and SV governance locks;
-      SV onboarding tokens (1900) in `DsoRules_StartSvOnboarding`;
-      and the tracking ids of buy-traffic requests (279, matching the existing limit for transfer offers).
-      The limits are far above the values that the Splice apps produce.
+    - The following `Text` arguments are now bounded in length, using the limits in the new `Splice.TextLimits`
+      module of `splice-amulet`. The limits are far above the values that the Splice apps produce.
+
+      | Choice | Argument | Maximum length (characters) |
+      |---|---|---|
+      | `AnsRules_RequestEntry` | `name` | 255 |
+      | `AnsRules_RequestEntry` | `url`, `description` | 4096 |
+      | `DsoRules_StartSvOnboarding` | `candidateName` | 255 |
+      | `DsoRules_StartSvOnboarding` | `token` (JWT characters only) | 1900 |
+      | `DsoRules_ConfirmSvOnboarding`, `DsoRules_AddSv` | `newSvName` | 255 |
+      | `WalletAppInstall_CreateBuyTrafficRequest` | `trackingId` | 279 |
+
+      The SV name in the `lock-subject` metadata of SV governance locks is limited to 255 characters,
+      and `BuyTrafficRequest` contracts require a `trackingId` of at most 279 characters.
 
   - Wallet, Validator and SV Apps
 
-    - The HTTP APIs reject over-long tracking ids, ANS entry fields, SV onboarding tokens and validator onboarding
-      secrets and party hints with `400 Bad Request` before submitting a command.
+    - The HTTP APIs reject arguments that exceed these limits with `400 Bad Request`.
 
   - Scan App
 

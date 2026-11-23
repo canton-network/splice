@@ -10,14 +10,14 @@ package org.lfdecentralizedtrust.splice.util
   */
 object TextLimits {
 
-  /** Names and identifiers, e.g., ANS entry names, SV names, and user names. */
+  /** Names and identifiers, e.g., ANS entry names and SV names. */
   val maxIdentifierLength: Int = 255
 
-  /** Tracking ids that clients choose to deduplicate requests. */
+  /** Tracking ids that clients choose to deduplicate requests, inherited from `TransferOffer.trackingId`. */
   val maxTrackingIdLength: Int = 279
 
-  /** Free-form descriptions and URLs. */
-  val maxDescriptionLength: Int = 1024
+  /** Free-form text, e.g., descriptions and URLs. */
+  val maxFreeFormTextLength: Int = 4096
 
   /** Signed tokens with which SV candidates request to be onboarded. */
   val maxSvOnboardingTokenLength: Int = 1900

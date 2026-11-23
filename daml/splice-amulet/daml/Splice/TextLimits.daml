@@ -1,39 +1,45 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- | Upper bounds on the length of `Text` values that parties other than the DSO party
--- can choose, and that the Splice apps store and index.
+-- | Upper bounds on the length of `Text` values that the Splice apps store.
 --
--- All limits are well below the 2066 characters that the Splice app stores can index.
--- They are chosen with ample headroom over the longest values that the Splice apps produce.
+-- The limits are chosen with ample headroom over the longest values that the Splice apps produce.
+-- Limits on values that the Splice apps index are low enough that their UTF-8 encoding,
+-- of at most four bytes per character, stays below the size limit of Postgres index entries.
+-- Values that need a larger limit are restricted to ASCII characters.
 module Splice.TextLimits
 (
   maxIdentifierLength,
   maxTrackingIdLength,
-  maxDescriptionLength,
+  maxFreeFormTextLength,
   maxSvOnboardingTokenLength,
 
   requireMaxLength,
+  requireSvOnboardingTokenCharacters,
 ) where
 
 import DA.Text qualified as Text
 
 import Splice.Util
 
--- | Maximum length of names and identifiers, e.g., ANS entry names, SV names, and user names.
+-- | Maximum length of names and identifiers, e.g., ANS entry names and SV names.
 maxIdentifierLength : Int
 maxIdentifierLength = 255
 
--- | Maximum length of the tracking ids that clients choose to deduplicate requests,
--- which matches the existing limit of `TransferOffer.trackingId`.
+-- | Maximum length of the tracking ids that clients choose to deduplicate requests.
+-- Inherited from the existing limit of `TransferOffer.trackingId`, which cannot be lowered
+-- without making existing transfer offers unusable.
 maxTrackingIdLength : Int
 maxTrackingIdLength = 279
 
--- | Maximum length of free-form descriptions and URLs.
-maxDescriptionLength : Int
-maxDescriptionLength = 1024
+-- | Maximum length of free-form text, e.g., descriptions and URLs.
+maxFreeFormTextLength : Int
+maxFreeFormTextLength = 4096
 
 -- | Maximum length of the signed token with which an SV candidate requests to be onboarded.
+-- The token is a JWT, whose characters `requireSvOnboardingTokenCharacters` restricts to ASCII.
+-- It contains the candidate's SV name, party, participant id and public key, and the DSO party,
+-- which take at most 1822 characters with all of them at their maximum length.
 maxSvOnboardingTokenLength : Int
 maxSvOnboardingTokenLength = 1900
 
@@ -43,3 +49,19 @@ requireMaxLength name maxLength value =
   require
     (name <> " is at most " <> show maxLength <> " characters long, but has length " <> show (Text.length value))
     (Text.length value <= maxLength)
+
+-- | Require that the SV onboarding token `token` only consists of the characters of a JWT:
+-- the base64url alphabet `A-Z`, `a-z`, `0-9`, `-`, `_`, and the separator `.`.
+requireSvOnboardingTokenCharacters : CanAssert m => Text -> m ()
+requireSvOnboardingTokenCharacters token =
+  require "token only contains the characters A-Z, a-z, 0-9, '-', '_' and '.'"
+    (all isJwtCodePoint (Text.toCodePoints token))
+
+isJwtCodePoint : Int -> Bool
+isJwtCodePoint c =
+  (c >= 0x41 && c <= 0x5A) || -- A-Z
+  (c >= 0x61 && c <= 0x7A) || -- a-z
+  (c >= 0x30 && c <= 0x39) || -- 0-9
+  c == 0x2D || -- '-'
+  c == 0x5F || -- '_'
+  c == 0x2E    -- '.'

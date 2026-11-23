@@ -1259,6 +1259,7 @@ template DsoRules with
         require "Sponsor is an SV" (sponsor `Map.member` svs)
         TextLimits.requireMaxLength "candidateName" TextLimits.maxIdentifierLength arg.candidateName
         TextLimits.requireMaxLength "token" TextLimits.maxSvOnboardingTokenLength arg.token
+        TextLimits.requireSvOnboardingTokenCharacters arg.token
         now <- getTime
         let expiresAt = now `addRelTime` config.svOnboardingRequestTimeout
         onboardingRequest <- create SvOnboardingRequest with ..

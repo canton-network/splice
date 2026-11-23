@@ -22,7 +22,6 @@ import Splice.SvOnboarding
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)
 import Splice.AmuletRules (AmuletRules)
-import Splice.TextLimits qualified as TextLimits
 import Splice.Types
 
 
@@ -407,8 +406,9 @@ testSvOnboardingTextLimits = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
   svX <- allocateParty "svX"
   svY <- allocateParty "svY"
-  let maxName = Text.implode (replicate TextLimits.maxIdentifierLength "n")
-      maxToken = Text.implode (replicate TextLimits.maxSvOnboardingTokenLength "t")
+  -- the limits are spelled out to notice accidental changes
+  let maxName = Text.implode (replicate 255 "n")
+      maxToken = Text.implode (replicate 1900 "t")
       startOnboarding candidateName token = exerciseCmd dsoRulesCid DsoRules_StartSvOnboarding with
         candidateName
         candidateParty = svX
@@ -433,13 +433,18 @@ testSvOnboardingTextLimits = do
   submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding (maxName <> "n") maxToken
   submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding maxName (maxToken <> "t")
 
+  -- the token only contains the characters of a JWT
+  _ <- submit (actAs sv2 <> readAs dso) $ startOnboarding "svX" "azAZ09-_.azAZ09-_.azAZ09-_"
+  forA_ ["=", "+", "/", " ", "\x00e9", "\x1F600"] $ \char ->
+    submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding "svX" ("header.payload" <> char <> ".signature")
+
   -- the name of a confirmed SV is bounded
   _ <- submit dso $ confirm maxName
   submitMustFail dso $ confirm (maxName <> "n")
 
   -- the name of an added SV is bounded
-  submitMustFail dso $ addSv (Text.implode (replicate (TextLimits.maxIdentifierLength + 1) "m"))
-  _ <- submit dso $ addSv (Text.implode (replicate TextLimits.maxIdentifierLength "m"))
+  submitMustFail dso $ addSv (Text.implode (replicate 256 "m"))
+  _ <- submit dso $ addSv (Text.implode (replicate 255 "m"))
   pure ()
 
 

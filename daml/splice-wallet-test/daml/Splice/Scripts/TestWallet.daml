@@ -16,7 +16,6 @@ import DA.TextMap as TextMap
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.AmuletConfig (defaultTransferPreapprovalFee, defaultTransferPreapprovalBaseDuration)
-import Splice.TextLimits (maxTrackingIdLength)
 import Splice.Types
 import Splice.Schedule
 import Splice.DecentralizedSynchronizer
@@ -1082,7 +1081,8 @@ testBuyTrafficRequestTrackingIdLimit = script do
     dsoParty = app.dso
     validatorParty = aliceValidator.primaryParty
   now <- getTime
-  let maxTrackingId = Text.implode (replicate maxTrackingIdLength "t")
+  -- the limit is spelled out to notice accidental changes
+  let maxTrackingId = Text.implode (replicate 279 "t")
       viaInstall trackingId = exerciseCmd install WalletAppInstall_CreateBuyTrafficRequest with
         trafficAmount = 1000000
         memberId = "alice_participant_id"

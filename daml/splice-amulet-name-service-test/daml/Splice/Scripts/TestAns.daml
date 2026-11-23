@@ -13,7 +13,6 @@ import Splice.AmuletRules
 import Splice.Scripts.Util
 import Splice.Ans
 import Splice.Scripts.AnsRulesParameters
-import Splice.TextLimits
 import Splice.Wallet.Subscriptions
 import Splice.TokenStandard.Utils qualified as TSU
 
@@ -234,9 +233,10 @@ testRequestEntryTextLimits = script do
           url
           description
           user = alice.primaryParty
-      maxName = Text.implode (replicate maxIdentifierLength "n")
-      maxUrl = Text.implode (replicate maxDescriptionLength "u")
-      maxDescription = Text.implode (replicate maxDescriptionLength "d")
+      -- the limits are spelled out to notice accidental changes
+      maxName = Text.implode (replicate 255 "n")
+      maxUrl = Text.implode (replicate 4096 "u")
+      maxDescription = Text.implode (replicate 4096 "d")
 
   -- values at the limit are accepted
   _ <- submit (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName maxUrl maxDescription
