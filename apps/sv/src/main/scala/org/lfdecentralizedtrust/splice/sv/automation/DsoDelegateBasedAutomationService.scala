@@ -97,7 +97,6 @@ class DsoDelegateBasedAutomationService(
     registerTrigger(
       new ExpiredAmuletAllocationV2Trigger(
         config,
-        clock,
         triggerContext,
         svTaskContext,
         unavailablePartiesStore,
@@ -109,6 +108,12 @@ class DsoDelegateBasedAutomationService(
     registerTrigger(new ExpireIssuingMiningRoundTrigger(triggerContext, svTaskContext))
     registerTrigger(new ExpireStaleConfirmationsTrigger(triggerContext, svTaskContext))
     registerTrigger(new GarbageCollectAmuletPriceVotesTrigger(triggerContext, svTaskContext))
+    registerTrigger(
+      new ExecuteFeaturedAppConfigUpdateInstructionTrigger(triggerContext, svTaskContext)
+    )
+    registerTrigger(
+      new ExpireFeaturedAppConfigUpdateInstructionTrigger(triggerContext, svTaskContext)
+    )
 
     registerTrigger(new MergeUnclaimedRewardsTrigger(triggerContext, svTaskContext))
     registerTrigger(
@@ -305,5 +310,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpireGovernanceLockTransferTrigger],
     aTrigger[ExpireGovernanceLockSubstitutionTrigger],
     aTrigger[ProvisionalFeaturedAppLockConversionTrigger],
+    aTrigger[ExecuteFeaturedAppConfigUpdateInstructionTrigger],
+    aTrigger[ExpireFeaturedAppConfigUpdateInstructionTrigger],
   )
 }

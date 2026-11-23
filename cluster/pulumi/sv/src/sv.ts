@@ -21,8 +21,6 @@ import {
   installSvAppSecrets,
   installValidatorOnboardingSecret,
   isDevNet,
-  svCometBftGovernanceKeyFromSecret,
-  svCometBftGovernanceKeySecret,
   SvIdKey,
   svKeyFromSecret,
   svOnboardingPollingInterval,
@@ -33,7 +31,7 @@ import {
   coreSvsToDeploy,
   initialRound,
   installScanBulkStorage,
-  installSvLoopback,
+  installLoopback,
   SingleSvConfiguration,
   StaticSvConfig,
   SynchronizerNodes,
@@ -68,7 +66,7 @@ export async function installSvApps(
   extraDependsOn: CnInput<Resource>[] = []
 ): Promise<InstalledSv> {
   const nodeName = staticConfig.nodeName;
-  const [sv1StaticConfig, ...otherSvsStaticConfigs] = coreSvsToDeploy;
+  const [sv1StaticConfig] = coreSvsToDeploy;
   const isFoundingSv = nodeName === sv1StaticConfig.nodeName;
   const disableOnboardingParticipantPromotionDelay = envConfig.envFlag(
     'DISABLE_ONBOARDING_PARTICIPANT_PROMOTION_DELAY',
@@ -81,24 +79,11 @@ export async function installSvApps(
       'nodeName',
       'ingressName',
       'onboardingName',
-      'cometBft',
       'validatorWalletUser',
       'auth0ValidatorAppName',
       'auth0SvAppName',
       'sweep',
     ]),
-    nodeConfigs: {
-      sv1: {
-        ...sv1StaticConfig.cometBft,
-        ...pick(sv1StaticConfig, ['nodeName', 'ingressName']),
-      },
-      peers: otherSvsStaticConfigs
-        .filter(config => config.nodeName !== nodeName)
-        .map(config => ({
-          ...config.cometBft,
-          ...pick(config, ['nodeName', 'ingressName']),
-        })),
-    },
     onboarding: isFoundingSv
       ? {
           type: 'found-dso',
@@ -156,13 +141,6 @@ export async function installSvApps(
     splitPostgresInstances: SplitPostgresInstances,
     disableOnboardingParticipantPromotionDelay,
     onboardingPollingInterval: svOnboardingPollingInterval,
-    cometBftGovernanceKey:
-      dynamicConfig.participant?.kms !== undefined
-        ? svCometBftGovernanceKeyFromSecret(
-            staticConfig.cometBftGovernanceKeySecretName ??
-              `${nodeName.replaceAll('-', '')}-cometbft-governance-key`
-          )
-        : undefined,
     initialRound: initialRound?.toString(),
     version: dynamicConfig.versionOverride ?? activeVersion,
     ...dynamicConfig,
@@ -175,7 +153,7 @@ export async function installSvApps(
       )
     : undefined;
 
-  const loopback = installSvLoopback(xns, DecentralizedSynchronizerUpgradeConfig.usesCometbft());
+  const loopback = installLoopback(xns);
   const imagePullDeps = imagePullSecret(xns);
 
   const auth0Secrets: CnInput<pulumi.Resource>[] = await installSvAppSecrets(
@@ -226,11 +204,6 @@ export async function installSvApps(
     .concat(loopback)
     .concat(imagePullDeps)
     .concat(
-      config.cometBftGovernanceKey
-        ? svCometBftGovernanceKeySecret(xns, config.cometBftGovernanceKey)
-        : []
-    )
-    .concat(
       config.bulkStorageBuckets
         ? [
             config.bulkStorageBuckets.staging.secret,
@@ -244,14 +217,7 @@ export async function installSvApps(
 
   const appsPostgres = await installAppsPostgres(xns, config);
 
-  const canton = new SynchronizerNodes(
-    DecentralizedSynchronizerUpgradeConfig,
-    {
-      ...config.nodeConfigs,
-      self: { ...config.cometBft, nodeName: config.nodeName },
-    },
-    config.ingressName
-  );
+  const canton = new SynchronizerNodes(DecentralizedSynchronizerUpgradeConfig, config.ingressName);
 
   const svApp = installSvApp(
     DecentralizedSynchronizerUpgradeConfig,
@@ -262,15 +228,7 @@ export async function installSvApps(
     canton
   );
 
-  const scan = installScan(
-    xns,
-    config,
-    DecentralizedSynchronizerUpgradeConfig,
-    dependsOn,
-    canton,
-    svApp,
-    appsPostgres
-  );
+  const scan = installScan(xns, config, dependsOn, canton, appsPostgres);
 
   installInfo(
     xns,

@@ -1,7 +1,76 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
+  "required": ["sequencer"],
   "properties": {
+    "sequencer": {
+      "type": "object",
+      "required": ["driver"],
+      "properties": {
+        "driver": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "const": "cantonbft",
+              "description": "The sequencer driver. Only the Canton BFT (DA BFT) driver is supported."
+            },
+            "persistence": {
+              "type": "object"
+            },
+            "externalAddress": {
+              "type": "string"
+            },
+            "externalPort": {
+              "type": "integer"
+            },
+            "peerEndpoints": {
+              "type": "array",
+              "description": "initial set of cantonBFT peers. Should be left empty for gSync SVs, use only for dedicated synchronizers.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "driver": {
+                "properties": {
+                  "type": {
+                    "const": "cantonbft"
+                  }
+                },
+                "required": [
+                  "type",
+                  "externalAddress",
+                  "externalPort"
+                ]
+              }
+            },
+            "required": [
+              "driver"
+            ]
+          },
+          "then": {
+            "required": [
+              "imageName"
+            ]
+          }
+        }
+      ]
+    },
     "serviceAccountName": {
       "type": "string"
     },
@@ -31,77 +100,6 @@
         }
       },
       "required": ["pod", "containers"]
-    },
-    "sequencer": {
-      "type": "object",
-      "properties": {
-        "driver": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string"
-            },
-            "persistence": {
-              "type": "object"
-            },
-            "externalAddress": {
-              "type": "string"
-            },
-            "externalPort": {
-              "type": "integer"
-            },
-            "peerEndpoints": {
-              "type": "array",
-              "description": "initial set of cantonBFT peers. Should be left empty for gSync SVs, use only for dedicated synchronizers.",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "address": {
-                    "type": "string"
-                  },
-                  "port": {
-                    "type": "integer"
-                  }
-                }
-              }
-            }
-          },
-          "required": [
-            "type"
-          ]
-        }
-      },
-      "required": [
-        "driver"
-      ],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "driver": {
-                "properties": {
-                  "type": {
-                    "const": "cantonbft"
-                  }
-                },
-                "required": [
-                  "type",
-                  "externalAddress",
-                  "externalPort"
-                ]
-              }
-            },
-            "required": [
-              "driver"
-            ]
-          },
-          "then": {
-            "required": [
-              "imageName"
-            ]
-          }
-        }
-      ]
     }
   }
 }

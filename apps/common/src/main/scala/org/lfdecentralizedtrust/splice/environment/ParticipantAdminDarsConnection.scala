@@ -129,7 +129,6 @@ trait ParticipantAdminDarsConnection {
     }
   }
 
-  // TODO(DACH-NY/splice#4803): unvet dependencies
   def unvetDars(
       synchronizerId: SynchronizerId,
       dars: Seq[DarResource],
@@ -323,7 +322,9 @@ trait ParticipantAdminDarsConnection {
   ): Future[Unit] = {
     for {
       existingDars <- listDars().map(_.map(_.mainPackageId))
-      darsToUploads = dars.filterNot(dar => existingDars.contains(dar.packageId))
+      darsToUploads = UploadablePackage.distinct(
+        dars.filterNot(dar => existingDars.contains(dar.packageId))
+      )
       _ <- MonadUtil.parTraverseWithLimit(PositiveInt.tryCreate(5))(darsToUploads)(
         uploadDar(_, retryFor)
       )

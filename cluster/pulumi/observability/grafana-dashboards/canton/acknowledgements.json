@@ -471,19 +471,6 @@
                 }
               }
             }
-          },
-          {
-            "kind": "RowsLayoutRow",
-            "spec": {
-              "title": "CometBFT",
-              "collapse": false,
-              "layout": {
-                "kind": "GridLayout",
-                "spec": {
-                  "items": []
-                }
-              }
-            }
           }
         ]
       }

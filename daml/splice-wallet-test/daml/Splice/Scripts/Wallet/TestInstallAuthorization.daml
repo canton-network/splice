@@ -1,0 +1,151 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Tests that the choices of an end user's `WalletAppInstall` only act on contracts of that end user.
+module Splice.Scripts.Wallet.TestInstallAuthorization where
+
+import DA.Action (void)
+import DA.Foldable (foldMap)
+import DA.Time
+import Daml.Script
+
+import Splice.AmuletRules
+import Splice.Wallet.Install
+import Splice.Wallet.Payment
+import Splice.Wallet.Subscriptions
+
+import Splice.Scripts.Util
+import Splice.Scripts.TestWallet (createSingleReceiverPaymentRequest, executeAmuletOperationMustFail)
+import Splice.Scripts.Wallet.TestSubscriptions (testPayData)
+import Splice.Testing.Utils
+
+endUserMismatch : FailureStatusCheck
+endUserMismatch = expectMessageContains "must match endUserParty"
+
+groupMismatch : FailureStatusCheck
+groupMismatch = expectMessageContains "Contract group identifier mismatch"
+
+testInstallChoicesOnlyActOnEndUserContracts : Script ()
+testInstallChoicesOnlyActOnEndUserContracts = script do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+  runNextIssuance app
+  runAmuletDepositBots app
+
+  let validator = aliceValidator.primaryParty
+  aliceInstall <- submit (actAs alice.primaryParty <> actAs validator) $ createCmd WalletAppInstall with
+    endUserParty = alice.primaryParty
+    endUserName = "alice"
+    dsoParty = app.dso
+    validatorParty = validator
+  validatorInstall <- submit (actAs validator) $ createCmd WalletAppInstall with
+    endUserParty = validator
+    endUserName = "alice_validator_user"
+    dsoParty = app.dso
+    validatorParty = validator
+  bobInstall <- submit (actAs bob.primaryParty <> actAs bobValidator.primaryParty) $ createCmd WalletAppInstall with
+    endUserParty = bob.primaryParty
+    endUserName = "bob"
+    dsoParty = app.dso
+    validatorParty = bobValidator.primaryParty
+
+  -- submits a choice on alice's install, as done by the validator backend
+  let aliceInstallMustFail : Choice WalletAppInstall c r => FailureStatusCheck -> c -> Script ()
+      aliceInstallMustFail check choice =
+        -- the result is discarded, as the result types of the choices have no `Show` instance
+        submitMustFail'' check (actAs validator <> foldMap readAs [alice.primaryParty, app.dso]) $
+          void (exerciseCmd aliceInstall choice)
+  let aliceOperationMustFail check op = executeAmuletOperationMustFail app alice op check
+
+  now <- getTime
+  let expiresAt = now `addRelTime` minutes 5
+  let createOffer install sender receiver trackingId = do
+        result <- submit (actAs validator <> readAs sender) $ exerciseCmd install WalletAppInstall_CreateTransferOffer with
+          receiver
+          amount = PaymentAmount 1.0 AmuletUnit
+          description = "offer"
+          expiresAt
+          trackingId
+        pure result.transferOffer
+
+  -- Transfer offers sent by the validator party
+  offer <- createOffer validatorInstall validator bob.primaryParty "validator-to-bob"
+  aliceInstallMustFail endUserMismatch WalletAppInstall_TransferOffer_Withdraw with cid = offer; reason = "test"
+  acceptResult <- submit (actAs bobValidator.primaryParty <> readAs bob.primaryParty) $
+    exerciseCmd bobInstall WalletAppInstall_TransferOffer_Accept with cid = offer
+  let accepted = acceptResult.acceptedTransferOffer
+  aliceInstallMustFail endUserMismatch WalletAppInstall_AcceptedTransferOffer_Abort with cid = accepted; reason = "test"
+  aliceOperationMustFail endUserMismatch (CO_CompleteAcceptedTransfer accepted)
+
+  -- Transfer offers received by the validator party
+  offer <- createOffer aliceInstall alice.primaryParty validator "alice-to-validator"
+  aliceInstallMustFail endUserMismatch WalletAppInstall_TransferOffer_Accept with cid = offer
+  aliceInstallMustFail endUserMismatch WalletAppInstall_TransferOffer_Reject with cid = offer
+  acceptResult <- submit (actAs validator) $
+    exerciseCmd validatorInstall WalletAppInstall_TransferOffer_Accept with cid = offer
+  aliceInstallMustFail endUserMismatch WalletAppInstall_AcceptedTransferOffer_Withdraw with
+    cid = acceptResult.acceptedTransferOffer
+    reason = "test"
+
+  -- App payment requests of the validator party
+  paymentRequest <- createSingleReceiverPaymentRequest app provider1.primaryParty validator bob.primaryParty (PaymentAmount 1.0 AmuletUnit)
+  aliceInstallMustFail groupMismatch WalletAppInstall_AppPaymentRequest_Reject with cid = paymentRequest
+  aliceOperationMustFail groupMismatch (CO_AppPayment paymentRequest)
+
+  -- Subscriptions of the validator party
+  let subscriptionData = SubscriptionData with
+        sender = validator
+        receiver = bob.primaryParty
+        provider = provider1.primaryParty
+        dso = app.dso
+        description = "validator subscription"
+      subscriptionSignatories = actAs validator <> actAs bob.primaryParty <> actAs provider1.primaryParty
+  subscriptionRequest <- submit subscriptionSignatories $ createCmd (SubscriptionRequest subscriptionData testPayData)
+  aliceInstallMustFail groupMismatch WalletAppInstall_SubscriptionRequest_Reject with cid = subscriptionRequest
+  aliceOperationMustFail groupMismatch (CO_SubscriptionAcceptAndMakeInitialPayment subscriptionRequest)
+  subscription <- submit subscriptionSignatories $ createCmd Subscription with
+    subscriptionData
+    reference = subscriptionRequest
+  subscriptionState <- submit subscriptionSignatories $ createCmd SubscriptionIdleState with
+    subscription
+    subscriptionData
+    payData = testPayData
+    nextPaymentDueAt = now `addRelTime` days 1
+    reference = subscriptionRequest
+  aliceInstallMustFail groupMismatch WalletAppInstall_SubscriptionIdleState_CancelSubscription with cid = subscriptionState
+  aliceOperationMustFail groupMismatch (CO_SubscriptionMakePayment subscriptionState)
+
+  -- Buy traffic requests of the validator party
+  trafficRequest <- submit (actAs validator) $ exerciseCmd validatorInstall WalletAppInstall_CreateBuyTrafficRequest with
+    memberId = "validator-participant"
+    synchronizerId = "synchronizer"
+    migrationId = 0
+    trafficAmount = 1000000
+    expiresAt
+    trackingId = "validator-traffic"
+  aliceInstallMustFail groupMismatch WalletAppInstall_BuyTrafficRequest_Cancel with
+    requestCid = trafficRequest.buyTrafficRequest
+    reason = "test"
+  aliceInstallMustFail groupMismatch WalletAppInstall_BuyTrafficRequest_Expire with
+    requestCid = trafficRequest.buyTrafficRequest
+  aliceOperationMustFail groupMismatch (CO_CompleteBuyTrafficRequest trafficRequest.buyTrafficRequest)
+
+  -- Member traffic is bought by the validator party
+  aliceOperationMustFail (expectMessageContains "Only a validator can buy member traffic") $
+    CO_BuyMemberTraffic 1000000 "validator-participant" "synchronizer" 0 (minutes 10) None
+
+  -- Transfer preapprovals provided by the validator party
+  preapproval <- submit (actAs bob.primaryParty <> actAs validator <> actAs app.dso) $ createCmd TransferPreapproval with
+    dso = app.dso
+    receiver = bob.primaryParty
+    provider = validator
+    validFrom = now
+    lastRenewedAt = now
+    expiresAt = now `addRelTime` days 1
+  aliceOperationMustFail endUserMismatch (CO_RenewTransferPreapproval preapproval (now `addRelTime` days 2))
+
+  -- Featured app right of the validator party
+  featuredAppRight <- featureApp app aliceValidator
+  aliceInstallMustFail groupMismatch WalletAppInstall_FeaturedAppRights_Cancel with
+    cid = featuredAppRight
+
+  pure ()

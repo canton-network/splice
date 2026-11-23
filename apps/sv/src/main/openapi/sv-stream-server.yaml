@@ -8,105 +8,97 @@ servers:
   - url: https://example.com/api/sv
 paths:
 
-  /v0/onboard/sv/party-migration/authorize:
-    post:
+  /v0/onboard/sv/download/{id}:
+    get:
       tags: [sv]
       x-jvm-package: sv_public_stream
       x-external-audience: svs
-      operationId: "onboardSvPartyMigrationAuthorize"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/OnboardSvPartyMigrationAuthorizeRequest"
+      operationId: "onboardSvDownload"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: string
       responses:
         "200":
-          description: |
-            The ACS snapshot of the DSO party, in the binary format expected by the
-            participant's `ImportPartyAcs` endpoint. This is returned as a binary stream
-            rather than as JSON as snapshots can exceed the 2GB limit of a JSON string.
+          description: The response body contains the exported snapshot file.
+          headers:
+            Repr-Digest:
+              description: "SHA-256 of the whole snapshot, as `sha-256=:<base64>:`"
+              required: true
+              schema:
+                type: string
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
                 x-scala-type: org.apache.pekko.http.scaladsl.model.ResponseEntity
-        "400":
-          description: system state not yet valid
+        "206":
+          description: |
+            Part of the snapshot, from the offset in the `Range` header to its end. Used to resume
+            an interrupted download with the same ID. `Content-Range` includes the length of the
+            whole snapshot and `Repr-Digest` is its SHA-256, as for status 200.
+        "416":
+          description: |
+            The offset in the `Range` header is at or past the end of the snapshot. The file
+            downloaded so far is complete only if its length and SHA-256 match the snapshot.
+        "202":
+          description: |
+            The export is queued or still running. Retry the download with the same ID.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/OnboardSvPartyMigrationAuthorizeErrorResponse"
-        "401":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/401"
-
-  /v0/onboard/sv/sequencer:
-    post:
-      tags: [sv]
-      x-jvm-package: sv_public_stream
-      x-external-audience: svs
-      operationId: "onboardSvSequencer"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/OnboardSvSequencerRequest"
-      responses:
-        "200":
+                "$ref": "#/components/schemas/OnboardSvDownloadPendingResponse"
+        "404":
           description: |
-            The onboarding state of the sequencer, in the binary format expected by the
-            sequencer's initialization endpoint. This is returned as a binary stream
-            rather than as JSON as the onboarding state can exceed the 2GB limit of a JSON string.
+            The sponsor does not know this ID. Call prepare again to get a new ID.
           content:
-            application/octet-stream:
+            application/json:
               schema:
-                type: string
-                format: binary
-                x-scala-type: org.apache.pekko.http.scaladsl.model.ResponseEntity
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "410":
+          description: |
+            The export with this ID failed or its snapshot is no longer usable.
+            Call prepare again to get a new ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "500":
+          description: |
+            Unexpected error. Retry the download with the same ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "503":
+          description: |
+            The sponsor is temporarily unavailable, for example during shutdown.
+            Retry the download with the same ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
 
 components:
   schemas:
-    OnboardSvSequencerRequest:
+    OnboardSvDownloadPendingResponse:
       type: object
       required:
-        - sequencer_id
+        - status
+        - queued_at
       properties:
-        sequencer_id:
+        status:
           type: string
-
-    OnboardSvPartyMigrationAuthorizeRequest:
-      type: object
-      required:
-        - candidate_party_id
-      properties:
-        candidate_party_id:
+          enum:
+            - queued
+            - exporting
+        queued_at:
           type: string
-
-    OnboardSvPartyMigrationAuthorizeErrorResponse:
-      oneOf:
-        - "$ref": "#/components/schemas/AcceptedStateNotFoundErrorResponse"
-        - "$ref": "#/components/schemas/ProposalNotFoundErrorResponse"
-    AcceptedStateNotFoundErrorResponse:
-      type: object
-      required:
-        - accepted_state_not_found
-      properties:
-        accepted_state_not_found:
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
-    ProposalNotFoundErrorResponse:
-      type: object
-      required:
-        - proposal_not_found
-      properties:
-        proposal_not_found:
-          type: object
-          required:
-            - party_to_participant_base_serial
-          properties:
-            party_to_participant_base_serial:
-              type: integer
-              description: "The serial of the party to participant accepted state as seen by the sponsor"
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          description: Set once the export is running.

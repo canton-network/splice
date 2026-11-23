@@ -25,7 +25,6 @@ import {
   ObservabilityReleaseName,
   SPLICE_ROOT,
 } from '@canton-network/splice-pulumi-common';
-import { allSvsConfiguration } from '@canton-network/splice-pulumi-common-sv/src/singleSvConfig';
 import {
   extraSvConfigsBasic,
   standardSvConfigsBasic,
@@ -56,8 +55,10 @@ import {
 import {
   type CloudArmorAlertConfig,
   cloudArmorConfig,
+  grafanaMuteTimeIntervals,
   monitoringConfig,
   prometheusConfig,
+  prometheusMuteTimeIntervals,
 } from './config';
 import { createGrafanaGcpDatasources, grafanaGcpLoggingPlugin } from './gcpGrafanaDatasources';
 import { createGrafanaDashboards } from './grafana-dashboards';
@@ -231,8 +232,31 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                   matchers: ['alertname=~"Watchdog|InfoInhibitor"'],
                   continue: false,
                 },
+                ...prometheusMuteTimeIntervals.map(interval => ({
+                  receiver: enableAlerts && enablePrometheusAlerts ? 'slack' : 'null',
+                  matchers: interval.objectMatchers.map(
+                    ([label, op, value]) => `${label}${op}${JSON.stringify(value)}`
+                  ),
+                  mute_time_intervals: [interval.name],
+                  continue: false,
+                })),
               ],
             },
+            ...(prometheusMuteTimeIntervals.length > 0
+              ? {
+                  time_intervals: prometheusMuteTimeIntervals.map(interval => ({
+                    name: interval.name,
+                    time_intervals: interval.timeWindows.map(window => ({
+                      times: window.times.map(t => ({
+                        start_time: t.startTime,
+                        end_time: t.endTime,
+                      })),
+                      ...(window.weekdays ? { weekdays: window.weekdays } : {}),
+                      location: 'UTC',
+                    })),
+                  })),
+                }
+              : {}),
             receivers: [
               {
                 name: 'null',
@@ -935,13 +959,6 @@ function createGrafanaAlerting(namespace: Input<string>) {
     .map(sv => sv.sweep!)
     .concat(deployedValidators.map(validator => allValidatorsConfig[validator].sweep!))
     .filter(e => e != undefined);
-  const cantonBftEnabled =
-    DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
-  const cometbftPruningHighestBlockRetain = allSvsConfiguration
-    .map(sv => sv.pruning?.cometbft?.retainBlocks)
-    .filter((retainBlocks): retainBlocks is number => retainBlocks !== undefined)
-    .sort((a, b) => a - b)
-    .pop();
   const legacyMigrationIds = [
     ...(DecentralizedSynchronizerUpgradeConfig.legacy
       ? [DecentralizedSynchronizerUpgradeConfig.legacy]
@@ -968,11 +985,11 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 'notification_policies.yaml': grafanaAlertNotificationPolicies(),
               }
             : {}),
-          ...(enableAlerts && monitoringConfig.alerting.muteTimeIntervals.length > 0
+          ...(enableAlerts && grafanaMuteTimeIntervals.length > 0
             ? {
                 'mute_time_intervals.yaml': yaml.dump({
                   apiVersion: 1,
-                  muteTimes: monitoringConfig.alerting.muteTimeIntervals.map(interval => ({
+                  muteTimes: grafanaMuteTimeIntervals.map(interval => ({
                     orgId: 1,
                     name: interval.name,
                     time_intervals: interval.timeWindows.map(window => ({
@@ -1028,25 +1045,6 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 loadTesterConfig?.minRate ? loadTesterConfig?.minRate.toString() : '1.0'
               )
               .replaceAll('$NODATA', loadTesterConfig?.enable ? 'Alerting' : 'OK'),
-            ...(cantonBftEnabled
-              ? {
-                  'cometbft_deleted_alerts.yaml': readGrafanaAlertingFile('cometbft_deleted.yaml'),
-                }
-              : {
-                  'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
-                    .replaceAll(
-                      '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
-                      monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
-                    )
-                    .replaceAll(
-                      '$COMETBFT_PRUNING_DISABLED',
-                      (cometbftPruningHighestBlockRetain === undefined).toString()
-                    )
-                    .replaceAll(
-                      '$COMETBFT_RETAIN_BLOCKS',
-                      String((cometbftPruningHighestBlockRetain || 0) * 1.05)
-                    ),
-                }),
             'automation_alerts.yaml': readGrafanaAlertingFile('automation_alerts.yaml')
               .replaceAll(
                 '$CONTENTION_THRESHOLD_PERCENTAGE_PER_NAMESPACE',
@@ -1176,16 +1174,10 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$SEQUENCER_RATE_LIMIT_CIRCUIT_BREAKER_STATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.circuitBreakerStateThreshold.toString()
               ),
-            ...(cantonBftEnabled
-              ? {
-                  'cantonbft_alerts.yaml': readGrafanaAlertingFile(
-                    'cantonbft_alerts.yaml'
-                  ).replaceAll(
-                    '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
-                    monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
-                  ),
-                }
-              : {}),
+            'cantonbft_alerts.yaml': readGrafanaAlertingFile('cantonbft_alerts.yaml').replaceAll(
+              '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
+              monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
+            ),
             'deleted_alerts.yaml': readGrafanaAlertingFile('deleted.yaml'),
             'templates.yaml': substituteSlackNotificationTemplate(
               readGrafanaAlertingFile('templates.yaml')
@@ -1248,7 +1240,7 @@ function grafanaAlertNotificationPolicies() {
   const defaultPolicy = yaml.load(
     readGrafanaAlertingFile('notification_policies/default_slack.yaml')
   ) as Record<string, unknown>;
-  for (const interval of monitoringConfig.alerting.muteTimeIntervals) {
+  for (const interval of grafanaMuteTimeIntervals) {
     notificationPolicies.push({
       receiver: 'cn-ci-channel-notification',
       object_matchers: interval.objectMatchers,

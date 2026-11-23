@@ -3,14 +3,10 @@
 import * as k8s from '@pulumi/kubernetes';
 import {
   CLUSTER_BASENAME,
-  config,
   DecentralizedSynchronizerUpgradeConfig,
   DomainMigrationIndex,
 } from '@canton-network/splice-pulumi-common';
-import {
-  allSvNamesToDeploy,
-  svRunbookNodeName,
-} from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
+import { allSvNamesToDeploy } from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
 import { deploymentConf } from '@canton-network/splice-pulumi-common/src/operator/config';
 import {
   GitFluxRef,
@@ -74,12 +70,10 @@ function createStackForMigration(
   namespace: string,
   gcpSecret: k8s.core.v1.Secret
 ) {
-  const supportsReset = sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET');
   createStackCR(
     `sv-canton.${sv}-migration-${migrationId}`,
     'sv-canton',
     namespace,
-    supportsReset,
     reference,
     envRefs,
     gcpSecret,

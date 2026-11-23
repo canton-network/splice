@@ -154,7 +154,6 @@ runs:
         POSTGRES_PORT: 5432
         POSTGRES_USER: postgres
         POSTGRES_PASSWORD: postgres
-        COMETBFT_DOCKER_IP: 127.0.0.1
       with:
         cmd: |
           if [[ "${{ inputs.with_canton }}" == "false" ]]; then

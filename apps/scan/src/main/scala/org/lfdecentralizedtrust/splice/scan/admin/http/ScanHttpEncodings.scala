@@ -14,7 +14,7 @@ import com.google.protobuf.ByteString
 import io.circe.Json
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.ledger.api as ledgerApi
-import org.lfdecentralizedtrust.splice.http.OmitNullString
+import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItem,
@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, definitions as httpApi}
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppAndAssetActivityRecordT
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{
   TrafficSummaryT,
   TransactionViewT,
@@ -33,7 +33,14 @@ import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{
 }
 import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract, EventId, LegacyOffset, Trees}
+import org.lfdecentralizedtrust.splice.util.{
+  Codec,
+  Contract,
+  EventId,
+  LegacyOffset,
+  Trees,
+  ValueJsonCodecTranscode,
+}
 
 import java.time.format.DateTimeFormatterBuilder
 import java.time.{Instant, ZoneOffset}
@@ -622,7 +629,7 @@ object ScanHttpEncodings {
   }
 
   def encodeAppActivityRecord(
-      record: AppActivityRecordT
+      record: AppAndAssetActivityRecordT
   ): definitions.EventHistoryAppActivityRecords = {
     val records = record.appProviderParties
       .zip(record.appActivityWeights)
@@ -636,9 +643,32 @@ object ScanHttpEncodings {
     )
   }
 
+  /** Returns `None` when there is no record or no asset activity, so the JSON
+    * key is omitted (via `OmitNullArray`) rather than emitted as `null` — matches
+    * pre-upgrade SV behaviour so BFT reads converge during the upgrade window.
+    */
+  def encodeAssetActivityRecord(
+      recordO: Option[AppAndAssetActivityRecordT]
+  ): Option[OmitNullArray[definitions.ActivityRecord]] =
+    recordO.flatMap { r =>
+      val records = r.assetActivityProviderParties
+        .zip(r.assetActivityWeights)
+        .map { case (party, weight) =>
+          definitions.ActivityRecord(party = party, weight = weight)
+        }
+        .toVector
+      if (records.isEmpty) None else Some(OmitNullArray(records))
+    }
+
+  def encodeSubmittingAppProvider(
+      recordO: Option[AppAndAssetActivityRecordT]
+  ): Option[OmitNullString] =
+    recordO.flatMap(_.submittingAppProvider).map(OmitNullString(_))
+
   def fromDamlValueEncoding(encoding: definitions.DamlValueEncoding): ScanHttpEncodings =
     encoding match {
       case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()
+      case definitions.DamlValueEncoding.members.LedgerApiJson => LedgerApiJsonScanHttpEncodings
       case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJsonScanHttpEncodings
     }
 
@@ -1045,6 +1075,110 @@ case class CompactJsonScanHttpEncodings(
 // A lossy, but much easier to process, encoding. Should be used for all endpoints not used for backfilling Scan.
 object CompactJsonScanHttpEncodings {
   def apply() = new CompactJsonScanHttpEncodings(RemoveFieldLabels.value, RemoveFieldLabels.record)
+}
+
+/** Encodes Daml values like the JSON Ledger API does, with trailing `None` fields of records omitted.
+  * Unlike [[CompactJsonScanHttpEncodings]], the output does not depend on the version of the Java codegen
+  * bundled with the app, see [[org.lfdecentralizedtrust.splice.util.ValueJsonCodecTranscode]].
+  * Should not be used for backfilling Scan.
+  */
+case object LedgerApiJsonScanHttpEncodings extends ScanHttpEncodings {
+
+  private def encodeOrFallback(
+      what: String,
+      encoded: Either[String, String],
+      value: javaApi.Value,
+  )(implicit elc: ErrorLoggingContext): Json =
+    encoded.fold(
+      err => {
+        elc.error(s"Failed to encode $what: $err")
+        encodeValueFallback(err, value)
+      },
+      tryParseJson,
+    )
+
+  private def decodeOrThrow[T](what: String, json: Json, decoded: Either[String, T]): T =
+    decoded.fold(
+      error => throw new RuntimeException(s"Failed to decode $what '${json.noSpaces}': $error"),
+      identity,
+    )
+
+  override def encodeContractPayload(
+      event: javaApi.CreatedEvent
+  )(implicit elc: ErrorLoggingContext): Json =
+    encodeOrFallback(
+      "contract payload",
+      ValueJsonCodecTranscode.serializableContractPayload(event),
+      event.getArguments,
+    )
+
+  override def encodeChoiceArgument(
+      event: javaApi.ExercisedEvent
+  )(implicit elc: ErrorLoggingContext): Json =
+    encodeOrFallback(
+      "choice argument",
+      ValueJsonCodecTranscode.serializeChoiceArgument(event),
+      event.getChoiceArgument,
+    )
+
+  override def encodeExerciseResult(
+      event: javaApi.ExercisedEvent
+  )(implicit elc: ErrorLoggingContext): Json =
+    encodeOrFallback(
+      "exercise result",
+      ValueJsonCodecTranscode.serializeChoiceResult(event),
+      event.getExerciseResult,
+    )
+
+  override def decodeContractPayload(
+      templateId: javaApi.Identifier,
+      json: Json,
+  ): javaApi.DamlRecord =
+    RemoveFieldLabels.record(
+      decodeOrThrow(
+        "contract payload",
+        json,
+        ValueJsonCodecTranscode.deserializableContractPayload(templateId, json.noSpaces),
+      )
+    )
+
+  override def decodeChoiceArgument(
+      templateId: javaApi.Identifier,
+      interfaceId: Option[javaApi.Identifier],
+      choice: String,
+      json: Json,
+  ): javaApi.Value =
+    RemoveFieldLabels.value(
+      decodeOrThrow(
+        "choice argument",
+        json,
+        ValueJsonCodecTranscode.deserializeChoiceArgument(
+          templateId,
+          interfaceId,
+          choice,
+          json.noSpaces,
+        ),
+      )
+    )
+
+  override def decodeExerciseResult(
+      templateId: javaApi.Identifier,
+      interfaceId: Option[javaApi.Identifier],
+      choice: String,
+      json: Json,
+  ): javaApi.Value =
+    RemoveFieldLabels.value(
+      decodeOrThrow(
+        "exercise result",
+        json,
+        ValueJsonCodecTranscode.deserializeChoiceResult(
+          templateId,
+          interfaceId,
+          choice,
+          json.noSpaces,
+        ),
+      )
+    )
 }
 
 // A lossless, but harder to process, encoding. Should be used only for backfilling Scan.

@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
-import cats.implicits.toTraverseOps
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.transaction.{LsuAnnouncement, TopologyChangeOp}
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
@@ -18,7 +17,6 @@ import org.lfdecentralizedtrust.splice.lsu.LsuTransferTriggerBase.LsuTransferTas
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.SynchronizerNodeState.OnboardedImmediately
-import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import java.nio.file.Path
 import scala.concurrent.{ExecutionContext, Future}
@@ -29,7 +27,6 @@ class LsuTrigger(
     localSynchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
     successorSynchronizerNode: LocalSynchronizerNode,
     participantAdminConnection: ParticipantAdminConnection,
-    store: SvDsoStore,
     dumpPath: Path,
     hasBftSequencerConnections: Boolean,
 )(implicit
@@ -50,20 +47,6 @@ class LsuTrigger(
       announcements: Seq[LsuAnnouncement],
   )(implicit tc: TraceContext): Future[Boolean] =
     participantNeedsManualLsu(now, currentPsid, announcements)
-
-  override protected def beforeInitialize(
-      task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask]
-  )(implicit tc: TraceContext): Future[Unit] =
-    for {
-      rulesAndState <- store.getDsoRulesWithSvNodeStates()
-      owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
-      _ <- successorSynchronizerNode.cometbftNode.traverse(
-        _.rotateGenesisGovernanceKeyForSV1(owningNodeSvName)
-      )
-      _ <- successorSynchronizerNode.cometbftNode.traverse(
-        _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
-      )
-    } yield ()
 
   override protected def afterInitialize(
       task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask]

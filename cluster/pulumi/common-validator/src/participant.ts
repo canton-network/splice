@@ -39,6 +39,10 @@ export async function installParticipant(
   validatorConfig: ValidatorNodeConfig,
   xns: ExactNamespace,
   auth0Config: Auth0Config,
+  nodeIdentifier: string,
+  // false while the participant restores its identity from a dump: Canton must
+  // not create a fresh one first.
+  enableAutoInit: boolean,
   disableAuth?: boolean,
   version: CnChartVersion = activeVersion,
   defaultPostgres?: postgres.Postgres,
@@ -113,6 +117,8 @@ export async function installParticipant(
       additionalJvmOptions: getAdditionalJvmOptions(
         validatorConfig.participant?.additionalJvmOptions
       ),
+      nodeIdentifier,
+      enableAutoInit,
       additionalEnvVars: (participantValuesWithSpecifiedAud.additionalEnvVars ?? []).concat(
         validatorConfig.participant?.additionalEnvVars ?? []
       ),

@@ -121,7 +121,6 @@ abstract class SpliceNodeBase[State <: AutoCloseable & HasHealth](
 
   override type Status = SpliceNodeBase.NodeStatus
 
-  // TODO(DACH-NY/canton-network-node#736): fork or generalize status definition.
   override final def status = {
     SpliceNodeBase.NodeStatus(
       uid = UniqueIdentifier.tryFromProtoPrimitive(s"amulet::$name"),
@@ -141,7 +140,7 @@ abstract class SpliceNodeBase[State <: AutoCloseable & HasHealth](
       _ => {
         val startTime = Instant.now()
         logger.debug(s"$appInitMessage: $description started")(tc)
-        // TODO(DACH-NY/canton-network-node#5419): here we could pass on the trace context to inner function to make sure all log lines
+        // Here we could pass on the trace context to inner function to make sure all log lines
         // produced by this initialization step are tagged with the same trace id.
         // However, some of our helper methods hold onto the trace context and use it for all future
         // operations. This would mean that the trace context would be used for operations that are

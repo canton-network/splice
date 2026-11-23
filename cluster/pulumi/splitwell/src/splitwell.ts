@@ -16,10 +16,10 @@ import {
   ExactNamespace,
   failOnAppVersionMismatch,
   imagePullSecret,
-  installLedgerApiSecret,
   installSpliceHelmChart,
   persistentHeapDumpsPvc,
   ValidatorTopupConfig,
+  installSplitwellAppSecrets,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
@@ -60,6 +60,8 @@ export async function installSplitwell(
 
   const imagePullDeps = imagePullSecret(xns);
 
+  const nodeIdentifier = 'splitwell';
+
   installIngress(xns, imagePullDeps);
 
   checkValidatorKeyDownloadForPeriodicBackups('splitwell', splitwellConfig, backupConfig);
@@ -67,6 +69,8 @@ export async function installSplitwell(
     splitwellConfig,
     xns,
     auth0Client.getCfg(),
+    nodeIdentifier,
+    !participantBootstrapDump,
     false,
     decentralizedSynchronizerMigrationConfig.active.version,
     sharedPostgres,
@@ -89,6 +93,9 @@ export async function installSplitwell(
   const splitwellDbName = 'app_splitwell';
 
   const scanAddress = `http://scan-app.sv-1:5012`;
+
+  const extraDependsOn = imagePullDeps.concat(await installSplitwellAppSecrets(xns, auth0Client));
+
   installSpliceHelmChart(
     xns,
     'splitwell-app',
@@ -119,7 +126,7 @@ export async function installSplitwell(
       pvc: persistentHeapDumpsPvc(),
     },
     activeVersion,
-    { dependsOn: imagePullDeps }
+    { dependsOn: extraDependsOn }
   );
 
   const validatorPostgres =
@@ -134,10 +141,6 @@ export async function installSplitwell(
       true
     ));
   const validatorDbName = 'val_splitwell';
-
-  const extraDependsOn = imagePullDeps.concat(
-    await installLedgerApiSecret(auth0Client, xns, 'splitwell')
-  );
 
   const participantPruningConfig = splitwellConfig?.participantPruningSchedule;
 
@@ -179,7 +182,7 @@ export async function installSplitwell(
     auth0ValidatorAppName: 'splitwell_validator',
     validatorWalletUsers: pulumi.output([validatorWalletUser]),
     validatorPartyHint: 'digitalasset-splitwell-1',
-    nodeIdentifier: 'splitwell',
+    nodeIdentifier,
     logLevel: splitwellConfig.logging?.level,
     logAsync: splitwellConfig.logging?.async,
     version: activeVersion,

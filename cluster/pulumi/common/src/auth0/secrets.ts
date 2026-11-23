@@ -74,7 +74,7 @@ async function ledgerApiSecretContent(
   allSecrets: Auth0SecretMap,
   clientName: 'sv' | 'validator' | 'splitwell',
   namespace: string
-): Promise<{ [key: string]: string }> {
+): Promise<Record<string, string>> {
   const cfg = auth0Client.getCfg();
   const clientId = getClientId(auth0Client, clientName, namespace);
 
@@ -84,7 +84,12 @@ async function ledgerApiSecretContent(
   const clientSecret = clientSecrets.client_secret;
 
   if (fixedTokens()) {
-    const accessToken = await auth0Client.getClientAccessToken(clientId, clientSecret, audience);
+    const accessToken = await auth0Client.getClientFixedToken(
+      clientId,
+      clientSecret,
+      audience,
+      'ledgerApi'
+    );
     return {
       audience,
       token: accessToken,
@@ -199,8 +204,7 @@ function legacyResourceName(
   return '';
 }
 
-// TODO(#2873): for now we still export this for splitwell, reconsider
-export async function installLedgerApiSecret(
+async function installLedgerApiSecret(
   auth0Client: Auth0Client,
   xns: ExactNamespace,
   clientName: 'sv' | 'validator' | 'splitwell'
@@ -268,7 +272,7 @@ function installAuth0UiSecretWithClientId(
 export async function installValidatorSecrets(
   ns: ExactNamespace,
   auth0Client: Auth0Client
-): Promise<k8s.core.v1.Secret[]> {
+): Promise<Array<k8s.core.v1.Secret>> {
   const walletUiClientId = getUiClientId(auth0Client, 'wallet', ns.logicalName);
   const cnsUiClientId = getUiClientId(auth0Client, 'cns', ns.logicalName);
 
@@ -282,11 +286,18 @@ export async function installValidatorSecrets(
 export async function installSvAppSecrets(
   ns: ExactNamespace,
   auth0Client: Auth0Client
-): Promise<k8s.core.v1.Secret[]> {
+): Promise<Array<k8s.core.v1.Secret>> {
   const clientId = getUiClientId(auth0Client, 'sv', ns.logicalName);
 
   return [
     await installLedgerApiSecret(auth0Client, ns, 'sv'),
     installAuth0UiSecretWithClientId(auth0Client, ns, 'sv', clientId),
   ];
+}
+
+export async function installSplitwellAppSecrets(
+  ns: ExactNamespace,
+  auth0Client: Auth0Client
+): Promise<Array<k8s.core.v1.Secret>> {
+  return [await installLedgerApiSecret(auth0Client, ns, 'splitwell')];
 }

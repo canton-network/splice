@@ -492,7 +492,6 @@ object AmuletExpireV2
       choice = amuletCodegen.Amulet.CHOICE_Amulet_ExpireV2,
     )
 
-// TODO(DACH-NY/canton-network-node#2930): This is not really a Amulet event - consider either renaming the file, or splitting it into different ones based on event "types"
 object OpenMiningRoundCreate {
   type TCid = OpenMiningRound.ContractId
   type T = OpenMiningRound
@@ -506,7 +505,6 @@ object OpenMiningRoundCreate {
   }
 }
 
-// TODO(DACH-NY/canton-network-node#2930): This is not really a Amulet event - consider either renaming the file, or splitting it into different ones based on event "types"
 object ClosedMiningRoundCreate {
   type TCid = ClosedMiningRound.ContractId
   type T = ClosedMiningRound
@@ -520,7 +518,6 @@ object ClosedMiningRoundCreate {
   }
 }
 
-// TODO(DACH-NY/canton-network-node#2930): This is not really a Amulet event - consider either renaming the file, or splitting it into different ones based on event "types"
 object AppRewardCreate {
   type TCid = amuletCodegen.AppRewardCoupon.ContractId
   type T = amuletCodegen.AppRewardCoupon

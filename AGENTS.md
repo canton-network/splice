@@ -9,6 +9,7 @@ This document provides instructions for AI coding agents (GitHub Copilot, Claude
 * `daml/` holds the Daml packages, one sbt project each. `token-standard/` defines the CIP-0056 token standard APIs, which `daml/splice-amulet` implements.
 * `canton/` is a copy of open-source Canton, not Splice code. Avoid editing it; if you must, record the change in `CANTON_CODE_CHANGES.md` (see "Bumping Our Canton fork" in [MAINTENANCE.md](MAINTENANCE.md)).
 * `cluster/` holds the Helm charts, Pulumi deployment code, and Docker Compose setup.
+* For Canton Network and Daml documentation, prefer the public docs MCP server at `https://docs.canton.network/mcp` (tools `search_canton_network_docs` and `query_docs_filesystem_canton_network_docs`) if it is configured; otherwise read the sources in the `canton-network/cf-docs` repository, e.g. with `gh`.
 
 ## Testing
 
@@ -36,6 +37,7 @@ Every contribution must be tested in an automated test. For further details see 
 * All test cases of a suite extending `IntegrationTest` share one environment (`IntegrationTestWithIsolatedEnvironment` creates one per test case). Use `perTestCaseName(...)` for party and other names to avoid collisions between test cases.
 * Wrap actions that are expected to log warnings or errors in `loggerFactory.assertLogs` (or a related `SuppressingLogger` method); otherwise `checkErrors` fails in CI.
 * Simulated-time tests mix in `TimeTestUtil` and move the clock with `advanceTime` and related helpers.
+* Integration tests are expensive: cover variants and edge cases in Daml Script tests, test one representative path here, and add related test cases to an existing suite to share its environment.
 
 ## DB Migrations
 
@@ -49,9 +51,7 @@ If you make intentional changes in Daml code, run `sbt damlDarsLockFileUpdate` a
 
 ### Backwards-compatible Daml changes
 
-All Daml changes must be backwards-compatible. See the [Smart Contract Upgrading Reference from the Canton docs](https://docs.canton.network/appdev/deep-dives/smart-contract-upgrading-reference).
-
-When adding to enums, make sure to only add further nullary constructors to types that only have nullary constructors.
+All Daml changes must be backwards-compatible; see "Future Proofing" in the [Daml Style Guide](DAML_STYLE.md#future-proofing).
 
 Backends must keep working while only an older Daml version is voted in. Guard version-specific behavior, and tag tests that need a newer package with the matching scalatest tag from `org.lfdecentralizedtrust.splice.util.scalatesttags` (e.g. `SpliceAmulet_0_1_19`) so that the compatibility runs skip them. See "Daml Version Bump" and the sections after it in [DEVELOPMENT.md](DEVELOPMENT.md).
 
@@ -65,6 +65,10 @@ When you change a Daml package, bump the version of that package and of every pa
 - To represent Daml `Numeric`s in Protobuf, use `string`s. Conversions to and from `string`s should occur via `org.lfdecentralizedtrust.splice.util.Proto.encode/tryDecode`.
 - When interacting with the Ledger API, convert Scala `BigDecimal`s to Java `BigDecimal`s.
 - Refer to the `wallet.tap` command implementation for the canonical handling of Daml Numerics.
+
+### Daml Code Style
+
+Before writing or reviewing `.daml` files, read the [Daml Style Guide](DAML_STYLE.md).
 
 ## Message Definitions
 
@@ -127,4 +131,8 @@ The `common-frontend` package (`@canton-network/splice-common-frontend`) contain
 
 - Every commit needs a DCO `Signed-off-by:` line; use `git commit -s`.
 - PRs are squash-merged, so the PR title and description become the commit message.
+- Mark work that is still to be done with the most specific tag, so that it is tracked and done when it is due:
+  - `FIXME`: must be fixed before the PR is merged. The static CI checks reject FIXMEs.
+  - `TODO(#1234)`: must be fixed as part of that issue. Use the feature's tracking issue if a separate issue makes no sense.
+    For tech debt that will not be addressed as part of the feature you are delivering, create a tech-debt issue and reference it.
 - On branches in this repository, CI only runs if the last commit message contains `[ci]` (or `[static]` for static checks only). See [TESTING.md](TESTING.md) for other tags and for cluster tests.

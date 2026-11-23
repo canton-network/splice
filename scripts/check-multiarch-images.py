@@ -29,10 +29,7 @@ IMAGE_SHA256_MAP = {
 }
 
 # List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check
-IGNORED_FILE_PATTERNS = [
-    re.compile(r"^cluster/images/cometbft/Dockerfile$"),
-    re.compile(r"^cluster/images/splice-test-cometbft/Dockerfile$"),
-]
+IGNORED_FILE_PATTERNS: list[re.Pattern[str]] = []
 
 VERSION_VAR_IMAGES = {
     "POSTGRES_VERSION": "postgres",
@@ -47,7 +44,7 @@ def main() -> int:
     # The set semantics of the dict keys give us deduplication for free.
     refs_by_file: dict[tuple[str, str, str], str] = {}
 
-    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them.
+    # Dockerfiles may use variable digests (e.g. ARG $image_sha256), so parse all of them.
     for file in _tracked_dockerfiles():
         path = Path(file)
         if not path.is_file() or _file_is_ignored(file):
@@ -84,10 +81,6 @@ def main() -> int:
 def _setup_env() -> None:
     """Export lowercase aliases for Dockerfile ARG references"""
     os.environ.setdefault("canton_version", os.environ.get("CANTON_VERSION", ""))
-    os.environ.setdefault(
-        "cometbft_version", os.environ.get("COMETBFT_RELEASE_VERSION", "")
-    )
-    os.environ.setdefault("cometbft_sha", os.environ.get("COMETBFT_IMAGE_SHA256", ""))
 
 
 def _image_sha256_for(file: str) -> str | None:

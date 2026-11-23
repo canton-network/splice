@@ -1,0 +1,154 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "backfillNone": {},
+    "desiredState": "RUNNING",
+    "destinationConfig": {
+      "bigqueryDestinationConfig": {
+        "appendOnly": {},
+        "dataFreshness": "0s",
+        "singleTargetDataset": {
+          "datasetId": "projects/undefined/datasets/mock_da2_scan_staging"
+        }
+      }
+    },
+    "displayName": "mock-sv-1-stag-production-datastream",
+    "labels": {
+      "cluster": "mock",
+      "datastream_id": "stag_prod"
+    },
+    "location": "europe-west6",
+    "ruleSets": [
+      {
+        "customizationRules": [
+          {
+            "bigqueryPartitioning": {
+              "ingestionTimePartition": {
+                "partitioningTimeGranularity": "PARTITIONING_TIME_GRANULARITY_HOUR"
+              }
+            }
+          }
+        ],
+        "objectFilter": {
+          "sourceObjectIdentifier": {
+            "postgresqlIdentifier": {
+              "schema": "scan_sv_1",
+              "table": "update_history_creates"
+            }
+          }
+        }
+      },
+      {
+        "customizationRules": [
+          {
+            "bigqueryPartitioning": {
+              "ingestionTimePartition": {
+                "partitioningTimeGranularity": "PARTITIONING_TIME_GRANULARITY_HOUR"
+              }
+            }
+          }
+        ],
+        "objectFilter": {
+          "sourceObjectIdentifier": {
+            "postgresqlIdentifier": {
+              "schema": "scan_sv_1",
+              "table": "update_history_exercises"
+            }
+          }
+        }
+      },
+      {
+        "customizationRules": [
+          {
+            "bigqueryPartitioning": {
+              "ingestionTimePartition": {
+                "partitioningTimeGranularity": "PARTITIONING_TIME_GRANULARITY_HOUR"
+              }
+            }
+          }
+        ],
+        "objectFilter": {
+          "sourceObjectIdentifier": {
+            "postgresqlIdentifier": {
+              "schema": "scan_sv_1",
+              "table": "scan_verdict_store"
+            }
+          }
+        }
+      },
+      {
+        "customizationRules": [
+          {
+            "bigqueryPartitioning": {
+              "ingestionTimePartition": {
+                "partitioningTimeGranularity": "PARTITIONING_TIME_GRANULARITY_HOUR"
+              }
+            }
+          }
+        ],
+        "objectFilter": {
+          "sourceObjectIdentifier": {
+            "postgresqlIdentifier": {
+              "schema": "scan_sv_1",
+              "table": "scan_verdict_transaction_view_store"
+            }
+          }
+        }
+      },
+      {
+        "customizationRules": [
+          {
+            "bigqueryPartitioning": {
+              "ingestionTimePartition": {
+                "partitioningTimeGranularity": "PARTITIONING_TIME_GRANULARITY_HOUR"
+              }
+            }
+          }
+        ],
+        "objectFilter": {
+          "sourceObjectIdentifier": {
+            "postgresqlIdentifier": {
+              "schema": "scan_sv_1",
+              "table": "app_activity_record_store"
+            }
+          }
+        }
+      }
+    ],
+    "sourceConfig": {
+      "postgresqlSourceConfig": {
+        "includeObjects": {
+          "postgresqlSchemas": [
+            {
+              "postgresqlTables": [
+                {
+                  "table": "update_history_creates"
+                },
+                {
+                  "table": "update_history_exercises"
+                },
+                {
+                  "table": "scan_verdict_store"
+                },
+                {
+                  "table": "scan_verdict_transaction_view_store"
+                },
+                {
+                  "table": "app_activity_record_store"
+                }
+              ],
+              "schema": "scan_sv_1"
+            }
+          ]
+        },
+        "publication": "update_history_datastream_stag_prod_pub",
+        "replicationSlot": "update_history_datastream_stag_prod_r_slot"
+      }
+    },
+    "streamId": "mock-sv-1-stag-production-datastream"
+  },
+  "name": "mock-sv-1-stag-production-datastream",
+  "provider": "",
+  "type": "gcp:datastream/stream:Stream"
+}

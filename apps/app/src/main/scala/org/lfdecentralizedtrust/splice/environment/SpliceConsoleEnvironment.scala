@@ -34,8 +34,7 @@ import scala.concurrent.ExecutionContext
 class SpliceConsoleEnvironment(
     override val environment: SpliceEnvironment,
     val consoleOutput: ConsoleOutput = StandardConsoleOutput,
-) extends ConsoleEnvironment // TODO(DACH-NY/canton-network-node#736): Generalize this.
-    {
+) extends ConsoleEnvironment {
 
   override type Config = SpliceConfig
 

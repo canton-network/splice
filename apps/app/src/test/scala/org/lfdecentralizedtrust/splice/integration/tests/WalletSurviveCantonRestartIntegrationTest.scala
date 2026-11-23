@@ -35,12 +35,14 @@ class WalletSurviveCantonRestartIntegrationTest
       clue("First run of Canton participant") {
         withCanton(
           Seq(
-            testResourcesPath / "standalone-participant-extra.conf"
+            testResourcesPath / "standalone-participant-extra.conf",
+            testResourcesPath / "standalone-participant-extra-auto-init.conf",
           ),
           Seq(),
           "wallet-survive-canton-restarts-1",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorLocalBackend),
         ) {
           aliceValidatorLocalBackend.startSync()
           actAndCheck(
@@ -58,19 +60,22 @@ class WalletSurviveCantonRestartIntegrationTest
       clue("Second run of Canton participant") {
         withCanton(
           Seq(
-            testResourcesPath / "standalone-participant-extra.conf"
+            testResourcesPath / "standalone-participant-extra.conf",
+            testResourcesPath / "standalone-participant-extra-auto-init.conf",
           ),
           Seq.empty,
           "wallet-survive-canton-restarts-2",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorLocalBackend),
         ) {
           clue("We can tap and list after Canton restart and domain reconnection") {
             loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
               {
                 // Due to the circuit breaker kicking in, this might take a bit longer to succeed after some failures due to the disconnect
                 // Disable suppressErrors to avoid nested loggerFactory calls
-                eventuallySucceeds(2.minutes, suppressErrors = false) {
+                // The budget also covers the restarted participant's startup, as withCanton does not wait for it
+                eventuallySucceeds(5.minutes, suppressErrors = false) {
                   aliceWalletClient.tap(2)
                 }
                 aliceWalletClient.list()

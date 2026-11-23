@@ -298,7 +298,6 @@ class TokenStandardAllocationIntegrationTest
   }
 
   private def setupAllocatedOtcTrade()(implicit env: SpliceTestConsoleEnvironment) = {
-    // TODO(DACH-NY/canton-network-node#18561): use external parties for all of them
     val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
     val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
     // Allocate venue on separate participant node, we still go through the validator API instead of parties.enable

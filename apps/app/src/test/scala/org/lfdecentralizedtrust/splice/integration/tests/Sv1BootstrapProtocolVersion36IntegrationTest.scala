@@ -77,8 +77,6 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
     val svs = Seq(sv1Backend, sv2Backend)
     val synchronizerNodeConnections: Seq[TopologyAdminConnection] =
       svs.flatMap(sv => Seq(sequencerConnection(sv), mediatorConnection(sv)))
-    val topologyConnections: Seq[TopologyAdminConnection] =
-      svs.map(participantConnection) ++ synchronizerNodeConnections
 
     withCantonSvNodes(
       (
@@ -91,13 +89,21 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
       logSuffix = "sv1-bootstrap-pv36",
       sv4 = false,
     )() {
-      clue("Canton nodes are running but have no identity") {
-        topologyConnections.foreach { connection =>
+      clue("The synchronizer nodes are running but have no identity") {
+        synchronizerNodeConnections.foreach { connection =>
           // Long timeout because Canton is slow to start up
           eventually(timeUntilSuccess = 60.seconds) {
             val idResult = connection.getIdOption().futureValue
             idResult.initialized shouldBe false
             idResult.uniqueIdentifier shouldBe None
+          }
+        }
+      }
+
+      clue("The participants have initialized themselves") {
+        svs.map(participantConnection).foreach { connection =>
+          eventually(timeUntilSuccess = 60.seconds) {
+            connection.getIdOption().futureValue.uniqueIdentifier shouldBe defined
           }
         }
       }

@@ -28,7 +28,6 @@ const TransferPreapproval: React.FC = () => {
       navigate('/transactions');
     },
     onError: error => {
-      // TODO (DACH-NY/canton-network-node#5491): show an error to the user.
       console.error(`Failed to create transfer preapproval`, error);
     },
   });

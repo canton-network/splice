@@ -17,10 +17,6 @@
         {
           "name": "ADDITIONAL_CONFIG_SESSION_SIGNING_KEYS",
           "value": "canton.participants.participant.crypto.session-signing-keys.enabled = true"
-        },
-        {
-          "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",
-          "value": "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
         }
       ],
       "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1",
@@ -58,6 +54,7 @@
         "name": "cn-mocknet"
       },
       "disableAuth": true,
+      "enableAutoInit": true,
       "enableHealthProbes": true,
       "enableKeyDownload": false,
       "enablePostgresMetrics": true,
@@ -88,6 +85,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "validator1",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",

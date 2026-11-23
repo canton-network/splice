@@ -7,9 +7,6 @@ images := \
 	canton-domain \
 	canton-sequencer \
 	canton-mediator \
-	canton-cometbft-sequencer \
-	cometbft \
-	cometbft-watchdog \
 	\
 	splice-app \
 	splice-debug \
@@ -35,7 +32,6 @@ images := \
 	\
 	splice-test-ci \
 	splice-test-docker-runner \
-	splice-test-cometbft \
 	splice-test-runner-hook \
 
 canton-image := cluster/images/canton

@@ -56,7 +56,7 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       expectedKind: transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind,
       timeToLife: Duration = Duration.ofMinutes(10),
       expectedTimeBounds: Option[(CantonTimestamp, CantonTimestamp)] = None,
-      advanceTimeBeforeExecute: Option[Duration] = None,
+      beforeExecute: Option[() => Unit] = None,
       description: Option[String] = None,
       // Whether to wait for the input holdings to be consumed. Setting this to false is necessary
       // for transfers where the inputs are ignored, e.g. governance lock unlocks and withdrawals
@@ -86,7 +86,7 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
             .toSeq,
           disclosedContracts = factoryChoice.disclosedContracts,
           expectedTimeBounds = expectedTimeBounds,
-          advanceTimeBeforeExecute = advanceTimeBeforeExecute,
+          beforeExecute = beforeExecute,
         )
       senderHoldingCids.headOption.filter(_ => wait).foreach { trackingHoldingCid =>
         // Prepared tx execution does not wait for the tx being committed.
@@ -158,7 +158,7 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       expectedKind: transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
       timeToLife: Duration = Duration.ofMinutes(10),
       expectedTimeBounds: Option[(CantonTimestamp, CantonTimestamp)] = None,
-      advanceTimeBeforeExecute: Option[Duration] = None,
+      beforeExecute: Option[() => Unit] = None,
       description: Option[String] = None,
       wait: Boolean = true,
   )(implicit
@@ -185,7 +185,7 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
               .toSeq,
             disclosedContracts = factoryChoice.disclosedContracts,
             expectedTimeBounds = expectedTimeBounds,
-            advanceTimeBeforeExecute = advanceTimeBeforeExecute,
+            beforeExecute = beforeExecute,
           )
         senderHoldingCids.headOption
       },

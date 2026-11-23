@@ -15,7 +15,7 @@ set:
   # Things we need just to pass the schema
   sequencer:
     driver:
-      type: mock
+      type: cantonbft
 tests:
   - it: "sets labels as expected"
     documentSelector:

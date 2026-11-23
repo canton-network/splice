@@ -52,6 +52,20 @@ class ScanStorageConfigTest
       config.getStartAndEndTimestampsForFolder(config.getSegmentFolderOfObjectKey(key)) shouldBe
         Right((from, to))
     }
+
+    "dump only the daily 00:00 UTC snapshot to bulk storage" in {
+      val config = ScanStorageConfigs.scanStorageConfigV1
+      val day = cantonTimestamp("2007-12-03T00:00:00.00Z")
+      val bulkHours = (0 until 24).filter(hour =>
+        config.shouldDumpSnapshotToBulkStorage(day.plusSeconds(hour * 3600L))
+      )
+      withClue(
+        "ACS snapshot pruning keeps exactly these snapshots and drops the others outside the analyzable time window, " +
+          "so adding hours here needs snapshots that were already pruned: "
+      ) {
+        bulkHours shouldBe Seq(0)
+      }
+    }
   }
 
   private def cantonTimestamp(isoStr: String) =
