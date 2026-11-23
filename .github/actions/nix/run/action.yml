@@ -220,8 +220,13 @@ runs:
           # compares its test data only when CI is set, and token-standard/cli/__tests__/mocks/data/ is stale
           # (splice-amulet 0.1.22). Other CI checks: project/Wartremover.scala, build-tools/npm-install.sh,
           # build-tools/get-snapshot-version, build-tools/cncluster, build-tools/lib/pulumi-commands.
+          # Jobs that ran without a container on the self-hosted-docker-* runners had CI: they set NIX_RUN_KEEP_CI.
           # Without CI, build-tools/get-snapshot-version needs USER, which the runner does not set: set it as above.
-          env -u CI USER="${USER:-$(whoami)}" bash -euo pipefail -c 'source "$NIX_ENV_SOURCE" && source "$ENVRC_SOURCE" && bash "$1"' bash "$CMD_FILE" &
+          unset_ci=(-u CI)
+          if [[ "${NIX_RUN_KEEP_CI:-}" == "true" ]]; then
+            unset_ci=()
+          fi
+          env "${unset_ci[@]}" USER="${USER:-$(whoami)}" bash -euo pipefail -c 'source "$NIX_ENV_SOURCE" && source "$ENVRC_SOURCE" && bash "$1"' bash "$CMD_FILE" &
         else
           # Run the command for real within the nix environment
           nix develop \
