@@ -264,29 +264,32 @@ class BulkStorage(
       loggerFactory,
     )
   val updateHistoryBackfilling: Option[UpdateHistoryBackfillingFromBulkStorage] =
-    if (!appConfig.updateHistoryBackfilling.enabled) None
-    else if (legacyUpdateHistoryBackfillEnabled) {
-      logger.info(
-        "Not loading update history from bulk storage, because update history backfilling from peers is enabled"
-      )
-      None
-    } else
-      Some(
-        new UpdateHistoryBackfillingFromBulkStorage(
-          appConfig.updateHistoryBackfilling,
-          storageConfig,
-          updateHistory,
-          new UpdateHistoryBackfillingFromBulkStorage.BucketCommittedSegments(
-            reader,
-            committedConnection,
+    UpdateHistoryBackfillingFromBulkStorage.notStartedBecause(
+      appConfig.updateHistoryBackfilling.enabled,
+      legacyUpdateHistoryBackfillEnabled,
+    ) match {
+      case Some(UpdateHistoryBackfillingFromBulkStorage.NotStarted.Disabled) => None
+      case Some(reason @ UpdateHistoryBackfillingFromBulkStorage.NotStarted.BackfillingFromPeers) =>
+        logger.warn(reason.description)
+        None
+      case None =>
+        Some(
+          new UpdateHistoryBackfillingFromBulkStorage(
             appConfig.updateHistoryBackfilling,
-          ),
-          historyReadiness,
-          updateHistoryBackfillingProgress,
-          historyMetrics.BulkStorage.updateHistoryLoadedUpdates,
-          loggerFactory,
+            storageConfig,
+            updateHistory,
+            new UpdateHistoryBackfillingFromBulkStorage.BucketCommittedSegments(
+              reader,
+              committedConnection,
+              appConfig.updateHistoryBackfilling,
+            ),
+            historyReadiness,
+            updateHistoryBackfillingProgress,
+            historyMetrics.BulkStorage.updateHistoryLoadedUpdates,
+            loggerFactory,
+          )
         )
-      )
+    }
 
   // Services are only started once initialization has completed.
   private lazy val services =

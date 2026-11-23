@@ -51,7 +51,15 @@ object BulkStorageUpdateDecoder {
     Source
       .lazySource { () =>
         val compressedStream = compressed.runWith(StreamConverters.asInputStream(readTimeout))
-        StreamConverters.fromInputStream(() => new ZstdInputStream(compressedStream))
+        // Closing the stream cancels the download, also when the decompressing stream cannot be opened.
+        StreamConverters.fromInputStream { () =>
+          try new ZstdInputStream(compressedStream)
+          catch {
+            case NonFatal(e) =>
+              compressedStream.close()
+              throw e
+          }
+        }
       }
       .via(Framing.delimiter(ByteString("\n"), maxLineBytes, allowTruncation = false))
       .zipWithIndex

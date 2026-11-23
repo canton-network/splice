@@ -32,13 +32,15 @@ import org.lfdecentralizedtrust.splice.store.{
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
-/** Loads update history from this Scan's own bulk storage into the database, for the record times before its
-  * history start `t` (#6253).
+/** Loads update history from this Scan's own bulk storage into the database, for the record times before the
+  * updates it ingested itself (#6253).
   *
-  * A Scan whose history starts after genesis has ingested updates from `t` on. The update segments before its first
-  * own segment are copied from its peers and committed to its bucket by bulk storage backfilling (#6252). This loads
-  * the updates of those segments with record times up to and including `t`, segment by segment, starting from the
-  * segment that contains the start of the analyzable time window (genesis when the window is unlimited).
+  * A Scan whose history starts after genesis, at `t`, ingests updates from about `t` on. The update segments before
+  * its first own segment are copied from its peers and committed to its bucket by bulk storage backfilling (#6252).
+  * This loads the updates of those segments that are older than the earliest update stored after `t`, segment by
+  * segment, starting from the segment that contains the start of the analyzable time window (genesis when the window
+  * is unlimited). Updates that are already stored are skipped, so a segment can be loaded again after a restart, and
+  * updates that were stored by other means are left alone.
   *
   * A segment is loaded once the committed segment progress covers it. After each loaded segment, the last loaded
   * segment is recorded, so a restart continues with the segment after it.
@@ -68,7 +70,7 @@ class UpdateHistoryBackfillingFromBulkStorage(
   private[bulk] def mksrc()(implicit tc: TraceContext): Source[Step, NotUsed] =
     Source.unfoldAsync[State, Step](State.Starting) {
       case State.Starting => start()
-      case State.Loading(historyStart, next) => continueWith(historyStart, next)
+      case State.Loading(loadBefore, next) => continueWith(loadBefore, next)
       case State.Finished => Future.successful(None)
     }
 
@@ -78,23 +80,29 @@ class UpdateHistoryBackfillingFromBulkStorage(
       historyReadiness.historyStart().flatMap {
         case None => waitFor("the history start of this Scan to be determined")
         case Some(HistoryStart.Genesis) =>
-          logger.info("This Scan holds update history from genesis, nothing to load from bulk storage")
+          logger
+            .info("This Scan holds update history from genesis, nothing to load from bulk storage")
           Future.successful(Some((State.Finished, NothingToLoad)))
         case Some(HistoryStart.From(historyStart)) =>
-          progress.readLastLoadedSegment.flatMap {
-            case Some(loaded) =>
-              logger.info(
-                s"Continuing to load update history from bulk storage after $loaded, up to $historyStart"
-              )
-              continueWith(historyStart, Next.After(loaded))
+          updateHistory.getEarliestRecordTimeAfter(historyStart).flatMap {
             case None =>
-              lowerBound() match {
-                case None => waitFor("the start of the analyzable time window to be known")
-                case Some(lower) =>
+              waitFor(s"this Scan to ingest its first update after its history start $historyStart")
+            case Some(loadBefore) =>
+              progress.readLastLoadedSegment.flatMap {
+                case Some(loaded) =>
                   logger.info(
-                    s"Loading update history from bulk storage from the segment containing $lower up to $historyStart"
+                    s"Continuing to load update history from bulk storage after $loaded, up to $loadBefore (exclusive)"
                   )
-                  continueWith(historyStart, Next.First(lower))
+                  continueWith(loadBefore, Next.After(loaded))
+                case None =>
+                  lowerBound() match {
+                    case None => waitFor("the start of the analyzable time window to be known")
+                    case Some(lower) =>
+                      logger.info(
+                        s"Loading update history from bulk storage from the segment containing $lower up to $loadBefore (exclusive)"
+                      )
+                      continueWith(loadBefore, Next.First(lower))
+                  }
               }
           }
       }
@@ -106,26 +114,28 @@ class UpdateHistoryBackfillingFromBulkStorage(
     if (updateHistory.analyzableTimeWindowIsUnlimited) Some(CantonTimestamp.MinValue)
     else updateHistory.startAnalyzableTimeWindow
 
+  /** @param loadBefore the earliest record time of an update stored after the history start; everything older is
+    *                   loaded
+    */
   private def continueWith(
-      historyStart: CantonTimestamp,
+      loadBefore: CantonTimestamp,
       next: Next,
   )(implicit tc: TraceContext): Future[Option[(State, Step)]] =
-    if (next.loadedUpTo >= historyStart) {
-      logger.info(s"Update history is loaded from bulk storage up to the history start $historyStart")
-      Future.successful(Some((State.Finished, Loaded(historyStart))))
+    if (next.loadedUpTo >= loadBefore) {
+      logger.info(s"Update history is loaded from bulk storage up to $loadBefore (exclusive)")
+      Future.successful(Some((State.Finished, Loaded(loadBefore))))
     } else
       nextSegment(next).flatMap {
         case None =>
           logger.debug(s"No committed update segment after ${next.loadedUpTo} yet, waiting")
-          waitThen(State.Loading(historyStart, next), WaitingForSegment(next.loadedUpTo))
+          waitThen(State.Loading(loadBefore, next), WaitingForSegment(next.loadedUpTo))
         case Some(segment) =>
           for {
-            count <- loadSegment(segment, historyStart)
+            inserted <- loadSegment(segment, loadBefore)
             _ <- progress.persistLastLoadedSegment(segment)
-            _ = loadedUpdates.inc(count.toLong)(MetricsContext.Empty)
-            _ = logger.info(s"Loaded $count updates of the segment $segment from bulk storage")
+            _ = logger.info(s"Loaded $inserted updates of the segment $segment from bulk storage")
           } yield Some(
-            (State.Loading(historyStart, Next.After(segment)), SegmentLoaded(segment, count))
+            (State.Loading(loadBefore, Next.After(segment)), SegmentLoaded(segment, inserted))
           )
       }
 
@@ -146,33 +156,52 @@ class UpdateHistoryBackfillingFromBulkStorage(
         )
     }
 
-  private def loadSegment(segment: UpdatesSegment, historyStart: CantonTimestamp)(implicit
+  /** Inserts the updates of a segment that are older than `loadBefore` and not stored yet, returning how many. */
+  private def loadSegment(segment: UpdatesSegment, loadBefore: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[Int] =
     segments
       .updates(segment)
-      .filter(_.update.update.recordTime <= historyStart)
+      .filter(_.update.update.recordTime < loadBefore)
       .grouped(config.insertBatchSize)
       .mapConcat(sameMigrationRuns)
-      .mapAsync(1)(insert)
+      .prefixAndTail(1)
+      .flatMapConcat { case (firstBatch, otherBatches) =>
+        // The updates of a segment are in record time order, so the partitions from the first one to the end of the
+        // segment cover all of them.
+        firstBatch.headOption.flatMap(_.headOption) match {
+          case None => Source.empty
+          case Some(first) =>
+            val last =
+              if (segment.toTimestamp < loadBefore) segment.toTimestamp else loadBefore
+            Source
+              .future(updateHistory.ensurePartitionsFor(first.update.update.recordTime, last))
+              .flatMapConcat(_ => Source(firstBatch).concat(otherBatches))
+        }
+      }
+      .mapAsync(1)(insertNotStored)
       .runWith(Sink.fold(0)(_ + _))
 
-  private def insert(batch: Vector[TreeUpdateWithMigrationId])(implicit
+  private def insertNotStored(batch: Vector[TreeUpdateWithMigrationId])(implicit
       tc: TraceContext
   ): Future[Int] =
     batch.headOption.fold(Future.successful(0)) { first =>
       val recordTimes = batch.map(_.update.update.recordTime)
       for {
-        _ <- updateHistory.ensurePartitionsFor(
+        stored <- updateHistory.getStoredUpdateIds(
+          first.migrationId,
           recordTimes.minOption.getOrElse(first.update.update.recordTime),
           recordTimes.maxOption.getOrElse(first.update.update.recordTime),
+          batch.map(_.update.update.updateId),
         )
-        _ <- updateHistory.destinationHistory.insert(
-          first.migrationId,
-          first.update.synchronizerId,
-          batch.map(_.update),
-        )
-      } yield batch.size
+        notStored = batch.filterNot(u => stored.contains(u.update.update.updateId))
+        _ <-
+          if (notStored.isEmpty) Future.unit
+          else
+            updateHistory.destinationHistory
+              .insert(first.migrationId, first.update.synchronizerId, notStored.map(_.update))
+              .map(_ => loadedUpdates.inc(notStored.size.toLong)(MetricsContext.Empty))
+      } yield notStored.size
     }
 
   private def waitFor(what: String)(implicit tc: TraceContext): Future[Option[(State, Step)]] = {
@@ -207,6 +236,31 @@ object UpdateHistoryBackfillingFromBulkStorage {
   val description = "UpdateHistoryBackfillingFromBulkStorage"
 
   val lastLoadedSegmentKvStoreKey = "update_history_from_bulk_storage_cursor"
+
+  /** Why loading update history from bulk storage is not started, None if it is started. */
+  def notStartedBecause(
+      enabled: Boolean,
+      backfillingFromPeersEnabled: Boolean,
+  ): Option[NotStarted] =
+    if (!enabled) Some(NotStarted.Disabled)
+    else if (backfillingFromPeersEnabled) Some(NotStarted.BackfillingFromPeers)
+    else None
+
+  sealed abstract class NotStarted(val description: String) extends Product with Serializable
+  object NotStarted {
+    case object Disabled extends NotStarted("Loading update history from bulk storage is disabled")
+
+    /** With backfilling from peers enabled, it fills the same history, and the history start is genesis once it is
+      * complete.
+      */
+    case object BackfillingFromPeers
+        extends NotStarted(
+          "Not loading update history from bulk storage although bulk-storage.update-history-backfilling.enabled is set, " +
+            "because update history backfilling from peers is enabled too. To load it from bulk storage, " +
+            "set update-history-backfill-enabled = false (Helm: updateHistoryBackfilling.enabled, " +
+            "Pulumi: scanApp.updateHistoryBackfillingFromPeers.enabled)"
+        )
+  }
 
   /** Splits a batch into runs of updates with the same migration id, keeping their order, because one insert is for
     * one migration id.
@@ -266,7 +320,8 @@ object UpdateHistoryBackfillingFromBulkStorage {
         .flatMapConcat { key =>
           BulkStorageUpdateDecoder.decodeObject(
             key,
-            Source.futureSource(committedConnection.readObject(key)),
+            // Only start the download when the object is decoded.
+            Source.lazyFutureSource(() => committedConnection.readObject(key)),
             config.maxLineBytes,
             readTimeout,
           )

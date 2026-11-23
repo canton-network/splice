@@ -2189,6 +2189,59 @@ class UpdateHistory private (
       setBackfillingImportUpdatesComplete()
   }
 
+  /** The earliest record time after `after` of an update stored in the current migration. */
+  def getEarliestRecordTimeAfter(after: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[Option[CantonTimestamp]] =
+    MonadUtil
+      .sequentialTraverse(
+        Seq(
+          "update_history_transactions",
+          "update_history_assignments",
+          "update_history_unassignments",
+        )
+      ) { table =>
+        storage.query(
+          sql"""
+            select min(record_time) from #$table
+            where history_id = $historyId and migration_id = $domainMigrationId and record_time > $after
+          """.as[Option[CantonTimestamp]].head,
+          s"getEarliestRecordTimeAfter.$table",
+        )
+      }
+      .map(_.flatten.minOption)
+
+  /** Which of `updateIds` are stored in the given migration with a record time between `fromRecordTime` and
+    * `toRecordTime` (inclusive).
+    */
+  def getStoredUpdateIds(
+      migrationId: Long,
+      fromRecordTime: CantonTimestamp,
+      toRecordTime: CantonTimestamp,
+      updateIds: Seq[String],
+  )(implicit tc: TraceContext): Future[Set[String]] =
+    if (updateIds.isEmpty) Future.successful(Set.empty)
+    else
+      MonadUtil
+        .sequentialTraverse(
+          Seq(
+            "update_history_transactions",
+            "update_history_assignments",
+            "update_history_unassignments",
+          )
+        ) { table =>
+          storage.query(
+            sql"""
+              select update_id from #$table
+              where history_id = $historyId and migration_id = $migrationId
+                and record_time >= $fromRecordTime and record_time <= $toRecordTime
+                and update_id = any(${updateIds.toArray[String]})
+            """.as[String],
+            s"getStoredUpdateIds.$table",
+          )
+        }
+        .map(_.flatten.toSet)
+
   /** Creates the update history partitions covering record times from `fromRecordTime` to `toRecordTime`,
     * for writers that insert before the record times of live ingestion (#6253, #8481).
     */

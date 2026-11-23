@@ -57,7 +57,11 @@ final case class UpdateHistoryBackfillingFromBulkStorageConfig(
     pollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     insertBatchSize: Int = 500,
     maxLineBytes: Int = 64 * 1024 * 1024,
-)
+) {
+  require(pollingInterval.underlying.toMillis > 0, "pollingInterval must be positive")
+  require(insertBatchSize > 0, "insertBatchSize must be positive")
+  require(maxLineBytes > 0, "maxLineBytes must be positive")
+}
 
 final case class BulkStorageConfig(
     /** When new snapshot is not yet available, how long to wait for a new one. */

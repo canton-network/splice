@@ -164,16 +164,30 @@ class BulkStorageReader(
           .map(_.map(segmentOf).minByOption(_.fromTimestamp))
     }
 
-  /** The keys of the objects of a committed update segment in the given encoding. */
+  /** The keys of the objects of a committed update segment in the given encoding. Fails rather than returning only
+    * some of them.
+    */
   def getCommittedUpdateObjectsInSegment(
       segment: UpdatesSegment,
       encoding: ScanStorageConfig.Encoding,
-  ): Future[Seq[String]] =
-    getUpdateObjectsInFolder(
-      committedS3Connection,
-      storageConfig.getSegmentFolder(segment.fromTimestamp, Some(segment.toTimestamp)),
-      NonEmptyList.one(encoding),
-    )
+  ): Future[Seq[String]] = {
+    val maxObjects = Limit.DefaultMaxPageSize
+    committedS3Connection
+      .listObjects(
+        prefix = storageConfig.getSegmentFolder(segment.fromTimestamp, Some(segment.toTimestamp)),
+        keyMatchesStorageEncodings("updates", NonEmptyList.one(encoding)),
+        PageLimit.tryCreate(maxObjects + 1, maxObjects + 1),
+      )
+      .map { keys =>
+        if (keys.sizeIs > maxObjects)
+          throw Status.INTERNAL
+            .withDescription(
+              s"The committed update segment $segment has more than $maxObjects ${encoding.key} objects"
+            )
+            .asRuntimeException()
+        keys
+      }
+  }
 
   def getStagingSegmentStartingAt(
       startTimestamp: Option[CantonTimestamp]
