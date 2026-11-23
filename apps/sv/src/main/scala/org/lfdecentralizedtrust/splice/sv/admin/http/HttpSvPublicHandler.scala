@@ -189,80 +189,107 @@ class HttpSvPublicHandler(
   )(extracted: TraceContext): Future[r0.StartSvOnboardingResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.startSvOnboarding") { _ => _ =>
-      SvOnboardingToken.verifyAndDecode(body.token) match {
-        case Left(error) =>
-          Future.failed(
-            HttpErrorHandler.badRequest(s"Could not verify and decode token: $error")
-          )
-        case Right(token) =>
-          for {
-            dsoRules <- dsoStore.getDsoRules()
-            isCandidatePartyHostedOnParticipant <- participantAdminConnection
-              .listPartyToParticipant(
-                TopologyStoreId.Synchronizer(dsoRules.domain).some,
-                filterParty = token.candidateParty.filterString,
-                filterParticipant = token.candidateParticipantId.toProtoPrimitive,
-              )
-              .map(_.nonEmpty)
-            res <-
-              if (!SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)) {
-                Future.failed(
-                  HttpErrorHandler.badRequest(
-                    s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."
-                  )
+      for {
+        dsoRules <- dsoStore.getDsoRules()
+        maxTextLength = dsoRules.payload.config.maxTextLength.longValue
+        outcome <- validateStartSvOnboardingBody(body, maxTextLength) match {
+          case Left(error) =>
+            Future.failed(HttpErrorHandler.badRequest(error))
+          case Right(token) =>
+            for {
+              isCandidatePartyHostedOnParticipant <- participantAdminConnection
+                .listPartyToParticipant(
+                  TopologyStoreId.Synchronizer(dsoRules.domain).some,
+                  filterParty = token.candidateParty.filterString,
+                  filterParticipant = token.candidateParticipantId.toProtoPrimitive,
                 )
-              } else if (!isCandidatePartyHostedOnParticipant)
-                // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
-                // and the client can just retry on that.
-                Future.failed(
-                  HttpErrorHandler.conflict(
-                    s"Candidate party ${token.candidateParty} is not authorized by participant ${token.candidateParticipantId}"
-                  )
-                )
-              else
-                SvApp
-                  .isApprovedSvIdentity(
-                    token.candidateName,
-                    token.candidateParty,
-                    body.token,
-                    config,
-                    svStore,
-                    logger,
-                  ) match {
-                  case Left(reason) =>
-                    Future.failed(
-                      HttpErrorHandler.unauthorized(
-                        s"Could not approve SV Identity because of reason: $reason"
-                      )
+                .map(_.nonEmpty)
+              res <-
+                if (!isCandidatePartyHostedOnParticipant)
+                  // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
+                  // and the client can just retry on that.
+                  Future.failed(
+                    HttpErrorHandler.conflict(
+                      s"Candidate party ${token.candidateParty} is not authorized by participant ${token.candidateParticipantId}"
                     )
-                  case Right(_) =>
-                    // We retry here because the DsoRules can change while attempting this.
-                    retryProvider
-                      .retryForClientCalls(
-                        "start_sv_onboarding",
-                        s"start SV ${token.candidateName} onboarding via DsoRules",
-                        startSvOnboarding(
-                          token.candidateName,
-                          token.candidateParty,
-                          token.candidateParticipantId,
-                          body.token,
-                        ),
-                        logger,
+                  )
+                else
+                  SvApp
+                    .isApprovedSvIdentity(
+                      token.candidateName,
+                      token.candidateParty,
+                      body.token,
+                      config,
+                      svStore,
+                      logger,
+                    ) match {
+                    case Left(reason) =>
+                      Future.failed(
+                        HttpErrorHandler.unauthorized(
+                          s"Could not approve SV Identity because of reason: $reason"
+                        )
                       )
-                      .flatMap {
-                        case Left(reason) =>
-                          Future.failed(
-                            HttpErrorHandler.badRequest(
-                              s"Could not start onboarding request because of reason: : $reason"
+                    case Right(_) =>
+                      // We retry here because the DsoRules can change while attempting this.
+                      retryProvider
+                        .retryForClientCalls(
+                          "start_sv_onboarding",
+                          s"start SV ${token.candidateName} onboarding via DsoRules",
+                          startSvOnboarding(
+                            token.candidateName,
+                            token.candidateParty,
+                            token.candidateParticipantId,
+                            body.token,
+                          ),
+                          logger,
+                        )
+                        .flatMap {
+                          case Left(reason) =>
+                            Future.failed(
+                              HttpErrorHandler.badRequest(
+                                s"Could not start onboarding request because of reason: : $reason"
+                              )
                             )
-                          )
-                        case Right(_) =>
-                          Future.successful(r0.StartSvOnboardingResponseOK)
-                      }
-                }
-          } yield res
-      }
+                          case Right(_) =>
+                            Future.successful(r0.StartSvOnboardingResponseOK)
+                        }
+                  }
+            } yield res
+        }
+      } yield outcome
     }
+  }
+
+  /** Validates the request body and decodes its token. The length of the unbounded body is
+    * checked before it is parsed and its signature verified. Lengths are counted in code points
+    * to match the bound that DsoRules_StartSvOnboarding enforces.
+    */
+  private def validateStartSvOnboardingBody(
+      body: definitions.StartSvOnboardingRequest,
+      maxTextLength: Long,
+  ): Either[String, SvOnboardingToken] = {
+    def textLength(text: String): Long = text.codePointCount(0, text.length).toLong
+    for {
+      _ <- Either.cond(
+        textLength(body.token) <= maxTextLength,
+        (),
+        s"Onboarding token is longer than the maximum of $maxTextLength characters.",
+      )
+      token <- SvOnboardingToken
+        .verifyAndDecode(body.token)
+        .left
+        .map(error => s"Could not verify and decode token: $error")
+      _ <- Either.cond(
+        textLength(token.candidateName) <= maxTextLength,
+        (),
+        s"Candidate name is longer than the maximum of $maxTextLength characters.",
+      )
+      _ <- Either.cond(
+        SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId),
+        (),
+        s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}.",
+      )
+    } yield token
   }
 
   /** Intended use: Used by other SV operators

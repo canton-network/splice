@@ -23,6 +23,11 @@
 
   - SV App
 
+    - `DsoRules_StartSvOnboarding` now rejects a `candidateName`, `candidateParticipantId` or `token`
+      longer than `maxTextLength`, and the sponsor's `/v0/onboard/sv/start` endpoint rejects such a
+      request with a 400 instead of a 500. SV names and onboarding tokens are far below that limit
+      in practice, so this is not expected to affect onboarding.
+
     - Joining SVs now download the DSO party ACS and sequencer onboarding state from their sponsor as files
       instead of keeping the responses in the SV app's memory, reducing SV app memory usage for large
       snapshots. SVs that restrict SV app ingress must allow other SVs to reach the new

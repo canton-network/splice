@@ -1255,6 +1255,12 @@ template DsoRules with
       controller sponsor
       do
         require "Sponsor is an SV" (sponsor `Map.member` svs)
+        TSU.require' ("candidateName length", T.length candidateName)
+          TSU.isLessOrEqualR ("config.maxTextLength", config.maxTextLength)
+        TSU.require' ("candidateParticipantId length", T.length candidateParticipantId)
+          TSU.isLessOrEqualR ("config.maxTextLength", config.maxTextLength)
+        TSU.require' ("token length", T.length token)
+          TSU.isLessOrEqualR ("config.maxTextLength", config.maxTextLength)
         now <- getTime
         let expiresAt = now `addRelTime` config.svOnboardingRequestTimeout
         onboardingRequest <- create SvOnboardingRequest with ..
