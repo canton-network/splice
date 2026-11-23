@@ -22,6 +22,7 @@ import org.lfdecentralizedtrust.splice.store.{Accepted, StoreErrors, VoteRequest
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsRowData,
   AcsTables,
+  HashIndexedTextColumn,
   IndexColumnValue,
   TxLogRowData,
 }
@@ -32,6 +33,13 @@ import io.circe.Json
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
 object ScanTables extends AcsTables {
+
+  /** Index columns holding free text, which are indexed by a hash of their value. */
+  object HashIndexedColumns {
+    val governanceLockSubject: HashIndexedTextColumn = HashIndexedTextColumn(
+      "governance_lock_subject"
+    )
+  }
 
   case class ScanAcsStoreRowData(
       contract: Contract[?, ?],
@@ -69,17 +77,13 @@ object ScanTables extends AcsTables {
       ScanAcsStoreRowData.IndexColumns.validator_license_rounds_collected -> validatorLicenseRoundsCollected,
       ScanAcsStoreRowData.IndexColumns.sv_party -> svParty,
       ScanAcsStoreRowData.IndexColumns.vote_action_requiring_confirmation -> voteActionRequiringConfirmation,
-      ScanAcsStoreRowData.IndexColumns.vote_requester_name -> voteRequesterName.map(lengthLimited),
+      ScanAcsStoreRowData.IndexColumns.vote_requester_name -> voteRequesterName,
       ScanAcsStoreRowData.IndexColumns.vote_request_tracking_cid -> voteRequestTrackingCid,
       ScanAcsStoreRowData.IndexColumns.transfer_preapproval_receiver -> transferPreapprovalReceiver,
       ScanAcsStoreRowData.IndexColumns.transfer_preapproval_valid_from -> transferPreapprovalValidFrom,
       ScanAcsStoreRowData.IndexColumns.wallet_party -> walletParty,
-      ScanAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType.map(
-        lengthLimited
-      ),
-      ScanAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject.map(
-        lengthLimited
-      ),
+      ScanAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType,
+      ScanAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject,
     )
   }
 
@@ -162,7 +166,7 @@ object ScanTables extends AcsTables {
       "closed_round_effective_at" -> closedRoundEffectiveAt,
       "vote_action_name" -> voteActionName.map(lengthLimited),
       "vote_accepted" -> voteAccepted,
-      "vote_requester_name" -> voteRequesterName.map(lengthLimited),
+      "vote_requester_name" -> voteRequesterName,
       "vote_effective_at" -> voteEffectiveAt.map(lengthLimited),
     )
   }

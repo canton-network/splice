@@ -13,6 +13,13 @@
       repair commands such as `participant.repair.import_acs`.
       The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
 
+  - SV, Scan and Validator Apps
+
+    - Some database indexes of the SV, Scan, validator and wallet stores now use smaller, fixed-size keys.
+      The apps rebuild these indexes in the background after starting, without delaying the startup or blocking writes.
+      On SV nodes with a large DSO store, the rebuild can take several minutes and adds read load on the database
+      during that time.
+
   - Scan App
 
     - SVs can enable bulk storage: Scan exports its update history and daily ACS snapshots to S3-compatible object

@@ -41,6 +41,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ansentrycont
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
   SRARC_AddSv,
   SRARC_CreateFeaturedAppConfigUpdateInstruction,
+  SRARC_CreateUnallocatedUnclaimedActivityRecord,
   SRARC_GrantFeaturedAppRight,
   SRARC_OffboardSv,
 }
@@ -136,6 +137,29 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         confirmation(3, removeUserAction),
       ),
     )(_.lookupConfirmationByActionWithOffset(storeSvParty, addUser666Action))
+    "lookupConfirmationByActionWithOffset" should {
+      "find a confirmation whose action has an equal number written with a different scale" in {
+        def action(amount: String) = new ARC_DsoRules(
+          new SRARC_CreateUnallocatedUnclaimedActivityRecord(
+            new DsoRules_CreateUnallocatedUnclaimedActivityRecord(
+              userParty(1).toProtoPrimitive,
+              new java.math.BigDecimal(amount),
+              "reason",
+              Instant.EPOCH,
+            )
+          )
+        )
+        val stored = confirmation(1, action("1.0"))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(stored)(store.multiDomainAcsStore)
+          result <- store.lookupConfirmationByActionWithOffset(
+            storeSvParty,
+            action("1.0000000000"),
+          )
+        } yield result.value.map(_.contractId) shouldBe Some(stored.contractId)
+      }
+    }
     lookupTests("lookupSvOnboardingRequestByTokenWithOffset")(
       create = svOnboardingRequest("good", userParty(1), "good-pid", "good"),
       noise = Seq(

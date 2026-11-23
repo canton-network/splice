@@ -325,9 +325,9 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             Confirmation.COMPANION,
-            where = sql"""action_requiring_confirmation = ${payloadJsonFromDefinedDataType(
-                action
-              )}""",
+            where = DsoTables.HashIndexedColumns.actionRequiringConfirmation.equalTo(
+              payloadJsonFromDefinedDataType(action)
+            ),
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
           "listConfirmations",
@@ -351,9 +351,9 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             Confirmation.COMPANION,
-            where = sql"""
-                confirmer = $confirmer
-                and action_requiring_confirmation = ${payloadJsonFromDefinedDataType(action)}""",
+            where =
+              (sql"""confirmer = $confirmer and """ ++ DsoTables.HashIndexedColumns.actionRequiringConfirmation
+                .equalTo(payloadJsonFromDefinedDataType(action))).toActionBuilder,
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
           "listConfirmations",
@@ -1075,10 +1075,9 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             Confirmation.COMPANION,
-            where = sql"""
-                    confirmer = $confirmer
-                and action_requiring_confirmation = ${payloadJsonFromDefinedDataType(action)}
-                  """,
+            where =
+              (sql"""confirmer = $confirmer and """ ++ DsoTables.HashIndexedColumns.actionRequiringConfirmation
+                .equalTo(payloadJsonFromDefinedDataType(action))).toActionBuilder,
             orderLimit = sql" limit 1",
           ).headOption,
           "lookupConfirmationByActionWithOffset",
@@ -1205,7 +1204,7 @@ class DbSvDsoStore private (
               acsStoreId,
               domainMigrationId,
               Confirmation.COMPANION,
-              where = sql"""
+              where = (sql"""
                            confirmer = $confirmer
                        and action_ans_entry_context_cid IN (
                          select contract_id
@@ -1215,7 +1214,8 @@ class DbSvDsoStore private (
                            and template_id_qualified_name = ${QualifiedName(
                   AnsEntryContext.TEMPLATE_ID_WITH_PACKAGE_ID
                 )}
-                           and ans_entry_name = ${lengthLimited(name)})""",
+                           and """ ++ DsoTables.HashIndexedColumns.ansEntryName
+                .equalTo(name) ++ sql")").toActionBuilder,
               orderLimit = sql"""limit ${sqlLimit(limit)}""",
             ),
             "listInitialPaymentConfirmationByAnsName",
@@ -1237,7 +1237,7 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             SvOnboardingRequest.COMPANION,
-            where = sql"""sv_onboarding_token = ${lengthLimited(token)}""",
+            where = DsoTables.HashIndexedColumns.svOnboardingToken.equalTo(token),
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupSvOnboardingRequestByTokenWithOffset",
@@ -1953,9 +1953,9 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             VoteRequest.COMPANION,
-            where = sql"""action_requiring_confirmation = ${payloadJsonFromDefinedDataType(action)}
-                       and requester_name = ${key.svParty}
-                         """,
+            where = (DsoTables.HashIndexedColumns.actionRequiringConfirmation.equalTo(
+              payloadJsonFromDefinedDataType(action)
+            ) ++ sql""" and requester_name = ${key.svParty}""").toActionBuilder,
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupVoteRequestByThisSvAndActionWithOffset",
@@ -1999,7 +1999,7 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             SvOnboardingRequest.COMPANION,
-            where = sql"""sv_candidate_name = ${lengthLimited(candidateName)}""",
+            where = DsoTables.HashIndexedColumns.svCandidateName.equalTo(candidateName),
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupSvOnboardingRequestByCandidateNameWithOffset",
@@ -2023,7 +2023,7 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             SvOnboardingConfirmed.COMPANION,
-            where = sql"""sv_candidate_name = ${lengthLimited(svName)}""",
+            where = DsoTables.HashIndexedColumns.svCandidateName.equalTo(svName),
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupSvOnboardingConfirmedByNameWithOffset",
@@ -2048,8 +2048,8 @@ class DbSvDsoStore private (
             acsStoreId,
             domainMigrationId,
             AnsEntry.COMPANION,
-            where = sql"""ans_entry_name = ${lengthLimited(name)}
-                      and acs.contract_expires_at >= $now""",
+            where = (DsoTables.HashIndexedColumns.ansEntryName.equalTo(name) ++ sql"""
+                      and acs.contract_expires_at >= $now""").toActionBuilder,
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupAnsEntryByNameWithOffset",

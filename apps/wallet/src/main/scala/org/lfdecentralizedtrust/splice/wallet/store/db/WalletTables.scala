@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
   AcsRowData,
   AcsTables,
+  HashIndexedTextColumn,
   IndexColumnValue,
   TxLogRowData,
 }
@@ -25,6 +26,11 @@ import org.lfdecentralizedtrust.splice.store.db.AcsRowData.HasIndexColumns
 
 object WalletTables extends AcsTables {
 
+  /** Index columns holding free text, which are indexed by a hash of their value. */
+  object HashIndexedColumns {
+    val trackingId: HashIndexedTextColumn = HashIndexedTextColumn("tracking_id")
+  }
+
   case class UserWalletAcsStoreRowData(
       contract: Contract[?, ?],
       contractExpiresAt: Option[Timestamp] = None,
@@ -38,12 +44,8 @@ object WalletTables extends AcsTables {
       UserWalletAcsStoreRowData.IndexColumns.reward_coupon_round -> rewardCouponRound,
       UserWalletAcsStoreRowData.IndexColumns.reward_coupon_weight -> rewardCouponWeight,
       UserWalletAcsStoreRowData.IndexColumns.transfer_preapproval_receiver -> transferPreapprovalReceiver,
-      UserWalletAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType.map(
-        lengthLimited
-      ),
-      UserWalletAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject.map(
-        lengthLimited
-      ),
+      UserWalletAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType,
+      UserWalletAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject,
     )
   }
   object UserWalletAcsStoreRowData {
@@ -89,10 +91,8 @@ object WalletTables extends AcsTables {
       ExternalPartyWalletAcsStoreRowData.IndexColumns.reward_coupon_round -> IndexColumnValue(
         rewardCouponRound
       ),
-      ExternalPartyWalletAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType
-        .map(lengthLimited),
-      ExternalPartyWalletAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject
-        .map(lengthLimited),
+      ExternalPartyWalletAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType,
+      ExternalPartyWalletAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject,
     )
   }
   object ExternalPartyWalletAcsStoreRowData {
@@ -123,7 +123,7 @@ object WalletTables extends AcsTables {
       Seq[(String, IndexColumnValue[?])](
         "tx_log_id" -> IndexColumnValue(txLogId),
         "event_id" -> IndexColumnValue(eventId.map(lengthLimited)),
-        "tracking_id" -> IndexColumnValue(trackingId.map(lengthLimited)),
+        "tracking_id" -> IndexColumnValue(trackingId),
         "development_fund_coupon_contract_id" -> IndexColumnValue(
           developmentFundCouponCid.map(lengthLimited)
         ),
