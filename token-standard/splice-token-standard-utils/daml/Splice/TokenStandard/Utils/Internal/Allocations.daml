@@ -410,7 +410,9 @@ validateNextIterationArgs name iteratedSettlementAllowed extraTransferLegSides n
     requireMatchExpected (name <> ".extraTransferLegSides", extraTransferLegSides) []
     requireMatchExpected (name <> ".nextIterationFunding", nextIterationFunding) None
   forA_ nextIterationFunding $ \fundings -> forA_ fundings $ \amount -> do
-    require' (name <> ".nextIterationFunding.amount", amount) isGreaterR ("zero", 0.0)
+    -- Zero amounts are accepted because `isValidAllocationSpecificationV2`, which allocations check in their
+    -- `ensure` clause, accepts them, and changing it to reject them is not backwards-compatible.
+    require' (name <> ".nextIterationFunding.amount", amount) isGreaterOrEqualR ("zero", 0.0)
   forA_ extraTransferLegSides $ \leg -> do
     require' (name <> ".extraTransferLegSides.amount", leg.amount) isGreaterR ("zero", 0.0)
 

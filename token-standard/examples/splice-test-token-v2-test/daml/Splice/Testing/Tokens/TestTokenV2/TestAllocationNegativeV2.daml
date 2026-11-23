@@ -435,7 +435,7 @@ test_settleBatchV2_nextIterationFunding_negativeAmount = test_settleBatchV2_gene
         extraArgs = emptyExtraArgs
         actors = [provider]
   pure $ (,) choiceArg $
-    expectMessageContains "'finalizedAllocation.nextIterationFunding.amount' is not greater than 'zero'"
+    expectMessageContains "'finalizedAllocation.nextIterationFunding.amount' is less than 'zero'"
 
 -- | Test overflow from the net amount of two legs being larger than the max or min decimal value.
 test_settleBatchV2_decimal_overflow : Script ()
