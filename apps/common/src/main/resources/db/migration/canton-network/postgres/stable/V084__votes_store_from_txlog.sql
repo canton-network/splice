@@ -90,14 +90,17 @@ begin
 
                 -- Check 4: the update history has ingested up to that point as well.
                 -- The votes store started ingesting in the current migration id, so it is enough to look at
-                -- that one. Including it in the query lets both statements use a prefix of the index
-                -- updt_hist_tran_hi_mi_rt_di (history_id, migration_id, record_time, domain_id): the max is a
-                -- short backward scan, and the exists a single probe. Without the migration id, Postgres versions
-                -- before 18 (which cannot skip-scan) would walk the entries of all older migration ids.
-                select max(u.migration_id)
+                -- that one. update_history_last_ingested_offsets has a row for every migration id that the app
+                -- ingested live (not for older ones that it backfilled), so the current one is the highest.
+                -- It is read with a backward scan of its primary key (history_id, migration_id).
+                -- Including the migration id in the exists makes it a single probe of the index
+                -- updt_hist_tran_hi_mi_rt_di (history_id, migration_id, record_time, domain_id). Without it,
+                -- Postgres versions before 18 (which cannot skip-scan) would walk the entries of all older
+                -- migration ids.
+                select max(o.migration_id)
                 into current_migration_id
-                from update_history_transactions u
-                where u.history_id = scan.history_id;
+                from update_history_last_ingested_offsets o
+                where o.history_id = scan.history_id;
                 if not exists (select 1
                                from update_history_transactions u
                                where u.history_id = scan.history_id

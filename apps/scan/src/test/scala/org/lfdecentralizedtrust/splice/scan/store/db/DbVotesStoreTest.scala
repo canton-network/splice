@@ -1098,6 +1098,9 @@ class DbVotesStoreTest
           DBIO
             .seq(
               sqlu"""delete from update_history_backfilling where history_id = $historyId""",
+              sqlu"""insert into update_history_last_ingested_offsets (history_id, migration_id)
+                     values ($historyId, $domainMigrationId)
+                     on conflict do nothing""",
               sqlu"""delete from update_history_transactions
                      where history_id = $historyId and update_id = 'last-ingested'""",
               sqlu"""insert into update_history_transactions
