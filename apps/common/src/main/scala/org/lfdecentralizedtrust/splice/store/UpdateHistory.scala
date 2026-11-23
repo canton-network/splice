@@ -2189,32 +2189,40 @@ class UpdateHistory private (
       setBackfillingImportUpdatesComplete()
   }
 
-  /** The earliest record time after `after` of an update stored in the current migration. */
+  /** The earliest record time after `after` of an update stored in the current
+    * migration.
+    */
   def getEarliestRecordTimeAfter(after: CantonTimestamp)(implicit
       tc: TraceContext
-  ): Future[Option[CantonTimestamp]] =
-    MonadUtil
-      .sequentialTraverse(
-        Seq(
-          "update_history_transactions",
-          "update_history_assignments",
-          "update_history_unassignments",
-        )
-      ) { table =>
-        // Index-only scan of updt_hist_*_hi_mi_rt_di with LIMIT 1 (min): a few pages whatever the table size, also when
-        // nothing matches. No table scan.
-        storage.query(
-          sql"""
-            select min(record_time) from #$table
-            where history_id = $historyId and migration_id = $domainMigrationId and record_time > $after
-          """.as[Option[CantonTimestamp]].head,
-          s"getEarliestRecordTimeAfter.$table",
-        )
-      }
-      .map(_.flatten.minOption)
+  ): Future[Option[CantonTimestamp]] = {
+    def minForTable(table: String): SQLActionBuilder =
+      sql"""
+        select min(record_time) as min_record_time
+        from #$table
+        where history_id = $historyId
+        and migration_id = $domainMigrationId
+        and record_time > $after
+      """
+    // One statement, the min of the per-table mins. Per table, an
+    // index-only scan of updt_hist_*_hi_mi_rt_di with LIMIT 1: a few
+    // pages, also when nothing matches. No table scan.
+    storage.query(
+      (sql"""
+        select min(min_record_time)
+        from (
+          (""" ++ minForTable("update_history_transactions") ++ sql""")
+          union all
+          (""" ++ minForTable("update_history_assignments") ++ sql""")
+          union all
+          (""" ++ minForTable("update_history_unassignments") ++ sql""")
+        ) all_mins
+      """).toActionBuilder.as[Option[CantonTimestamp]].head,
+      "getEarliestRecordTimeAfter",
+    )
+  }
 
-  /** Which of `updateIds` are stored in the given migration with a record time between `fromRecordTime` and
-    * `toRecordTime` (inclusive).
+  /** Which of `updateIds` are stored in the given migration with a record time
+    * between `fromRecordTime` and `toRecordTime` (inclusive).
     */
   def getStoredUpdateIds(
       migrationId: Long,
@@ -2223,32 +2231,39 @@ class UpdateHistory private (
       updateIds: Seq[String],
   )(implicit tc: TraceContext): Future[Set[String]] =
     if (updateIds.isEmpty) Future.successful(Set.empty)
-    else
-      MonadUtil
-        .sequentialTraverse(
-          Seq(
-            "update_history_transactions",
-            "update_history_assignments",
-            "update_history_unassignments",
-          )
-        ) { table =>
-          // Range scan of updt_hist_*_hi_mi_rt_di filtering on update_id, or, for transactions with a wide range or a
-          // generic plan, one probe of updt_hist_tran_hi_ui per id filtering on the rest. No table scan; cost is bounded
-          // by the ids and by the rows in the range, which callers keep to one batch of consecutive updates.
-          storage.query(
-            sql"""
-              select update_id from #$table
-              where history_id = $historyId and migration_id = $migrationId
-                and record_time >= $fromRecordTime and record_time <= $toRecordTime
-                and update_id = any(${updateIds.toArray[String]})
-            """.as[String],
-            s"getStoredUpdateIds.$table",
-          )
-        }
-        .map(_.flatten.toSet)
+    else {
+      def storedInTable(table: String): SQLActionBuilder =
+        sql"""
+          select update_id
+          from #$table
+          where history_id = $historyId
+          and migration_id = $migrationId
+          and record_time >= $fromRecordTime
+          and record_time <= $toRecordTime
+          and update_id = any(${updateIds.toArray[String]})
+        """
+      // One statement over the three tables. Per table, a range scan of
+      // updt_hist_*_hi_mi_rt_di filtering on update_id, or, for wide
+      // ranges and generic plans, one probe per id of an index on
+      // update_id. No table scan; the cost is bounded by the ids and by
+      // the rows in the range, which callers keep to one batch.
+      storage
+        .query(
+          (sql"""
+            (""" ++ storedInTable("update_history_transactions") ++ sql""")
+            union all
+            (""" ++ storedInTable("update_history_assignments") ++ sql""")
+            union all
+            (""" ++ storedInTable("update_history_unassignments") ++ sql""")
+          """).toActionBuilder.as[String],
+          "getStoredUpdateIds",
+        )
+        .map(_.toSet)
+    }
 
-  /** Creates the update history partitions covering record times from `fromRecordTime` to `toRecordTime`,
-    * for writers that insert before the record times of live ingestion (#6253, #8481).
+  /** Creates the update history partitions covering record times from
+    * `fromRecordTime` to `toRecordTime`, for writers that insert before the
+    * record times of live ingestion (#6253, #8481).
     */
   def ensurePartitionsFor(
       fromRecordTime: CantonTimestamp,
