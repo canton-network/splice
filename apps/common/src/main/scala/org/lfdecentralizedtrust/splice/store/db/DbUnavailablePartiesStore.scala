@@ -8,6 +8,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.resource.DbStorage.SQLActionBuilderChain
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -16,6 +17,7 @@ import org.lfdecentralizedtrust.splice.store.db.AsUpdateReturning.`SQLActionBuil
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import slick.jdbc.JdbcProfile
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
+import slick.jdbc.canton.SQLActionBuilder
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -49,6 +51,30 @@ class DbUnavailablePartiesStore(
 
   override def listParties()(implicit tc: TraceContext): Future[Seq[PartyId]] =
     listPartiesAt(clock.now.toMicros)
+
+  /** Anti-join condition for batch queries, to be appended to a where clause: excludes rows where
+    * one of the party fields is currently unavailable. The field expressions are interpolated
+    * into the SQL as-is, so only pass string literals, never user input.
+    */
+  def excludeUnavailableClause(
+      partyFields: Seq[String],
+      partyArrayFields: Seq[String] = Seq.empty,
+  ): SQLActionBuilder = {
+    val nowMicros = clock.now.toMicros
+    val scalarClauses = partyFields.map(f => sql""" and not exists (
+          select 1 from dso_unavailable_parties u
+          where u.store_id = $storeId
+            and u.updated_at + u.ignore_duration > $nowMicros
+            and u.party = #$f)""")
+    val arrayClauses = partyArrayFields.map(f => sql""" and not exists (
+          select 1 from dso_unavailable_parties u
+          where u.store_id = $storeId
+            and u.updated_at + u.ignore_duration > $nowMicros
+            and u.party in (select jsonb_array_elements_text(#$f)))""")
+    (scalarClauses ++ arrayClauses)
+      .foldLeft(SQLActionBuilderChain(sql""))(_ ++ _)
+      .toActionBuilder
+  }
 
   /** Adds or updates parties only outside the ignore window.
     *  a. For new parties, it sets updated_at to now and the ignore_duration to base_duration.

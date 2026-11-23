@@ -285,7 +285,7 @@ trait SvDsoStore
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[SvDsoStore.RoundBatch[
@@ -311,7 +311,7 @@ trait SvDsoStore
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[SvDsoStore.RoundBatch[
@@ -354,7 +354,7 @@ trait SvDsoStore
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[
@@ -368,7 +368,7 @@ trait SvDsoStore
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[
@@ -421,7 +421,7 @@ trait SvDsoStore
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[SvDsoStore.RoundBatch[
@@ -464,18 +464,17 @@ trait SvDsoStore
         roundMap.get(batch.roundNumber).map(closedRound => (closedRound, batch.batch)).toList
       }
     for {
-      ignoredExpiredRewardsPartyIds <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
       appRewardGroups <- listAppRewardCouponsGroupedByRound(
         domain,
         batchSize = batchSize,
         numBatches = numBatches,
-        ignoredExpiredRewardsPartyIds,
+        unavailablePartiesStore,
       )
       validatorRewardGroups <- listValidatorRewardCouponsGroupedByRound(
         domain,
         batchSize = batchSize,
         numBatches = numBatches,
-        ignoredExpiredRewardsPartyIds,
+        unavailablePartiesStore,
       )
       validatorFaucetGroups <-
         if (enableExpireValidatorFaucet)
@@ -483,7 +482,7 @@ trait SvDsoStore
             domain,
             batchSize = batchSize,
             numBatches = numBatches,
-            ignoredExpiredRewardsPartyIds,
+            unavailablePartiesStore,
           )
         else Future.successful(Seq.empty)
       validatorLivenessActivityRecordGroups <-
@@ -491,13 +490,13 @@ trait SvDsoStore
           domain,
           batchSize = batchSize,
           numBatches = numBatches,
-          ignoredExpiredRewardsPartyIds,
+          unavailablePartiesStore,
         )
       svRewardCouponGroups <- listSvRewardCouponsGroupedByRound(
         domain,
         batchSize = batchSize,
         numBatches = numBatches,
-        ignoredExpiredRewardsPartyIds,
+        unavailablePartiesStore,
       )
       roundNumbers =
         (appRewardGroups ++ validatorRewardGroups ++ validatorFaucetGroups ++ validatorLivenessActivityRecordGroups ++ svRewardCouponGroups)
