@@ -45,6 +45,7 @@ jobs:
         with:
           cache_version: 10
           test_name: python_tests
+          with_sbt: false
 
       - name: Run Python unit tests
         if: steps.skip.outputs.skip != 'true'

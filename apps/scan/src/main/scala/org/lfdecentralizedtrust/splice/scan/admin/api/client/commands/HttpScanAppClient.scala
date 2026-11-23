@@ -665,66 +665,6 @@ object HttpScanAppClient {
     }
   }
 
-  final case class RateStep(
-      amount: BigDecimal,
-      rate: BigDecimal,
-  )
-  final case class SteppedRate(
-      initial: BigDecimal,
-      steps: Seq[RateStep],
-  )
-  final case class AmuletConfig(
-      amuletCreateFee: BigDecimal,
-      holdingFee: BigDecimal,
-      lockHolderFee: BigDecimal,
-      transferFee: SteppedRate,
-  )
-  case class GetAmuletConfigForRound(round: Long)
-      extends InternalBaseCommand[http.GetAmuletConfigForRoundResponse, AmuletConfig] {
-
-    override def submitRequest(
-        client: ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetAmuletConfigForRoundResponse] =
-      client.getAmuletConfigForRound(round, headers)
-
-    private def decodeStep(step: definitions.RateStep): Either[String, RateStep] =
-      for {
-        amount <- Codec.decode(Codec.BigDecimal)(step.amount)
-        rate <- Codec.decode(Codec.BigDecimal)(step.rate)
-      } yield RateStep(amount, rate)
-
-    private def decodeTransferFeeSteps(
-        tf: Seq[definitions.RateStep]
-    ): Either[String, Seq[RateStep]] =
-      tf.map(decodeStep(_)).sequence
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case http.GetAmuletConfigForRoundResponse.OK(response) =>
-        for {
-          amuletCreate <- Codec.decode(Codec.BigDecimal)(response.amuletCreateFee)
-          holding <- Codec.decode(Codec.BigDecimal)(response.holdingFee)
-          lockHolder <- Codec.decode(Codec.BigDecimal)(response.lockHolderFee)
-          initial <- Codec.decode(Codec.BigDecimal)(response.transferFee.initial)
-          steps <- decodeTransferFeeSteps(response.transferFee.steps.toSeq)
-        } yield {
-          AmuletConfig(
-            amuletCreateFee = amuletCreate,
-            holdingFee = holding,
-            lockHolderFee = lockHolder,
-            transferFee = SteppedRate(
-              initial = initial,
-              steps = steps,
-            ),
-          )
-        }
-      case http.GetAmuletConfigForRoundResponse.NotFound(err) =>
-        Left(err.error)
-    }
-  }
-
   case class GetMemberTrafficStatus(synchronizerId: SynchronizerId, memberId: Member)
       extends ExternalBaseCommand[
         http.GetMemberTrafficStatusResponse,

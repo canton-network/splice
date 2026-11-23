@@ -30,6 +30,7 @@ import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import monocle.macros.syntax.lens.*
 
 import java.time.Duration
+import scala.concurrent.duration.DurationInt
 
 class WalletTimeBasedIntegrationTest
     extends IntegrationTest
@@ -94,7 +95,7 @@ class WalletTimeBasedIntegrationTest
                 }
               },
             )
-            actAndCheck(
+            actAndCheck(timeUntilSuccess = 60.seconds)(
               "Accept subscription request", {
                 aliceWalletClient.acceptSubscriptionRequest(requestId)
               },

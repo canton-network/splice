@@ -13,15 +13,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequest,
   DsoRules_CloseVoteRequestResult,
 }
-import org.lfdecentralizedtrust.splice.history.*
 import org.lfdecentralizedtrust.splice.store.TxLogStore
 import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
-import org.lfdecentralizedtrust.splice.util.SpliceUtil.dollarsToCC
 import org.lfdecentralizedtrust.splice.util.{EventId, ExerciseNode}
 
 import scala.collection.immutable
 import scala.jdk.CollectionConverters.*
-import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 
 class ScanTxLogParser(
     override val loggerFactory: NamedLoggerFactory
@@ -73,21 +70,8 @@ class ScanTxLogParser(
             )
         }
 
-      case created: CreatedEvent =>
-        created match {
-          case OpenMiningRoundCreate(round) =>
-            State.fromOpenMiningRoundCreate(
-              EventId.prefixedFromUpdateIdAndNodeId(
-                tree.getUpdateId,
-                root.getNodeId,
-              ),
-              synchronizerId,
-              round,
-            )
-          case ClosedMiningRoundCreate(round) =>
-            State.fromClosedMiningRoundCreate(tree, root, synchronizerId, round)
-          case _ => State.empty
-        }
+      case _: CreatedEvent =>
+        State.empty
 
       case _ =>
         sys.error("The above match should be exhaustive")
@@ -152,53 +136,6 @@ object ScanTxLogParser {
 
       override def combine(a: State, b: State): State =
         a.appended(b)
-    }
-
-    def fromOpenMiningRoundCreate(
-        eventId: String,
-        synchronizerId: SynchronizerId,
-        round: OpenMiningRoundCreate.ContractType,
-    ): State = {
-      val config = round.payload.transferConfigUsd
-      val amuletPrice = round.payload.amuletPrice
-      val newEntry = OpenMiningRoundTxLogEntry(
-        eventId = eventId,
-        domainId = synchronizerId,
-        round = round.payload.round.number,
-        amuletCreateFee = dollarsToCC(config.createFee.fee, amuletPrice),
-        holdingFee = dollarsToCC(config.holdingFee.rate, amuletPrice),
-        lockHolderFee = dollarsToCC(config.lockHolderFee.fee, amuletPrice),
-        transferFee = Some(
-          SteppedRate(
-            initialRate = config.transferFee.initialRate,
-            steps = config.transferFee.steps.asScala.toSeq
-              .map(step =>
-                SteppedRate.Step(
-                  from = dollarsToCC(step._1, amuletPrice),
-                  rate = step._2,
-                )
-              ),
-          )
-        ),
-      )
-
-      State(newEntry)
-    }
-
-    def fromClosedMiningRoundCreate(
-        tx: Transaction,
-        event: Event,
-        synchronizerId: SynchronizerId,
-        round: ClosedMiningRoundCreate.ContractType,
-    ): State = {
-      val newEntry = ClosedMiningRoundTxLogEntry(
-        eventId = EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, event.getNodeId),
-        domainId = synchronizerId,
-        round = round.payload.round.number,
-        effectiveAt = Some(tx.getEffectiveAt),
-      )
-
-      State(newEntry)
     }
 
     def fromCloseVoteRequest(
