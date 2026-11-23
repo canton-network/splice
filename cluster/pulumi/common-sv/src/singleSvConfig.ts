@@ -77,6 +77,12 @@ const SvAppConfigSchema = z
   .strict();
 const BulkStorageConfigSchema = z.object({
   enabled: z.boolean(),
+  // load the update history before the Scan's history start from its bulk storage
+  updateHistoryBackfilling: z
+    .object({
+      enabled: z.boolean(),
+    })
+    .optional(),
 });
 
 export type BulkStorageConfig = z.infer<typeof BulkStorageConfigSchema>;

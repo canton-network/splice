@@ -226,6 +226,21 @@
           },
           "required": ["snapshots"]
         },
+        "bulkStorage": {
+          "type": "object",
+          "properties": {
+            "updateHistoryBackfilling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Load the update history before this Scan's history start from its bulk storage into the database (still in dev)."
+                }
+              },
+              "required": ["enabled"]
+            }
+          }
+        },
         "cluster": {
           "type": "object",
           "properties": {

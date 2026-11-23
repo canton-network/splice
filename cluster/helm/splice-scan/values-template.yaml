@@ -80,6 +80,9 @@ logLevel: DEBUG
 #     region:
 #     endpoint:
 #     secretName:
+#   # load the update history before this Scan's history start from bulk storage
+#   updateHistoryBackfilling:
+#     enabled: true
 # publicUrl:
 
 # ACS snapshot pruning (needs a finite analyzable time window)
