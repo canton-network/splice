@@ -54,8 +54,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "sum by (store_name) (rate(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))",
-                        "legendFormat": "{{store_name}}",
+                        "expr": "sum by (namespace, store_name) (rate(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))",
+                        "legendFormat": "{{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -110,8 +110,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "sum by (store_name) (increase(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range])) - (sum by (store_name) (increase(splice_store_acs_size_decrease_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range])) or sum by (store_name) (increase(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range]) * 0))",
-                        "legendFormat": "{{store_name}}",
+                        "expr": "sum by (namespace, store_name) (increase(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range])) - (sum by (namespace, store_name) (increase(splice_store_acs_size_decrease_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range])) or sum by (namespace, store_name) (increase(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range]) * 0))",
+                        "legendFormat": "{{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -166,8 +166,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "count by (store_name) (last_over_time(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range]))",
-                        "legendFormat": "{{store_name}}",
+                        "expr": "count by (namespace, store_name) (last_over_time(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__range]))",
+                        "legendFormat": "{{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -222,8 +222,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "sum by (store_name) (histogram_sum(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))) / sum by (store_name) (histogram_count(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
-                        "legendFormat": "{{store_name}}",
+                        "expr": "sum by (namespace, store_name) (histogram_sum(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))) / sum by (namespace, store_name) (histogram_count(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
+                        "legendFormat": "{{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -278,8 +278,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "histogram_quantile(0.5, sum by (store_name) (rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
-                        "legendFormat": "p50 {{store_name}}",
+                        "expr": "histogram_quantile(0.5, sum by (namespace, store_name) (rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
+                        "legendFormat": "p50 {{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -298,8 +298,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "histogram_quantile(0.99, sum by (store_name) (rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
-                        "legendFormat": "p99 {{store_name}}",
+                        "expr": "histogram_quantile(0.99, sum by (namespace, store_name) (rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
+                        "legendFormat": "p99 {{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -354,8 +354,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "sum by (store_name) (histogram_sum(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
-                        "legendFormat": "{{store_name}}",
+                        "expr": "sum by (namespace, store_name) (histogram_sum(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
+                        "legendFormat": "{{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -410,8 +410,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "sum by (store_name) (rate(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])) / sum by (store_name) (histogram_count(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
-                        "legendFormat": "{{store_name}}",
+                        "expr": "sum by (namespace, store_name) (rate(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])) / sum by (namespace, store_name) (histogram_count(rate(splice_store_batch_acs_ingestion_latency_duration_seconds{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval])))",
+                        "legendFormat": "{{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -901,8 +901,8 @@
         "kind": "Panel",
         "spec": {
           "id": 15,
-          "title": "Store events / completed ingestions rate (per s)",
-          "description": "Rate of events ingested (event-count) and completed ingestions (completed-ingestions: one per ACS, transaction tree or reassignment) per store. Not ACS-specific; use to confirm ingestion is progressing and when it switches from the ACS to updates.",
+          "title": "Is the store still ingesting? (events/s, ingestions/s)",
+          "description": "Shows whether each store is still making progress. events = contracts written per second, completed = ingestion steps finished per second. Both at 0 while the ACS isn't done means ingestion is stuck.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -919,8 +919,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "sum by (store_name) (rate(splice_store_event_count{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))",
-                        "legendFormat": "events {{store_name}}",
+                        "expr": "sum by (namespace, store_name) (rate(splice_store_event_count{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))",
+                        "legendFormat": "events {{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
@@ -939,8 +939,8 @@
                         "name": "prometheus"
                       },
                       "spec": {
-                        "expr": "sum by (store_name) (rate(splice_store_completed_ingestions_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))",
-                        "legendFormat": "completed {{store_name}}",
+                        "expr": "sum by (namespace, store_name) (rate(splice_store_completed_ingestions_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[$__rate_interval]))",
+                        "legendFormat": "completed {{namespace}} {{store_name}}",
                         "range": true
                       }
                     },
