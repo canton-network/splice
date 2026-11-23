@@ -577,37 +577,6 @@ class HttpScanHandler(
     }
   }
 
-  def getAmuletConfigForRound(
-      response: v0.ScanResource.GetAmuletConfigForRoundResponse.type
-  )(
-      round: Long
-  )(extracted: TraceContext): Future[v0.ScanResource.GetAmuletConfigForRoundResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getAmuletConfigForRound") { _ => _ =>
-      store
-        .getAmuletConfigForRound(round)
-        .map { cfg =>
-          val transferFee = cfg.transferFee.getOrElse(throw new RuntimeException("No transfer fee"))
-          v0.ScanResource.GetAmuletConfigForRoundResponse.OK(
-            definitions.GetAmuletConfigForRoundResponse(
-              Codec.encode(cfg.amuletCreateFee),
-              Codec.encode(cfg.holdingFee),
-              Codec.encode(cfg.lockHolderFee),
-              definitions.SteppedRate(
-                Codec.encode(transferFee.initialRate),
-                transferFee.steps
-                  .map((step) =>
-                    definitions.RateStep(Codec.encode(step.from), Codec.encode(step.rate))
-                  )
-                  .toVector,
-              ),
-            )
-          )
-        }
-        .transform(HttpErrorHandler.onGrpcNotFound(s"Round ${round} not found"))
-    }
-  }
-
   override def listValidatorLicenses(
       respond: ScanResource.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(
