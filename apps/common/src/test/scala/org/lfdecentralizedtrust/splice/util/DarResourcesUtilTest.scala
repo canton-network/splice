@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.daml.lf.data.Ref.PackageId
-import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
+import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.scalatest.wordspec.AnyWordSpec
 
 class DarResourcesUtilTest extends AnyWordSpec with BaseTest {
@@ -39,23 +39,6 @@ class DarResourcesUtilTest extends AnyWordSpec with BaseTest {
         DarResources.utilBatchedMarkers.latest.packageId,
         DarResources.TokenStandard.utilTokenStandardWallet.latest.packageId
       )
-    }
-  }
-
-  "PackageIdResolver.readPackageVersion" should {
-    "pin the auto-vetted utility packages to versions that are part of the release" in {
-      val packageConfig = SpliceUtil.readPackageConfig()
-      forEvery(
-        Seq(
-          PackageIdResolver.Package.SpliceUtilBatchedMarkers,
-          PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet,
-        )
-      ) { pkg =>
-        DarResourcesUtil.lookupPackageMetadata(
-          pkg.packageName,
-          PackageIdResolver.readPackageVersion(packageConfig, pkg),
-        ) should not be empty
-      }
     }
   }
 

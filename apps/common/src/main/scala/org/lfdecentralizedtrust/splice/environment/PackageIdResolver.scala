@@ -64,11 +64,12 @@ object PackageIdResolver {
         DarResources.TokenStandard.apiTokenTransferEventsV2.latest.metadata.version.toString()
       case TokenStandard.SpliceTokenStandardUtils =>
         DarResources.TokenStandard.tokenStandardUtils.latest.metadata.version.toString()
-      // Pinned to the last versions released before `splice-wallet` depended on them,
-      // as their newer versions are vetted via the `splice-wallet` version in the package config.
-      // TODO(#8321): remove once `splice-wallet` 0.1.27 or later is voted in on all networks.
-      case TokenStandard.SpliceUtilTokenStandardWallet => "1.1.2"
-      case SpliceUtilBatchedMarkers => "1.0.5"
+      case TokenStandard.SpliceUtilTokenStandardWallet =>
+        DarResources.TokenStandard.utilTokenStandardWallet.latest.metadata.version
+          .toString()
+      // Batched markers
+      case SpliceUtilBatchedMarkers =>
+        DarResources.utilBatchedMarkers.latest.metadata.version.toString()
       // Reward assignment
       case SpliceApiRewardAssignmentV1 =>
         DarResources.apiRewardAssignmentV1.latest.metadata.version.toString()

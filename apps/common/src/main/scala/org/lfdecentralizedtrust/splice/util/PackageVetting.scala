@@ -68,7 +68,7 @@ class PackageVetting(
     // Only add interface packages here. Packages with templates or choices must be vetted via the package config,
     // e.g., by making one of the packages in the package config depend on them.
     } ++
-      Seq(
+      (Seq(
         // Token Standard V1
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenMetadataV1,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenHoldingV1,
@@ -84,20 +84,24 @@ class PackageVetting(
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationInstructionV2,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenTransferEventsV2,
         PackageIdResolver.Package.SpliceApiRewardAssignmentV1,
-        // Not interface packages: pinned to the versions released before `splice-wallet` depended on them,
-        // so that validators keep vetting these versions until a `splice-wallet` version that depends on them is voted in.
-        // TODO(#8321): remove once `splice-wallet` 0.1.27 or later is voted in on all networks.
-        PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet,
-        PackageIdResolver.Package.SpliceUtilBatchedMarkers,
-      ).flatMap(pkg =>
+      ).map(pkg => pkg -> PackageIdResolver.readPackageVersion(currentPackageConfig, pkg)) ++
+        // Not interface packages: pinned to the last versions released before `splice-wallet` depended on them,
+        // so that validators keep vetting them until a `splice-wallet` version that depends on them is voted in.
+        // TODO(#8637): remove once `splice-wallet` 0.1.27 or later is voted in on all networks.
+        Seq(
+          PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet ->
+            PackageVersion.assertFromString("1.1.2"),
+          PackageIdResolver.Package.SpliceUtilBatchedMarkers ->
+            PackageVersion.assertFromString("1.0.5"),
+        )).flatMap { case (pkg, packageVersion) =>
         DarResourcesUtil
           .getRequiredPackageVersions(
             pkg.packageName,
-            PackageIdResolver.readPackageVersion(currentPackageConfig, pkg),
+            packageVersion,
             additionalPackagesToUnvet = additionalPackagesToUnvet,
           )
           .map(versionToVet => pkg -> versionToVet.metadata.version)
-      )
+      }
 
     vetPackages(
       domainId,
