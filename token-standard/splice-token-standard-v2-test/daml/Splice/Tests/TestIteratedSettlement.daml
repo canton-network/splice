@@ -40,7 +40,12 @@ amulet_test_refresh_and_withdrawal : Script ()
 amulet_test_refresh_and_withdrawal = mkAmuletTestCase >>= test_refresh_and_withdrawal
 
 amulet_test_allowed_instruments : Script ()
-amulet_test_allowed_instruments = mkAmuletTestCase >>= test_allowed_instruments
+amulet_test_allowed_instruments = mkAmuletTestCase >>= test_allowed_instruments False
+
+-- | Amulet treats an empty `nextIterationFunding` map as allowing Amulet, which
+-- keeps allocations working that were created before `{"Amulet": 0.0}` could be settled.
+amulet_test_allowed_instruments_emptyFunding : Script ()
+amulet_test_allowed_instruments_emptyFunding = mkAmuletTestCase >>= test_allowed_instruments True
 
 
 testTokenV2_test_locked_funds : Script ()
@@ -50,7 +55,7 @@ testTokenV2_test_refresh_and_withdrawal : Script ()
 testTokenV2_test_refresh_and_withdrawal = mkTestTokenV2TestCase >>= test_refresh_and_withdrawal
 
 testTokenV2_test_allowed_instruments : Script ()
-testTokenV2_test_allowed_instruments = mkTestTokenV2TestCase >>= test_allowed_instruments
+testTokenV2_test_allowed_instruments = mkTestTokenV2TestCase >>= test_allowed_instruments False
 
 mkAmuletTestCase : Script TestCase
 mkAmuletTestCase = do
@@ -267,8 +272,12 @@ test_locked_funds TestCase {..} = do
 -- | Test that the instrument ids in an allocation's `nextIterationFunding` limit
 -- the instruments that the executors can use in iterated settlement, and that a
 -- funding amount of `0.0` allows an instrument without reserving funds for it.
-test_allowed_instruments : TestCase -> Script ()
-test_allowed_instruments TestCase {..} = do
+--
+-- If `useEmptyFunding` is set, the authorizer uses an empty `nextIterationFunding`
+-- map, which only single-instrument registries like Amulet treat as allowing
+-- their instrument.
+test_allowed_instruments : Bool -> TestCase -> Script ()
+test_allowed_instruments useEmptyFunding TestCase {..} = do
   let allowedInstrId :: otherInstrIds = instrIds
   let settlement = V2.SettlementInfo with
         executors = [provider]
@@ -286,7 +295,7 @@ test_allowed_instruments TestCase {..} = do
       admin
       transferLegSides = []
       settlementDeadline = None
-      nextIterationFunding = allowOnly allowedInstrId
+      nextIterationFunding = if useEmptyFunding then Some TextMap.empty else allowOnly allowedInstrId
       committed = False
       meta = emptyMetadata
     requestedAt = now
@@ -296,6 +305,10 @@ test_allowed_instruments TestCase {..} = do
   result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   let V2.AllocationInstructionResult_Completed providerAllocationCid = result.output
+
+  -- the allocation reports the allowed instruments explicitly
+  Some providerAllocView <- queryInterfaceContractId provider providerAllocationCid
+  providerAllocView.allocation.nextIterationFunding === allowOnly allowedInstrId
 
   -- alice allocates a payment in every instrument
   let paymentLeg instrId = V2.TransferLeg with

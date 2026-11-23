@@ -133,6 +133,9 @@ data AllocationSpecification = AllocationSpecification with
       -- An amount of `0.0` allows an instrument without reserving funding for
       -- it, which can be used when the authorizer expects only incoming
       -- transfers of that instrument in the next iteration.
+      --
+      -- An empty map allows no instruments. Registries with a single instrument
+      -- MAY treat it as allowing that instrument without reserving funding for it.
     committed : Bool
       -- ^ Whether the authorizer commits to the allocation until either
       --

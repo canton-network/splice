@@ -103,9 +103,9 @@
         instruments that the executors can use in iterated settlement. Canton Coin allocations and the
         `splice-token-standard-utils` implementations reject extra transfer leg sides and next-iteration funding for
         instruments that are not keys of the allocation's `nextIterationFunding`, and accept a funding amount of `0.0`
-        to allow an instrument without reserving funds for it. Authorizers that enable iterated settlement
-        with an empty map and expect incoming transfers must list the instruments with amount `0.0`,
-        e.g., `nextIterationFunding = Some {"Amulet": 0.0}`.
+        to allow an instrument without reserving funds for it. For backwards compatibility, Canton Coin allocations
+        treat an empty `nextIterationFunding` map as `{"Amulet": 0.0}` and report it as such in their allocation view.
+        New allocations should list the instrument explicitly, e.g., `nextIterationFunding = Some {"Amulet": 0.0}`.
 
       - All Canton Coin transactions now emit token standard V2 transaction-history events, i.e.,
         `EventLog_HoldingsChange` events reported by the DSO party. Clients can rely on these events
