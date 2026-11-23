@@ -95,7 +95,14 @@
 
       - Token standard V2, iterated settlement only: the instrument ids in an allocation's
         `AllocationSpecification.nextIterationFunding` are now the only instruments that the executors can use
-        to settle it iteratively. The default implementations in `splice-token-standard-utils`, from version 2.0.2,
+        to settle it iteratively.
+        This closes a [gap in the CIP-0112 specification](https://github.com/canton-foundation/cips/pull/298).
+        It does so in favor of the authorizers,
+        which is in line with the general design of Canton
+        Network that puts owners in control over both
+        outgoing and incoming transfers.
+
+        The default implementations in `splice-token-standard-utils`, from version 2.0.2,
         reject extra transfer leg sides and next-iteration funding for any other instrument. The executors can
         narrow, but not widen, this set for later iterations. A funding amount of `0.0` allows an instrument
         without reserving funds for it.
