@@ -122,6 +122,7 @@ class UpdateHistory private (
   private val state = new AtomicReference[State](State.empty())
 
   def lastIngestedRecordTime: Option[CantonTimestamp] = state.get().lastIngestedRecordTime
+  def analyzableTimeWindowIsUnlimited: Boolean = !analyzableTimeWindowDuration.duration.isFinite
   def startAnalyzableTimeWindow: Option[CantonTimestamp] =
     lastIngestedRecordTime.flatMap { latestRecordTime =>
       Option.when(analyzableTimeWindowDuration.duration.isFinite) {
@@ -2186,6 +2187,31 @@ class UpdateHistory private (
 
     override def markImportUpdatesBackfillingComplete()(implicit tc: TraceContext): Future[Unit] =
       setBackfillingImportUpdatesComplete()
+  }
+
+  /** Creates the update history partitions covering record times from `fromRecordTime` to `toRecordTime`,
+    * for writers that insert before the record times of live ingestion (#6253, #8481).
+    */
+  def ensurePartitionsFor(
+      fromRecordTime: CantonTimestamp,
+      toRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Unit] = {
+    /* With the partitioned tables (#6257):
+    val days = Iterator
+      .iterate(dayOf(fromRecordTime))(_.plusDays(1))
+      .takeWhile(!_.isAfter(dayOf(toRecordTime)))
+      .toSeq
+    for {
+      existing <- listDatesWithAllPartitions()
+      missing = days.filterNot(existing)
+      _ <- MonadUtil.sequentialTraverse(missing)(createPartitions)
+      _ <- if (missing.nonEmpty) analyzePartitionedTables() else Future.unit
+    } yield ()
+     */
+    logger.trace(
+      s"No update history partitions to create for record times $fromRecordTime to $toRecordTime"
+    )
+    Future.unit
   }
 
   lazy val destinationHistory: HistoryBackfilling.DestinationHistory[

@@ -137,6 +137,44 @@ class BulkStorageReader(
       storageEncodings,
     )
 
+  /** The earliest committed update segment that ends after `after`, or None while the committed segment progress
+    * has not reached such a segment. Segments without objects have no folder, so this may skip empty segments.
+    */
+  def getCommittedSegmentAfter(after: CantonTimestamp): Future[Option[UpdatesSegment]] =
+    updateHistoryCommittedProgress.readLatestProcessedSegment.flatMap {
+      case None => Future.successful(None)
+      case Some(committed) if committed.toTimestamp <= after => Future.successful(None)
+      case Some(committed) =>
+        def segmentOf(folder: String): UpdatesSegment =
+          storageConfig.getStartAndEndTimestampsForFolder(folder) match {
+            case Left(err) =>
+              throw Status.INTERNAL
+                .withDescription(s"Cannot parse folder name $folder, error: $err")
+                .asRuntimeException()
+            case Right((from, to)) => UpdatesSegment(from, to)
+          }
+        committedS3Connection
+          .listFolders(
+            folder => {
+              val segment = segmentOf(folder)
+              segment.toTimestamp > after && segment.toTimestamp <= committed.toTimestamp
+            },
+            PageLimit.Max,
+          )
+          .map(_.map(segmentOf).minByOption(_.fromTimestamp))
+    }
+
+  /** The keys of the objects of a committed update segment in the given encoding. */
+  def getCommittedUpdateObjectsInSegment(
+      segment: UpdatesSegment,
+      encoding: ScanStorageConfig.Encoding,
+  ): Future[Seq[String]] =
+    getUpdateObjectsInFolder(
+      committedS3Connection,
+      storageConfig.getSegmentFolder(segment.fromTimestamp, Some(segment.toTimestamp)),
+      NonEmptyList.one(encoding),
+    )
+
   def getStagingSegmentStartingAt(
       startTimestamp: Option[CantonTimestamp]
   ): Future[Option[(CantonTimestamp, CantonTimestamp)]] = {

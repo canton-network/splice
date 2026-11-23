@@ -59,6 +59,7 @@ class BulkStorage(
     acsSnapshotStore: AcsSnapshotStore,
     updateHistory: UpdateHistory,
     currentMigrationId: Long,
+    legacyUpdateHistoryBackfillEnabled: Boolean,
     kvProvider: ScanKeyValueProvider,
     historyStart: ScanHistoryStart,
     historyReadiness: HistoryReadiness,
@@ -256,9 +257,40 @@ class BulkStorage(
     loggerFactory,
   )
 
+  private val updateHistoryBackfillingProgress =
+    new UpdateHistoryBackfillingFromBulkStorage.Progress(
+      kvProvider,
+      historyMetrics.BulkStorage.updateHistoryLoadedUpTo,
+      loggerFactory,
+    )
+  val updateHistoryBackfilling: Option[UpdateHistoryBackfillingFromBulkStorage] =
+    if (!appConfig.updateHistoryBackfilling.enabled) None
+    else if (legacyUpdateHistoryBackfillEnabled) {
+      logger.info(
+        "Not loading update history from bulk storage, because update history backfilling from peers is enabled"
+      )
+      None
+    } else
+      Some(
+        new UpdateHistoryBackfillingFromBulkStorage(
+          appConfig.updateHistoryBackfilling,
+          storageConfig,
+          updateHistory,
+          new UpdateHistoryBackfillingFromBulkStorage.BucketCommittedSegments(
+            reader,
+            committedConnection,
+            appConfig.updateHistoryBackfilling,
+          ),
+          historyReadiness,
+          updateHistoryBackfillingProgress,
+          historyMetrics.BulkStorage.updateHistoryLoadedUpdates,
+          loggerFactory,
+        )
+      )
+
   // Services are only started once initialization has completed.
   private lazy val services =
-    (backfilling.toList ++ Seq[PekkoRetryableService[?]](
+    (backfilling.toList ++ updateHistoryBackfilling.toList ++ Seq[PekkoRetryableService[?]](
       acsStaging,
       acsCommitted,
       updatesStaging,
@@ -277,6 +309,7 @@ class BulkStorage(
           _ <- updatesStagingProgress.reset
           _ <- updatesCommittedProgress.reset
           _ <- backfillingProgress.resetCompletion()
+          _ <- updateHistoryBackfillingProgress.reset
           _ <- deleteLegacyKeys()
         } yield ()
       } else Future.unit
@@ -318,6 +351,7 @@ object BulkStorage {
       acsSnapshotStore: AcsSnapshotStore,
       updateHistory: UpdateHistory,
       currentMigrationId: Long,
+      legacyUpdateHistoryBackfillEnabled: Boolean,
       kvProvider: ScanKeyValueProvider,
       historyStart: ScanHistoryStart,
       historyReadiness: HistoryReadiness,
@@ -354,6 +388,7 @@ object BulkStorage {
         acsSnapshotStore,
         updateHistory,
         currentMigrationId,
+        legacyUpdateHistoryBackfillEnabled,
         kvProvider,
         historyStart,
         historyReadiness,

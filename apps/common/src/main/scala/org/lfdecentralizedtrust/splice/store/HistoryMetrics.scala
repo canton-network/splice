@@ -433,6 +433,28 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
         initial = CantonTimestamp.MinValue,
       )(metricsContext)
 
+    val updateHistoryLoadedUpTo: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = bulkStoragePrefix :+ "update-history-loaded-up-to",
+          summary =
+            "The end timestamp of the latest segment whose updates have been loaded from bulk storage into the update history",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val updateHistoryLoadedUpdates: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = bulkStoragePrefix :+ "update-history-loaded-updates",
+          summary =
+            "The number of updates loaded from bulk storage into the update history since the last application restart",
+          Traffic,
+        )
+      )(metricsContext)
+
     val objectsCount: Counter =
       metricsFactory.counter(
         MetricInfo(

@@ -305,6 +305,7 @@ class ScanApp(
             acsSnapshotStore,
             updateHistory,
             currentMigrationId = domainMigrationId,
+            legacyUpdateHistoryBackfillEnabled = config.updateHistoryBackfillEnabled,
             kvProvider,
             historyStart,
             historyReadiness,
