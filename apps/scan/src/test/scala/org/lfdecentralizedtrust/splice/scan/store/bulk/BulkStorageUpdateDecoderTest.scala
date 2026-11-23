@@ -25,7 +25,10 @@ import java.io.ByteArrayOutputStream
 import java.time.Instant
 import scala.concurrent.duration.*
 
-class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContext with HasActorSystem {
+class BulkStorageUpdateDecoderTest
+    extends StoreTestBase
+    with HasExecutionContext
+    with HasActorSystem {
 
   private val party = mkPartyId("alice")
   private val otherDomain = com.digitalasset.canton.topology.SynchronizerId
@@ -43,7 +46,10 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
       recordTime,
       updateId = s"tx-$i",
     )
-    TreeUpdateWithMigrationId(UpdateHistoryResponse(TransactionTreeUpdate(tx), dummyDomain), migrationId)
+    TreeUpdateWithMigrationId(
+      UpdateHistoryResponse(TransactionTreeUpdate(tx), dummyDomain),
+      migrationId,
+    )
   }
 
   private def assignment(i: Int) = {
@@ -61,7 +67,10 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
         Instant.parse("2026-01-01T00:00:00Z").plusSeconds(i.toLong)
       ),
     )
-    TreeUpdateWithMigrationId(UpdateHistoryResponse(ReassignmentUpdate(reassignment), dummyDomain), 0L)
+    TreeUpdateWithMigrationId(
+      UpdateHistoryResponse(ReassignmentUpdate(reassignment), dummyDomain),
+      0L,
+    )
   }
 
   private def unassignment(i: Int) = {
@@ -78,7 +87,10 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
         Instant.parse("2026-01-01T00:00:00Z").plusSeconds(i.toLong)
       ),
     )
-    TreeUpdateWithMigrationId(UpdateHistoryResponse(ReassignmentUpdate(reassignment), dummyDomain), 0L)
+    TreeUpdateWithMigrationId(
+      UpdateHistoryResponse(ReassignmentUpdate(reassignment), dummyDomain),
+      0L,
+    )
   }
 
   /** The line [[UpdateHistorySegmentBulkStorage]] writes for an update. */
@@ -94,7 +106,9 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
       .noSpacesSortKeys
   }
 
-  /** What bulk storage gives back for an update: its lossless encoding, decoded. */
+  /** What bulk storage gives back for an update: its lossless encoding,
+    * decoded.
+    */
   private def roundTripped(update: TreeUpdateWithMigrationId): TreeUpdateWithMigrationId =
     ProtobufJsonScanHttpEncodings.httpToLapiUpdate(
       ScanHttpEncodings.encodeUpdateV2(
@@ -112,11 +126,20 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
     ByteString(out.toByteArray)
   }
 
-  /** An object as written to bulk storage: one zstd frame per group of lines, each line ending in a newline. */
+  /** An object as written to bulk storage: one zstd frame per group of lines,
+    * each line ending in a newline.
+    */
   private def objectOf(frames: Seq[Seq[TreeUpdateWithMigrationId]]): ByteString =
-    frames.map(lines => zstdFrame(lines.map(encode(_) + "\n").mkString)).foldLeft(ByteString.empty)(_ ++ _)
+    frames
+      .map(lines => zstdFrame(lines.map(encode(_) + "\n").mkString))
+      .foldLeft(ByteString.empty)(_ ++ _)
 
-  private def decode(key: String, bytes: ByteString, chunkSize: Int = 1000, maxLineBytes: Int = 1 << 20) =
+  private def decode(
+      key: String,
+      bytes: ByteString,
+      chunkSize: Int = 1000,
+      maxLineBytes: Int = 1 << 20,
+  ) =
     BulkStorageUpdateDecoder
       .decodeObject(key, Source(bytes.grouped(chunkSize).toList), maxLineBytes, 10.seconds)
       .runWith(Sink.seq)
@@ -124,20 +147,29 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
   "BulkStorageUpdateDecoder" should {
 
     "decode every update type from a multi-frame object, in order" in {
-      val updates = Seq(transaction(1), assignment(2), unassignment(3), transaction(4, migrationId = 1L))
+      val updates =
+        Seq(transaction(1), assignment(2), unassignment(3), transaction(4, migrationId = 1L))
       val bytes = objectOf(Seq(updates.take(2), updates.drop(2)))
-      decode("segment/updates_protobuf_json_0.zstd", bytes).futureValue shouldBe updates.map(roundTripped)
+      decode("segment/updates_protobuf_json_0.zstd", bytes).futureValue shouldBe updates.map(
+        roundTripped
+      )
     }
 
     "decode transactions without loss" in {
       val updates = (1 to 20).map(transaction(_))
-      decode("segment/updates_protobuf_json_0.zstd", objectOf(Seq(updates)), chunkSize = 7).futureValue shouldBe updates
+      decode(
+        "segment/updates_protobuf_json_0.zstd",
+        objectOf(Seq(updates)),
+        chunkSize = 7,
+      ).futureValue shouldBe updates
     }
 
     "fail on a line that is not a valid update, naming the object and the line" in {
       val bytes = zstdFrame(encode(transaction(1)) + "\n" + "{}\n")
       val failure = decode("segment/updates_protobuf_json_3.zstd", bytes).failed.futureValue
-      failure.getMessage should (include("line 2") and include("segment/updates_protobuf_json_3.zstd"))
+      failure.getMessage should (include("line 2") and include(
+        "segment/updates_protobuf_json_3.zstd"
+      ))
     }
 
     "fail on a truncated object" in {
@@ -149,7 +181,11 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
 
     "fail on a line longer than the limit" in {
       val bytes = objectOf(Seq(Seq(transaction(1))))
-      decode("segment/updates_protobuf_json_0.zstd", bytes, maxLineBytes = 100).failed.futureValue shouldBe a[
+      decode(
+        "segment/updates_protobuf_json_0.zstd",
+        bytes,
+        maxLineBytes = 100,
+      ).failed.futureValue shouldBe a[
         org.apache.pekko.stream.scaladsl.Framing.FramingException
       ]
     }
@@ -159,7 +195,10 @@ class BulkStorageUpdateDecoderTest extends StoreTestBase with HasExecutionContex
       def key(encoding: ScanStorageConfig.Encoding, i: Int) =
         s"$folder/${encoding.storageKey("updates", i)}"
       val keys = Seq(10, 2, 0, 1, 11).flatMap(i =>
-        Seq(key(ScanStorageConfig.Encoding.LedgerApiJson, i), key(ScanStorageConfig.Encoding.ProtobufJson, i))
+        Seq(
+          key(ScanStorageConfig.Encoding.LedgerApiJson, i),
+          key(ScanStorageConfig.Encoding.ProtobufJson, i),
+        )
       ) :+ s"$folder/${ScanStorageConfig.Encoding.ProtobufJson.storageKey("ACS", 0)}"
       BulkStorageUpdateDecoder.protobufJsonObjectsInOrder(keys) shouldBe Seq(0, 1, 2, 10, 11).map(
         key(ScanStorageConfig.Encoding.ProtobufJson, _)

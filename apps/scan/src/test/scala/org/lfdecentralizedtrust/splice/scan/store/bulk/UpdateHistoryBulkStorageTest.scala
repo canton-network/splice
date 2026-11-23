@@ -521,7 +521,8 @@ class UpdateHistoryBulkStorageTest
         reader.getCommittedSegmentAfter(ts("2015-10-23T12:00:00Z")).futureValue shouldBe Some(
           seg("2015-10-23T00:00:00Z", "2015-10-24T00:00:00Z")
         )
-        // The segment 2015-10-24 to 2015-10-25 has objects, but the committed segment progress has not reached it
+        // The segment 2015-10-24 to 2015-10-25 has objects, but the committed
+        // segment progress has not reached it
         reader.getCommittedSegmentAfter(ts("2015-10-24T00:00:00Z")).futureValue shouldBe None
         val protobufJson = ScanStorageConfig.Encoding.ProtobufJson
         reader

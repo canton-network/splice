@@ -32,18 +32,22 @@ import org.lfdecentralizedtrust.splice.store.{
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.*
 
-/** Loads update history from this Scan's own bulk storage into the database, for the record times before the
-  * updates it ingested itself (#6253).
+/** Loads update history from this Scan's own bulk storage into the database,
+  * for the record times before the updates it ingested itself (#6253).
   *
-  * A Scan whose history starts after genesis, at `t`, ingests updates from about `t` on. The update segments before
-  * its first own segment are copied from its peers and committed to its bucket by bulk storage backfilling (#6252).
-  * This loads the updates of those segments that are older than the earliest update stored after `t`, segment by
-  * segment, starting from the segment that contains the start of the analyzable time window (genesis when the window
-  * is unlimited). Updates that are already stored are skipped, so a segment can be loaded again after a restart, and
-  * updates that were stored by other means are left alone.
+  * A Scan whose history starts after genesis, at `t`, ingests updates from
+  * about `t` on. The update segments before its first own segment are copied
+  * from its peers and committed to its bucket by bulk storage backfilling
+  * (#6252). This loads the updates of those segments that are older than the
+  * earliest update stored after `t`, segment by segment, starting from the
+  * segment that contains the start of the analyzable time window (genesis when
+  * the window is unlimited). Updates that are already stored are skipped, so a
+  * segment can be loaded again after a restart, and updates that were stored by
+  * other means are left alone.
   *
-  * A segment is loaded once the committed segment progress covers it. After each loaded segment, the last loaded
-  * segment is recorded, so a restart continues with the segment after it.
+  * A segment is loaded once the committed segment progress covers it. After
+  * each loaded segment, the last loaded segment is recorded, so a restart
+  * continues with the segment after it.
   */
 class UpdateHistoryBackfillingFromBulkStorage(
     config: UpdateHistoryBackfillingFromBulkStorageConfig,
@@ -64,8 +68,9 @@ class UpdateHistoryBackfillingFromBulkStorage(
   private[bulk] def serviceSource()(implicit tc: TraceContext): Source[Step, NotUsed] =
     mksrc().concat(Source.never)
 
-  /** The steps of the load; completes when everything up to the history start is loaded, or nothing is to be loaded.
-    * Progress is read again each time the source is materialized, i.e. on each restart.
+  /** The steps of the load; completes when everything up to the history start
+    * is loaded, or nothing is to be loaded. Progress is read again each time
+    * the source is materialized, i.e. on each restart.
     */
   private[bulk] def mksrc()(implicit tc: TraceContext): Source[Step, NotUsed] =
     Source.unfoldAsync[State, Step](State.Starting) {
@@ -107,15 +112,17 @@ class UpdateHistoryBackfillingFromBulkStorage(
           }
       }
 
-  /** Where to start loading when nothing is loaded yet: the start of the analyzable time window, or genesis if the
-    * window is unlimited. It moves forward with ingestion, but only matters until the first segment is loaded.
+  /** Where to start loading when nothing is loaded yet: the start of the
+    * analyzable time window, or genesis if the window is unlimited. It moves
+    * forward with ingestion, but only matters until the first segment is
+    * loaded.
     */
   private def lowerBound(): Option[CantonTimestamp] =
     if (updateHistory.analyzableTimeWindowIsUnlimited) Some(CantonTimestamp.MinValue)
     else updateHistory.startAnalyzableTimeWindow
 
-  /** @param loadBefore the earliest record time of an update stored after the history start; everything older is
-    *                   loaded
+  /** @param loadBefore the earliest record time of an update stored after the
+    *   history start; everything older is loaded
     */
   private def continueWith(
       loadBefore: CantonTimestamp,
@@ -139,8 +146,9 @@ class UpdateHistoryBackfillingFromBulkStorage(
           )
       }
 
-  /** The segment to load next, once it is committed. The first one is found in the bucket: the earliest committed
-    * segment ending after the lower bound, which is the genesis segment on a new network. The following ones are on
+  /** The segment to load next, once it is committed. The first one is found in
+    * the bucket: the earliest committed segment ending after the lower bound,
+    * which is the genesis segment on a new network. The following ones are on
     * the grid of segments, and those without updates have no objects.
     */
   private def nextSegment(next: Next)(implicit tc: TraceContext): Future[Option[UpdatesSegment]] =
@@ -156,7 +164,9 @@ class UpdateHistoryBackfillingFromBulkStorage(
         )
     }
 
-  /** Inserts the updates of a segment that are older than `loadBefore` and not stored yet, returning how many. */
+  /** Inserts the updates of a segment that are older than `loadBefore` and not
+    * stored yet, returning how many.
+    */
   private def loadSegment(segment: UpdatesSegment, loadBefore: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[Int] =
@@ -167,8 +177,8 @@ class UpdateHistoryBackfillingFromBulkStorage(
       .mapConcat(sameMigrationRuns)
       .prefixAndTail(1)
       .flatMapConcat { case (firstBatch, otherBatches) =>
-        // The updates of a segment are in record time order, so the partitions from the first one to the end of the
-        // segment cover all of them.
+        // The updates of a segment are in record time order, so the partitions
+        // from the first one to the end of the segment cover all of them.
         firstBatch.headOption.flatMap(_.headOption) match {
           case None => Source.empty
           case Some(first) =>
@@ -237,7 +247,9 @@ object UpdateHistoryBackfillingFromBulkStorage {
 
   val lastLoadedSegmentKvStoreKey = "update_history_from_bulk_storage_cursor"
 
-  /** Why loading update history from bulk storage is not started, None if it is started. */
+  /** Why loading update history from bulk storage is not started, None if it is
+    * started.
+    */
   def notStartedBecause(
       enabled: Boolean,
       backfillingFromPeersEnabled: Boolean,
@@ -250,8 +262,8 @@ object UpdateHistoryBackfillingFromBulkStorage {
   object NotStarted {
     case object Disabled extends NotStarted("Loading update history from bulk storage is disabled")
 
-    /** With backfilling from peers enabled, it fills the same history, and the history start is genesis once it is
-      * complete.
+    /** With backfilling from peers enabled, it fills the same history, and the
+      * history start is genesis once it is complete.
       */
     case object BackfillingFromPeers
         extends NotStarted(
@@ -262,8 +274,8 @@ object UpdateHistoryBackfillingFromBulkStorage {
         )
   }
 
-  /** Splits a batch into runs of updates with the same migration id, keeping their order, because one insert is for
-    * one migration id.
+  /** Splits a batch into runs of updates with the same migration id, keeping
+    * their order, because one insert is for one migration id.
     */
   private[bulk] def sameMigrationRuns(
       batch: Seq[TreeUpdateWithMigrationId]
@@ -277,7 +289,9 @@ object UpdateHistoryBackfillingFromBulkStorage {
   /** The update segments in this Scan's committed bucket. */
   trait CommittedSegments {
 
-    /** The earliest committed segment that ends after `after`, None while there is none. */
+    /** The earliest committed segment that ends after `after`, None while there
+      * is none.
+      */
     def firstSegmentAfter(after: CantonTimestamp)(implicit
         tc: TraceContext
     ): Future[Option[UpdatesSegment]]
@@ -369,7 +383,9 @@ object UpdateHistoryBackfillingFromBulkStorage {
     case object Finished extends State
   }
 
-  /** Where loading continues: with the first segment ending after a lower bound, or after the last loaded segment. */
+  /** Where loading continues: with the first segment ending after a lower
+    * bound, or after the last loaded segment.
+    */
   private sealed trait Next {
     def loadedUpTo: CantonTimestamp
   }

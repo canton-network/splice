@@ -16,10 +16,12 @@ import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 
-/** Reads the update objects that [[UpdateHistorySegmentBulkStorage]] writes back into updates. Only the
-  * `protobuf_json` encoding is lossless, so only it is decoded.
+/** Reads the update objects that [[UpdateHistorySegmentBulkStorage]] writes
+  * back into updates. Only the `protobuf_json` encoding is lossless, so only it
+  * is decoded.
   *
-  * An object is a concatenation of zstd frames that hold NDJSON, one update per line, each line ending in a newline.
+  * An object is a concatenation of zstd frames that hold NDJSON, one update per
+  * line, each line ending in a newline.
   */
 object BulkStorageUpdateDecoder {
 
@@ -27,8 +29,9 @@ object BulkStorageUpdateDecoder {
 
   private val objectIndex = (".*" + "updates_" + encoding.key + "_(\\d+)\\.zstd").r
 
-  /** The `protobuf_json` update objects among `keys`, in the order they were written. The index in the object key is
-    * not zero-padded, so it is compared as a number.
+  /** The `protobuf_json` update objects among `keys`, in the order they were
+    * written. The index in the object key is not zero-padded, so it is compared
+    * as a number.
     */
   def protobufJsonObjectsInOrder(keys: Seq[String]): Seq[String] =
     keys
@@ -36,11 +39,13 @@ object BulkStorageUpdateDecoder {
       .sortBy(_._1)
       .map(_._2)
 
-  /** Decodes the updates in one object, streaming: the object is not held in memory as a whole.
+  /** Decodes the updates in one object, streaming: the object is not held in
+    * memory as a whole.
     *
     * @param objectKey only used in error messages
     * @param maxLineBytes the stream fails on a line longer than this
-    * @param readTimeout how long to wait for more bytes of the object before failing the stream
+    * @param readTimeout how long to wait for more bytes of the object before
+    *   failing the stream
     */
   def decodeObject(
       objectKey: String,
@@ -51,7 +56,8 @@ object BulkStorageUpdateDecoder {
     Source
       .lazySource { () =>
         val compressedStream = compressed.runWith(StreamConverters.asInputStream(readTimeout))
-        // Closing the stream cancels the download, also when the decompressing stream cannot be opened.
+        // Closing the stream cancels the download, also when the decompressing
+        // stream cannot be opened.
         StreamConverters.fromInputStream { () =>
           try new ZstdInputStream(compressedStream)
           catch {

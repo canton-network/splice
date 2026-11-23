@@ -45,12 +45,14 @@ final case class BulkStorageBackfillingConfig(
     pageSize: Int = Limit.DefaultMaxPageSize,
 )
 
-/** Loading update history from this Scan's own bulk storage into the database, for the times before its
-  * history start (#6253).
+/** Loading update history from this Scan's own bulk storage into the database,
+  * for the times before its history start (#6253).
   *
-  * @param pollingInterval how long to wait when the next segment is not committed in bulk storage yet
+  * @param pollingInterval how long to wait when the next segment is not
+  *   committed in bulk storage yet
   * @param insertBatchSize number of updates inserted per database transaction
-  * @param maxLineBytes the longest encoded update that can be read from bulk storage
+  * @param maxLineBytes the longest encoded update that can be read from bulk
+  *   storage
   */
 final case class UpdateHistoryBackfillingFromBulkStorageConfig(
     enabled: Boolean = false,

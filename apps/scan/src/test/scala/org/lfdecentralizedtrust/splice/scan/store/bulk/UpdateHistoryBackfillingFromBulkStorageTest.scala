@@ -51,7 +51,8 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
   private def at(hours: Int, minutes: Int): CantonTimestamp =
     base.plusSeconds(hours * 3600L + minutes * 60L)
 
-  // The history start of the destination: the record time of the ACS it imported, in the middle of a segment.
+  // The history start of the destination: the record time of the ACS it
+  // imported, in the middle of a segment.
   private val historyStart = at(3, 15)
   // The destination's first ingested update after its history start
   private val firstIngested = at(3, 30)
@@ -80,7 +81,8 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
     }
 
     "start from the segment containing the start of the analyzable time window" in {
-      // The destination ingested up to 04:10, so a window of 150 minutes starts at 01:40.
+      // The destination ingested up to 04:10, so a window of 150 minutes starts
+      // at 01:40.
       for {
         data <- setupTestData(
           destinationAtw = NonNegativeDuration.tryFromDuration(150.minutes)
@@ -128,7 +130,8 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
       for {
         data <- setupTestData()
         _ <- data.service().mksrc().runWith(Sink.seq)
-        // As if the last loaded segment had not been recorded after loading the segments after it
+        // As if the last loaded segment had not been recorded after loading the
+        // segments after it
         _ <- data.progress.persistLastLoadedSegment(segment(1, 2))
         steps <- data.service().mksrc().runWith(Sink.seq)
         _ <- data.assertDestinationHoldsSourceUpdatesAfter(CantonTimestamp.MinValue)
@@ -146,7 +149,8 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
     }
 
     "skip updates the destination already holds from before its history start" in {
-      // The destination also holds the update at 02:59, e.g. from backfilling from its peers, in the middle of a batch.
+      // The destination also holds the update at 02:59, e.g. from backfilling
+      // from its peers, in the middle of a batch.
       for {
         data <- setupTestData(destinationHoldsUpdateBeforeHistoryStart = true)
         steps <- data.service(insertBatchSize = 2).mksrc().runWith(Sink.seq)
@@ -155,7 +159,8 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
     }
 
     "load up to the first ingested update when it is later than the history start" in {
-      // The destination ingested nothing between its history start and 04:10, e.g. after its participant was pruned.
+      // The destination ingested nothing between its history start and 04:10,
+      // e.g. after its participant was pruned.
       for {
         data <- setupTestData(destinationIngestsFrom = at(4, 10))
         steps <- data.service().mksrc().runWith(Sink.seq)
@@ -254,7 +259,9 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
     }
   }
 
-  /** What [[UpdateHistorySegmentBulkStorage]] writes for an update, in the lossless encoding. */
+  /** What [[UpdateHistorySegmentBulkStorage]] writes for an update, in the
+    * lossless encoding.
+    */
   private def encode(update: TreeUpdateWithMigrationId): String = {
     import ScanJsonSupport.*
     ScanHttpEncodings
@@ -267,8 +274,9 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
       .noSpacesSortKeys
   }
 
-  /** The committed segments of the source history, as bulk storage would hold them: the segments that have updates,
-    * on the grid of `storageConfig`, each update encoded and decoded as when it is read from bulk storage.
+  /** The committed segments of the source history, as bulk storage would hold
+    * them: the segments that have updates, on the grid of `storageConfig`, each
+    * update encoded and decoded as when it is read from bulk storage.
     */
   private class SourceSegments(
       source: UpdateHistory,
@@ -349,7 +357,9 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
         loggerFactory,
       )
 
-    /** The destination holds the source's updates with record times after `after`, and nothing else. */
+    /** The destination holds the source's updates with record times after
+      * `after`, and nothing else.
+      */
     def assertDestinationHoldsSourceUpdatesAfter(after: CantonTimestamp) =
       for {
         sourceUpdates <- source.getUpdatesWithoutImportUpdates(None, PageLimit.tryCreate(1000))
@@ -362,12 +372,16 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
         .map(encode)
   }
 
-  /** The source holds updates from 00:10 on. The destination joins at 03:15 and ingests from then on, so its
-    * segments are: genesis (00:10, 00:40), 01:00-02:00 (an unassignment and an assignment), 02:00-03:00 (two
-    * creates), 03:00-04:00 (a create at the history start, then the destination's first own updates at 03:30).
+  /** The source holds updates from 00:10 on. The destination joins at 03:15 and
+    * ingests from then on, so its segments are: genesis (00:10, 00:40),
+    * 01:00-02:00 (an unassignment and an assignment), 02:00-03:00 (two
+    * creates), 03:00-04:00 (a create at the history start, then the
+    * destination's first own updates at 03:30).
     *
-    * @param destinationIngestsFrom the destination ingests the updates from this record time on
-    * @param destinationHoldsUpdateBeforeHistoryStart the destination also holds the update at 02:59
+    * @param destinationIngestsFrom the destination ingests the updates from
+    *   this record time on
+    * @param destinationHoldsUpdateBeforeHistoryStart the destination also holds
+    *   the update at 02:59
     */
   private def setupTestData(
       start: Option[HistoryStart] = Some(HistoryStart.From(historyStart)),

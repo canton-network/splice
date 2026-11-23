@@ -137,8 +137,9 @@ class BulkStorageReader(
       storageEncodings,
     )
 
-  /** The earliest committed update segment that ends after `after`, or None while the committed segment progress
-    * has not reached such a segment. Segments without objects have no folder, so this may skip empty segments.
+  /** The earliest committed update segment that ends after `after`, or None
+    * while the committed segment progress has not reached such a segment.
+    * Segments without objects have no folder, so this may skip empty segments.
     */
   def getCommittedSegmentAfter(after: CantonTimestamp): Future[Option[UpdatesSegment]] =
     updateHistoryCommittedProgress.readLatestProcessedSegment.flatMap {
@@ -164,8 +165,8 @@ class BulkStorageReader(
           .map(_.map(segmentOf).minByOption(_.fromTimestamp))
     }
 
-  /** The keys of the objects of a committed update segment in the given encoding. Fails rather than returning only
-    * some of them.
+  /** The keys of the objects of a committed update segment in the given
+    * encoding. Fails rather than returning only some of them.
     */
   def getCommittedUpdateObjectsInSegment(
       segment: UpdatesSegment,

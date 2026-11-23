@@ -77,7 +77,8 @@ const SvAppConfigSchema = z
   .strict();
 const BulkStorageConfigSchema = z.object({
   enabled: z.boolean(),
-  // load the update history before the Scan's history start from its bulk storage
+  // load the update history before the Scan's history start from its bulk
+  // storage
   updateHistoryBackfilling: z
     .object({
       enabled: z.boolean(),
@@ -118,7 +119,8 @@ const ScanAppConfigSchema = z
   .object({
     bigQuery: ScanBigQueryConfigSchema.optional(),
     bulkStorage: BulkStorageConfigSchema.optional(),
-    // backfilling update history from peers; turn it off to load the update history from bulk storage instead
+    // backfilling update history from peers; turn it off to load the update
+    // history from bulk storage instead
     updateHistoryBackfillingFromPeers: z
       .object({
         enabled: z.boolean(),
