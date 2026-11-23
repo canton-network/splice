@@ -100,6 +100,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     end: false,
     badgeCount: actionsPending?.length,
   };
+  // TODO(#8299): add nav links to the read-only operator pages (DSO info, Amulet price) in dApp
+  // mode; the Validators page stays operator-only.
   const navLinks: SvNavLinkItem[] = dappMode
     ? [governanceLink]
     : [

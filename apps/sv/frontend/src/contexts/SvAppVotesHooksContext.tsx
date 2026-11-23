@@ -25,6 +25,8 @@ import { useDappModeConfig } from '../utils';
 export const SvAppVotesHooksProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const dappMode = useDappModeConfig();
   const hooks: VotesHooks = {
+    // TODO(#8297): once votes are cast through the wallet, dApp mode is no longer read-only;
+    // derive this from the wallet connection and the chosen SV instead.
     isReadOnly: dappMode !== undefined,
     useDsoInfos(): UseQueryResult<DsoInfo> {
       return useSvAppDsoInfos();

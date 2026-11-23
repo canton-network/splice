@@ -134,6 +134,8 @@ const createRouter = (config: SvConfig) => {
   const dappMode = getDappModeConfig(config);
   const operator = dappMode ? undefined : requireOperatorConfig(config);
   const toGovernance = <Navigate to="/governance/proposals" replace />;
+  // TODO(#8299): show the operator pages (DSO info, Amulet price and its votes) read-only in dApp
+  // mode instead of redirecting; only validator-onboarding keeps the redirect.
   const operatorOnly = (page: React.ReactElement) => (dappMode ? toGovernance : page);
 
   return createBrowserRouter(
