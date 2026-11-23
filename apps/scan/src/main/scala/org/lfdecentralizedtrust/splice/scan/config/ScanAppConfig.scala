@@ -229,10 +229,6 @@ final case class ScanCacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 1000,
     ),
-    amuletConfigForRound: CacheConfig = CacheConfig(
-      ttl = NonNegativeFiniteDuration.ofMinutes(1),
-      maxSize = 1000,
-    ),
     roundOfLatestData: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofSeconds(30),
       maxSize = 1,

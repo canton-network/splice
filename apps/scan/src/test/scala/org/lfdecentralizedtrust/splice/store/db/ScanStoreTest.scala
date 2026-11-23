@@ -56,7 +56,6 @@ import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
-import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
@@ -75,33 +74,6 @@ abstract class ScanStoreTest
     with AmuletTransferUtil {
 
   "ScanStore" should {
-    "getAmuletConfigForRound" should {
-
-      "return the amulet OpenMiningRoundTxLogEntry for the round" in {
-        val wanted = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
-        val unwanted = openMiningRound(dsoParty, round = 3, amuletPrice = 3.0)
-        for {
-          store <- mkStore()
-          _ <- dummyDomain.create(wanted)(store.multiDomainAcsStore)
-          _ <- dummyDomain.create(unwanted)(store.multiDomainAcsStore)
-        } yield {
-          val logEntry = store.getAmuletConfigForRound(round = 2).futureValue
-          logEntry match {
-            case omr: OpenMiningRoundTxLogEntry =>
-              omr.round should be(wanted.payload.round.number)
-            case x =>
-              fail(s"Entry was not an OpenMiningRoundTxLogEntry but a $x")
-          }
-          numeric(logEntry.amuletCreateFee) should be(
-            numeric(
-              wanted.payload.transferConfigUsd.createFee.fee.divide(wanted.payload.amuletPrice)
-            )
-          )
-        }
-      }
-
-    }
-
     "getTotalPurchasedMemberTraffic" should {
 
       "return the sum over all traffic contracts for the member" in {

@@ -1308,31 +1308,6 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetAcsSnapshotResponse"
 
-  /v0/amulet-config-for-round:
-    get:
-      deprecated: true
-      tags: [deprecated]
-      x-jvm-package: scan
-      operationId: "getAmuletConfigForRound"
-      description: |
-        **Deprecated**. Retrieve some information from the `AmuletRules` selected for the given round
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetAmuletConfigForRoundResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/updates:
     post:
       deprecated: true
@@ -1960,37 +1935,6 @@ components:
       properties:
         featured_app_right:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
-    GetAmuletConfigForRoundResponse:
-      type: object
-      required:
-        ["amulet_create_fee", "holding_fee", "lock_holder_fee", "transfer_fee"]
-      properties:
-        amulet_create_fee:
-          type: string
-        holding_fee:
-          type: string
-        lock_holder_fee:
-          type: string
-        transfer_fee:
-          $ref: "#/components/schemas/SteppedRate"
-    SteppedRate:
-      type: object
-      required: ["initial", "steps"]
-      properties:
-        initial:
-          type: string
-        steps:
-          type: array
-          items:
-            $ref: "#/components/schemas/RateStep"
-    RateStep:
-      type: object
-      required: ["amount", "rate"]
-      properties:
-        amount:
-          type: string
-        rate:
-          type: string
     GetValidatorTrafficBalanceResponse:
       type: object
       required: ["remainingBalance", "totalPurchased"]

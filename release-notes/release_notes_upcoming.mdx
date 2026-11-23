@@ -7,6 +7,8 @@
     - Removed the internal `/v0/transfer-command-counter/{party}` and `/v0/transfer-command/status` endpoints.
       Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0, this removes
       the remaining parts.
+    - Removed the deprecated `/v0/amulet-config-for-round` endpoint. Use the `transferConfigUsd` and `amuletPrice`
+      fields of the `OpenMiningRound` contracts returned by `/v0/open-and-issuing-mining-rounds` instead.
     - The `DeleteCorruptAcsSnapshotTrigger` is removed because it is obsolete.
     - Scan switches its update history to tables partitioned by record time. On the first start, a database migration
       renames the existing update history tables to `*_legacy` (no data is copied) and creates the new tables. Scan reads

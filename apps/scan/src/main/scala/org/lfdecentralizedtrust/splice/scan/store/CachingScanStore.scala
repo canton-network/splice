@@ -102,15 +102,6 @@ class CachingScanStore(
       (_: Unit) => store.lookupAnsRules(),
     ).get(())
 
-  override def getAmuletConfigForRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[OpenMiningRoundTxLogEntry] =
-    getCache(
-      "getAmuletConfigForRound",
-      cacheConfig.amuletConfigForRound,
-      store.getAmuletConfigForRound,
-    ).get(round)
-
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorLicense.ContractId, ValidatorLicense]]] =

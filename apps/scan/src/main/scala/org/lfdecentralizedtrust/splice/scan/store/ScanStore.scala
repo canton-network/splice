@@ -152,10 +152,6 @@ trait ScanStore
       tc: TraceContext
   ): Future[Option[ContractWithState[splice.ans.AnsRules.ContractId, splice.ans.AnsRules]]]
 
-  def getAmuletConfigForRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[OpenMiningRoundTxLogEntry]
-
   def getTopValidatorLicenses(limit: Limit)(implicit tc: TraceContext): Future[Seq[
     Contract[
       splice.validatorlicense.ValidatorLicense.ContractId,
