@@ -34,7 +34,9 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
   ) = {
     val actionNameCondition = filters.actionName match {
       case Some(actionName) =>
-        Some(sql"""#$actionNameColumnName like ${lengthLimitedContainsPattern(actionName)}""")
+        Some(sql"""#$actionNameColumnName like ${lengthLimited(
+            s"%${lengthLimited(actionName)}%"
+          )}""")
       case None => None
     }
     val executedCondition = filters.accepted match {
@@ -56,7 +58,9 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     }
     val requesterCondition = filters.requester match {
       case Some(requester) =>
-        Some(sql"""#$requesterNameColumnName like ${lengthLimitedContainsPattern(requester)}""")
+        Some(sql"""#$requesterNameColumnName like ${lengthLimited(
+            s"%${lengthLimited(requester)}%"
+          )}""")
       case None => None
     }
     NonEmptyList(
