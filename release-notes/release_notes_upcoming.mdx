@@ -99,6 +99,9 @@
 
       - Security hardening: add extra assertions to the `WalletAppInstall` choices.
 
+      - `splice-wallet` now depends on `splice-util-batched-markers` and `splice-util-token-standard-wallet`.
+        The versions of these packages that validators vet now follow the voted `splice-wallet` version.
+
       - All Canton Coin transactions now emit token standard V2 transaction-history events, i.e.,
         `EventLog_HoldingsChange` events reported by the DSO party. Clients can rely on these events
         to parse the history of all Canton Coin holdings.

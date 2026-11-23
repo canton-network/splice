@@ -1,0 +1,22 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Dummy module that makes `splice-wallet` depend on the utility packages
+-- used by token standard workflows (`splice-util-batched-markers` and
+-- `splice-util-token-standard-wallet`).
+--
+-- Validators vet the dependencies of the `splice-wallet` version set in the
+-- `AmuletConfig.packageConfig`. Thus a vote on a new `splice-wallet` version
+-- also vets the versions of these utility packages that it depends on.
+--
+-- The type references are required, as `damlc` drops unused data-dependencies.
+module Splice.Wallet.VettingDependencies where
+
+import Splice.Util.FeaturedApp.BatchedMarkersProxy (BatchedMarkersProxy)
+import Splice.Util.Token.Wallet.MergeDelegation (MergeDelegation)
+
+-- | Not used. Only exists to reference one type from each package that should
+-- be vetted together with `splice-wallet`.
+data VettingDependencies = VettingDependencies with
+    batchedMarkersProxy : ContractId BatchedMarkersProxy
+    mergeDelegation : ContractId MergeDelegation

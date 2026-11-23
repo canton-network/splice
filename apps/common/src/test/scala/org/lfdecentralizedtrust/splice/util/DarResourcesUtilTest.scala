@@ -32,6 +32,16 @@ class DarResourcesUtilTest extends AnyWordSpec with BaseTest {
     }
   }
 
+  "splice-wallet" should {
+    // Validators vet these packages only as dependencies of the voted `splice-wallet` version.
+    "depend on the token standard workflow utility packages" in {
+      wallet.dependencyPackageIds should contain allOf (
+        DarResources.utilBatchedMarkers.latest.packageId,
+        DarResources.TokenStandard.utilTokenStandardWallet.latest.packageId
+      )
+    }
+  }
+
   "getRequiredPackageVersions" should {
     "list each DAR once, even if the latest one is also listed under its versioned path" in {
       val rows = for {
