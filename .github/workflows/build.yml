@@ -318,8 +318,8 @@ jobs:
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
-  docs:
-    uses: ./.github/workflows/build.docs.yml
+  compile_checks:
+    uses: ./.github/workflows/build.compile_checks.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
@@ -368,7 +368,7 @@ jobs:
     - ui_tests
     - ts_cli_tests
     - python_tests
-    - docs
+    - compile_checks
     - bundle_smoke_test
     runs-on: ubuntu-24.04
     steps:
@@ -401,7 +401,7 @@ jobs:
             # shellcheck disable=SC2129
             echo "FORCE=false" >> "$GITHUB_ENV"
             echo "JOBS<<EOF" >> "$GITHUB_ENV"
-            echo "$NEEDS_JSON" | jq '{"docs", "static_tests", "deployment_test"}' >> "$GITHUB_ENV"
+            echo "$NEEDS_JSON" | jq '{"compile_checks", "static_tests", "deployment_test"}' >> "$GITHUB_ENV"
             echo "EOF" >> "$GITHUB_ENV"
           else
             echo "Checking if all jobs succeeded."
