@@ -19,9 +19,9 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | F | frontend test infrastructure | 10156, 10141, 10145, 10157, 10143, 11187 | fixed on main (11187 by #8418) |
 | G | tests pass, one log line fails checkErrors | 10438, 10084, 10140, 10144, 10147, 10612, 10606, 10676, 10495, 10142, 11155, 9445 | mixed, see section |
 | H | evidence loss (sys.exit, teardown cascade) | 10137, 10139, 10183, 10088, 10180, 10176, 11347 | fix branches open |
-| H2 | LSU: validator init against a non-active psid | 10088, 10174, 10180, 11404 | 10174 fixed, 10180 closed (no repro), 11404 open (second hit of variant C) |
+| H2 | LSU: validator or SV app init against a non-active psid | 10088, 10174, 10180, 11404, 11682 | 10174 fixed, 10180 closed (no repro), 11404 open (second hit of variant C), 11682 open (third hit, SV app call site) |
 | H3 | trigger pause timeout (TriggerTestUtil.scala:93) | 10175, 10176 | 10175 fixed |
-| I | test races (venue, bulk storage, traffic, external party, sv4 sequencer, sequencer reconnect) | 8784, 10149, 10179, 10690, 10691, 11238 | mixed |
+| I | test races (venue, bulk storage, traffic, external party, sv4 sequencer, sequencer reconnect) | 8784, 10149, 10179, 10690, 10691, 10737 (dup 11531), 11238 | mixed |
 | J | infra, no code change | many | see section |
 | K | sim time: mediator pruning backoff after a 30 d jump | 10184 | PR 7440 open (2026-09-22) |
 | L | reference sequencer `insert block` 40001 retry storm | 10139, 10197, 11160, 11189, 11191 | open; goes away with splice#8234 (all tests on DA BFT) |
@@ -45,19 +45,19 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AD | TBAR test reads per-round totals while a parallel backlog computation is still committing | 11144 | open, test fix proposed |
 | AE | frontend login helper misses already-logged-in state on a slow page load | 11161 | open, test fix proposed |
 | AF | sim-clock jump timeouts trip the SV medium-priority circuit breaker | 11147 (dups 11291, 11348, 11357; related 10475) | open, fix PR #8420 |
-| AG | first Postgres connection > 5 s at shard start, createDatabase retry WARN | 10739, 11141 | open, test config fix proposed |
+| AG | first Postgres connection > 5 s at an environment start, createDatabase retry WARN | 11141 (dups 10739, 11523, 11533, 11536, 11641) | open, test config fix proposed |
 | AH | SequencerPruningIntegrationTest disables the shared participants at the global sequencer | 11165 | open, owner suggested martinflorian-da |
 | AI | SUBMISSION_ALREADY_IN_FLIGHT trips the validator circuit breaker | 9752 (dups 10300, 11173; 11240 via B) | closed 9752, fix cni#2785 status unknown |
 | AJ | scan `claimed by multiple SVs` WARN from sv2-4 scans after the suppression ended on sv1Scan | 11304 (dups 11307, 11309, 11316, 11327) | fixed, #8389 |
 | AK | RollForwardLsuDR pre-DR SV onboarding past the 300 s sequencing cutoff (BFT since #8234) | 11303 (dups 11312, 11328, 11336, 11371, 11372, 11396, 11419) | open, test budget |
 | AL | AppUpgradeIntegrationTest base-version nodes not initialized within the 5 min initial wait | 11301 (dup 11302) | open, fix PR #8414 |
-| AM | SV init slower than a fixed wait; a quarter of the DAR uploads are repeats | 11299, 11347, 11373 | 11299 fixed, #8467 (dedup + test timeout); 11347, 11373 open |
+| AM | SV init slower than a fixed wait; a quarter of the DAR uploads are repeats | 11299, 11347, 11373 (dups 11550, 11558, 11654) | 11299 fixed, #8467 (dedup + test timeout); 11347, 11373 open |
 | AN | cimain SV backup snapshots a CometBFT volume on CantonBFT (backup script defaults enableBftSequencer to false) | 10332 (dups 11297 11298 11314 11315) | open, splice script fix |
 | AP | ManualSignatureIntegrationTest validator OTK check gives up before or during alice's key rotation | 11232 (dup 11318) | fixed, #8391 |
 | AQ | cilr weekly SV catch-up: orderer restored a day behind (cantonBft backup rule), monitor 999 s fallback claims it | 11194 (also 10843) | open, splice backup selection + cni monitor |
 | AR | fixed wait for deadline-driven automation shorter than deadline + automation delay + a slow round trip | 11333 | open, fix PR #8411 |
 | AS | SvFrontendIntegrationTest expiring proposal closed by another SV (CloseVoteRequestTrigger paused on sv1 only) | 11186 (dup 11340) | open, fix PR #8417 |
-| AT | frontend test thread stalls minutes inside the only `eventually` attempt; stale first read rethrown after the deadline | 10918 (dup 10920) | open, stall origin unknown, no fix proposed |
+| AT | frontend test thread stalls minutes inside the only `eventually` attempt; stale first read rethrown after the deadline | 10918 (dups 10920, 11561) | open, stall origin: lead in 11561 (lazy package-signature load on the first console command), not proven; no fix proposed |
 | AU | test retry budget starts before a restarted external Canton process is ready (withCanton does not wait) | 11346 | fix PR splice#8444 (5 min budget) |
 | AV | LsuIntegrationTest test 2 restarts SV and scan nodes while test-1 validators keep calling scans; BFT call retries (12, about 7 s) run out | 11354 | fixed, #8469 |
 | AW | re-onboarded SV sequencer with a new id on the same P2P endpoint: peers keep the old id via a leaked incoming-connection ref, newcomer never leaves state transfer (Canton BFT) | 11363 (same symptom as 10011) | 11363 fixed in the test, #8465 (own P2P port); Canton gap open |
@@ -66,6 +66,16 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AZ | cluster hostnames under one ingress NXDOMAIN while cert-manager renews the cluster certificate (DNS-01 TXT hides the zone wildcard) | 11382 (dup 11383) | open, infra fix proposed |
 | BA | wait covers several DSO-delegate confirmed-action executions, which run one at a time behind one lock | 11392 | open, test fix proposed |
 | BB | test JVM stalls in the RemoteClock fetch after a sim-time advance; execution context threads all in the blocking clock wait | 11405 | open, cause of the exhaustion unknown, no fix proposed |
+| BC | default 20 s wait starts while the SV closes the issuing round the resumed wallet trigger uses; two contention retries at 8-10 s per round trip | 11532 | open, test fix on a local branch; slow window cause open |
+| BD | sponsor SV app: sequencer onboarding state export queued behind an ACS export that waits on the frozen synchronizer (one export slot since #7795) | 11539 | open, fix on a local branch (one queue per kind of export) |
+| BE | freshly added cluster node cannot pull the istio sidecar image: registry.istio.io answers 403 to the anonymous token; pods on that node stay in ImagePullBackOff | 11541 (same run: 11542, 11544, 11545, 11546; ciperiodic: 11547, 11551; cimain deploys: 11548, 11552, 11555) | open, infra, cause of the 403 unknown |
+| BF | Sv1BootstrapProtocolVersion36IntegrationTest: admin connections built before the standalone Canton spawn, GetId polls refused after the participant admin API is up, 60 s budget | 11228 (dup 11553) | open, test fix proposed, no PR |
+| BH | main test sources do not compile after a merge race (two PRs green alone, broken together); every job of the post-merge run fails at compile | 11566 (siblings 11567-11636 except 11597, 11637) | fixed, splice#8569 |
+| BJ | release deploy after a main deploy on a fixed-token cluster: main writes the auth0 fixed-token cache as v1 under the old secret name, the release loader returns an undefined token, ledger-api-auth secrets lack `token` | 11640 (dup 11656) | open, splice IaC owner decision |
+| BN | frontend test reads a polled list with scalatest-selenium `findAll` outside any retry; a row is re-keyed by the 1 s poll between FindElements and the per-row reads (`StaleElementReferenceException`) | 11664 | open, test fix on a local branch (`pperek/fix-11664-licenses-rows-stale-element`, 6451f8f582), no PR |
+| BO | default 20 s wait covers two sequential sv1 round trips (confirmation, then ExecuteConfirmedAction); one of them lands on a BFT epoch boundary with a view change (35 s) | 11665 | open, test fix on a local branch (`pperek/fix-11665-wallet-subscription-created-wait`, 155cd7a595), no PR; slow ordering window cause open (see 11532, 11375) |
+| BP | main deploy through the operator on a cluster whose infra stack output predates #8216: stacks read `audiences.participantAdminApi` as undefined before the infra stack adds it (token request `RequiredError`, participants with admin audience `undefined`), sv-runbook hits the operator retry limit of 4 failed updates | 11670 | open, splice cluster/pulumi owner decision, no fix written |
+| BQ | joining SV: DomainTimeIngestionTrigger retries `Not connected to any synchronizer` from synchronizer registration until the sponsor has bootstrapped the DSO; 35 retries (110 s) run out on a slow runner (checkErrors only) | 11673 | open, owner decision (app fix or #8467 backport) |
 
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
@@ -181,6 +191,17 @@ State as recorded in the family section, not rechecked against the tracker on 20
   currently blacklisted, rejecting`, participant `Response message for request ... timed out`. Ordering topology
   unchanged. splice#8356 does not apply: `disableBftBlacklisting` is only in `EnvironmentDefinition.withSimTime`.
   Confirm: a `Supervising futures itself takes longer` line in both JVMs shortly before the first blacklisted epoch.
+  Second wall-clock hit without that line: 11564 (2026-11-18, frontend-wall-clock-time (2), main ec059037fa, Canton
+  3.7.4-snapshot.20261112, TokenStandardWalletTransfersFrontendIntegrationTest): canton.clog rate falls from about
+  7000 to under 1000 lines/s at 12:49:39 (test JVM unaffected, zero `Supervising futures` lines, no DAR uploads),
+  segment timeouts 12:49:47.96, sv2 blacklisted in epoch 202, sv1 in epochs 203-207 (12:50:20.400-12:51:04.908).
+  All participants submit through sv1: bobValidator's PartyToParticipant batch (created by sv1 in epoch 202) is
+  ordered in epoch 208 after its max sequencing time (`validated to: Discard`), aliceValidator's push is rejected by
+  the mempool; both parties exist on splitwell only and `onboardWalletUser` fails with HTTP 400
+  `INVALID_PRESCRIBED_SYNCHRONIZER_ID` (do not confuse with L or AH). Confirm without the stall line: `New epoch`
+  with a non-empty blacklist while `size = 4` and activationTime are unchanged, `currently blacklisted, rejecting`
+  from `MempoolModule` on the sequencer the failing node submits to, and the failing request's message id either
+  rejected there or ordered after its `max sequencing time`.
 - 11255 on Canton 3.7.3, evening of 2026-11-12, all MediatorSynchronizerState pushes rejected at the 1 -> 4 step:
   11399 (release-line-0.10.2 48f45bf330, TimeBasedTestNetPreview setup, MED::sv2, setup blast radius over 3 suites),
   11400 (main 1fb5a7382f, SvTimeBasedRoundMgmt in the test body, sv4Validator JVM exit), 11402 (main f1e385ffac,
@@ -247,6 +268,88 @@ State as recorded in the family section, not rechecked against the tracker on 20
     effective in 1 min, ResetTopologyStatePlugin sys.exit, no report, as 11407).
   - Rate: from ee0c92e0fd (10:30) to 09f5cc4b78 (16:45) every post-merge main run had a failed shard of this family
     (7 of 7; 635294d6e6 before them is 11405, family BB).
+- 11255 on Canton 3.7.4-snapshot.20261112.20915.0.v9e248620, 2026-11-17, batch never ordered (as 11326): 11534 (main
+  54f83a5ddd, simtime (1), TrafficBasedRewardsSvAppTimeBased setup). splitwellValidator VettedPackages broadcast on
+  global accepted by sv1 at 08:19:14.035, `LocalBatchCreated` 08:19:14.066, 1 -> 4 at 08:19:14.068 (2 ms later), batch
+  disseminated to the three newcomers and never seen again; zero `P2P connectivity is not ready`, zero `Deliver` for
+  the message id; outbox flush never closes, splitwell_provider never created, providerSplitwellBackend JVM exit
+  08:23:55 (`UserNotFound(splitwell_provider)`). splice#8363 still open.
+  Same run, simtime (3), 11535: SvExpiredRewardsCollectionTimeBased setup, 1 -> 4 at 08:36:02.390, MED::sv3 add: sv3,
+  sv1 and sv4 pushes rejected 41-197 ms after the switch (`P2P connectivity is not ready`), sv2's outbox stuck on its
+  previous push batched 175 ms before the switch and never ordered (mixed hit as 11409); sv3 init timeout 08:39:44,
+  blast radius into SvTimeBasedBootstrappingRound and WalletAmuletPriceTimeBased (3 suites aborted, 9 tests passed).
+  11540 (main 95f6581dc9, simtime (0), TrafficBasedRewardsSvAppTimeBased setup): 1 -> 4 at 15:36:52.612, MED::sv4 add:
+  sv2 and sv1 pushes sequenced, sv4's batched 30 ms before the switch and never ordered, sv3's rejected 225 ms after
+  it (`P2P connectivity is not ready`); sv4 waits on mediator traffic, sv4Validator JVM exit 15:41:32
+  (`UserNotFound(sv4_validator_user)`), no report. Third failed simtime shard of this family on 2026-11-17.
+  11543 (main 408f7ed9e7, simtime (3), TimeBasedTestNetPreview setup): 1 -> 4 at 16:26:24.011, MED::sv2 add: sv4's
+  and sv2's pushes 69 and 32 ms before the switch never answered, sv3's rejected 64 ms after it (`P2P connectivity is
+  not ready`), sv1's stuck behind its open flush (mixed hit as 11409); sv2 init timeout 16:31:45, blast radius into
+  SvTimeBasedOnboarding (sv1Scan init timeout, then the 11347 teardown throw of family H) and, through the leaked
+  environment, SvTimeBasedAmuletPrice and SvTimeBasedRewardCoupon (`Address already in use`). Fourth of the day.
+  11554 (main facc9443d3, simtime (0), TrafficBasedRewardsSvAppTimeBased setup): 1 -> 4 at 20:15:00.758, rejected
+  send of a participant topology broadcast: splitwellParticipant's PartyToParticipant for the splitwell provider party
+  rejected by sv1 181 ms after the switch (`P2P connectivity is not ready`), `Retry has not been configured for
+  GrpcServiceUnavailable, giving up`, hash and message id never seen again; the party is hosted on the splitwell
+  synchronizers only, 62 `installWalletForUser` retries fail with `INVALID_PRESCRIBED_SYNCHRONIZER_ID`,
+  splitwellValidator stays in `Set up app instance splitwell` until the init timeout 20:20:30 (zero
+  `SUBMISSION_ALREADY_IN_FLIGHT`); blast radius over the 4 remaining suites (0 succeeded). Fifth of the day.
+  11559 (2026-11-18, main e74e9bf844, simtime (4), SvTimeBasedRoundMgmt 'round management' setup, first suite): 1 -> 4
+  at 09:19:12.310, MED::sv4 add: sv2's push sequenced, sv3's, sv1's and sv4's rejected 103, 126 and 509 ms after the
+  switch (`P2P connectivity is not ready`); sv4 waits on mediator traffic, sv4Validator JVM exit 09:24:15
+  (`UserNotFound(sv4_validator_user)`), no report; same shape as 11400. splice#8363 still open.
+  11560 (same run, simtime (0), TrafficBasedRewardsSvAppTimeBased setup, first suite): 1 -> 4 at 09:20:22.362,
+  splitwellParticipant's VettedPackages broadcast on global rejected by sv1 256 ms after the switch (`P2P connectivity
+  is not ready`), not retried, outbox flush never closes; splitwell_provider never created, providerSplitwellBackend
+  JVM exit 09:24:26 (`UserNotFound(splitwell_provider)`), no report; same shape as 11408 and 11413.
+  11565 (2026-11-18, main 465b29cc47, simtime (0), TrafficBasedRewardsSvAppTimeBased setup, first suite): 1 -> 4 at
+  14:33:11.774, splitwellParticipant's VettedPackages broadcast on global rejected by sv1 288 ms after the switch
+  (`P2P connectivity is not ready`), not retried; splitwellValidator stuck in `Vet packages`, providerSplitwellBackend
+  JVM exit 14:37:08 (`UserNotFound(splitwell_provider)`), no report; same shape as 11560.
+  11643 (2026-11-19, main 1eafba3113, simtime (4), SvTimeBasedRoundMgmt round management, first suite): 1 -> 4 at
+  02:46:54.333, MED::sv3 add: sv3's push 285 ms before the switch, sv4's, sv1's and sv2's rejected 24, 154 and 926 ms
+  after it (`P2P connectivity is not ready`), not retried; sv3 waits on mediator traffic, sv3 init timeout
+  02:49:48.476, ResetDecentralizedNamespace fails, ResetTopologyStatePlugin sys.exit 02:51:01, no report; same shape
+  as 11407 and 11421. splice#8363 still open.
+  11668 (2026-11-19, release-line-0.10.2 b12a1318f6, Canton 3.7.3, simtime (2), TimeBasedTestNetPreview setup, second
+  suite): 1 -> 4 at 18:39:15.657, sv1 rejects PAR::sv3 and PAR::sv2 156 and 418 ms after the switch (`P2P connectivity
+  is not ready`); two joiners stuck (sv2 and sv3 both wait on mediator traffic), sv3 init timeout 18:42:40.417, report
+  kept (5 failed: blast radius plus teardown leak cascade). Third hit on the 0.10.2 line. splice#8363 still open.
+  11684 (2026-11-20, main ae237a8ac9, Canton 3.7.4 final, simtime (2), SvTimeBasedAmuletPrice amulet price votes and
+  metrics, second suite): 1 -> 4 at 12:06:47.939, MED::sv4 add: sv3's push 219 ms before the switch, sv4's, sv2's and
+  sv1's rejected 24-26 ms after it (`P2P connectivity is not ready`), not retried; sv4 waits on mediator traffic, sv4
+  init timeout 12:12:32.549, ResetDecentralizedNamespace fails, ResetTopologyStatePlugin sys.exit 12:13:45, no report;
+  same shape as 11407, 11421 and 11643. First hit recorded on Canton 3.7.4 final. splice#8363 still open.
+  11685 (same run, simtime (1), SvExpiredRewardsCollectionTimeBased setup, third suite): 1 -> 4 at 12:07:58.519
+  (epoch 112), MED::sv4 add: the pushes of sv3, sv1, sv2 and sv4 all rejected 26-691 ms after the switch (`P2P
+  connectivity is not ready`), not retried; sv4 waits on mediator traffic, sv4 init timeout 12:13:24.656, report kept
+  (6 tests passed, 4 suites aborted: this one plus blast radius into TokenStandardCliTestDataTimeBased,
+  WalletTxLogWithRewardsCollectionTimeBased and WalletAmuletPriceTimeBased, each sv1 init timeout). Same shape as
+  11415 and 11535. Second failed simtime shard of this family in one post-merge run. splice#8363 still open.
+  11686 (2026-11-20, main d3f9006367, Canton 3.7.4, simtime (0), TrafficBasedRewardsSvAppTimeBased setup, first suite):
+  1 -> 4 at 15:34:10.993, splitwellParticipant's VettedPackages broadcast on global rejected by sv1 3.25 s after the
+  switch (`P2P connectivity is not ready`, still 1 authenticated node at 15:34:16.563), not retried, outbox flush never
+  closes; splitwellValidator stuck in `Set up app instance splitwell` (its `Vet packages` step had finished 1.5 s
+  before the switch), splitwell_provider never created, providerSplitwellBackend JVM exit 15:38:13.899
+  (`UserNotFound(splitwell_provider)`), no report; same shape as 11413, 11560 and 11565. splice#8363 still open.
+  11687 (2026-11-20, main a0e7406501, Canton 3.7.4, simtime (0), TrafficBasedRewardsSvAppTimeBased setup, first suite):
+  1 -> 4 at 20:59:44.736, splitwellParticipant's VettedPackages broadcast on global rejected by sv1 4.78 s after the
+  switch (`P2P connectivity is not ready`, still 1 authenticated node at 20:59:50.899), not retried, outbox flush never
+  closes; splitwell_provider never created, providerSplitwellBackend JVM exit 21:03:37.087
+  (`UserNotFound(splitwell_provider)`), no report; same shape as 11686. splice#8363 still open.
+  11688 (same run, simtime (3), TimeBasedTestNetPreview setup, second suite): batch-never-ordered variant (11326,
+  11358). 1 -> 4 at 21:07:03.081; the serial-3 MediatorSynchronizerState adds of MED::sv3 and MED::sv4 were pushed
+  21:07:02.376-21:07:03.005, all accepted by the sv1 mempool; the four accepted 370 to 55 ms before the switch were
+  batched with reference epoch 72 and never ordered (zero `Rejecting submission request by`; the trace ends on
+  `Dropping network message to unknown SEQ::sv<N> (possibly unauthenticated as of yet)`). sv3 and sv4 wait on mediator
+  unlimited traffic until the sv3 init timeout 21:10:37.810; next suite fails sv1 init, its teardown leaks the
+  environment (H, 11347 shape). Confirm this variant per push: trace id of `Attempting to push`, then
+  `LocalBatchCreated ... reference epoch <old>` without `Block N being output` or `validated to` for its message id.
+  11690 (2026-11-22, scheduled mainnet-Daml run, main a0e7406501, Canton 3.7.4, simtime (2), TimeBasedTestNetPreview
+  setup, second suite): 1 -> 4 at 05:30:14.440, MED::sv4 add (serial 4): sv4's, sv1's and sv3's pushes 559 to 196 ms
+  before the switch, sv2's rejected 8 ms after it (`P2P connectivity is not ready`), not retried; sv4 waits on
+  mediator traffic, sv4Validator JVM exit 05:34:52.952 (`UserNotFound(sv4_validator_user)`), no report; same shape as
+  11400, 11410, 11540 and 11559. Third hit on a0e7406501 (11687, 11688). splice#8363 still open.
 
 ## C. False off-boarding conclusion during onboarding state transfer (10048 family) - FIXED
 - Signatures: `Received topology for epoch N, but this node isn't part of it (i.e., it has been off-boarded)` on a
@@ -280,6 +383,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
 ## E. Missing backports to release lines (check first for any release-line-* failure)
 - #7261 (minting delegation time jump), #7305 (per-port Vite deps cache, 10156 / 9704), #7304 (wallet allocation
   UI test, 10157 / 10120), #7299 (package downgrade in UnsupportedPackageVettingIntegrationTest, 10169 / 9965).
+- #8425 (f1e385ffac, ignore the BFT orderer wording of `Sequencer is unhealthy, so disconnecting all members`, parent
+  11211): not on release-line-0.10.2 or 0.10.1 as of 2026-11-19. Hit: 11662 (release-line-0.10.2, splitwellSequencer,
+  during Canton startup). Confirm: `DB_CONNECTION_LOST(13,...)` from the DB health check on the same sequencer seconds
+  before the WARN, `'sequencer' is now in state SequencerHealthStatus(active = true)` seconds after, and
+  `git show <sha>:project/ignore-patterns/canton_log.ignore.txt | grep -n 'unhealthy, so disconnecting'` showing only
+  the `Can't connect to database` wording.
 - Check: `git merge-base --is-ancestor <sha> origin/<line>`; `git log origin/<line>..origin/main -- <test file>`.
 
 ## F. Frontend test infrastructure
@@ -345,6 +454,9 @@ State as recorded in the family section, not rechecked against the tracker on 20
   PeriodicTask` (6016 aliceValidator 2025-10; 11364 sv2Scan 2026-11-11, SvOnboardingAddlIntegrationTest, reconnect by
   ReconcileSequencerConnectionsTrigger after sv4 sequencer appears). Confirm: the participant line with the same trace
   id 1 ms earlier, and `DisconnectSynchronizer ... received` on that participant just before it. Close as dup of 9445.
+  Third client-side hit 11645 (2026-11-19, main 1eafba3113, mainnet-Daml nightly wall-clock-time (8), Canton
+  3.7.4-snapshot.20261112): sv2Validator in SequencerPruningIntegrationTest, reconnect after the sv2 sequencer appears,
+  participant line 05:32:56.318, client lines .323-.325.
 
 
 ## H. Evidence loss
@@ -391,6 +503,17 @@ State as recorded in the family section, not rechecked against the tracker on 20
   unretried) reads in that gap: `TOPOLOGY_STORE_NOT_FOUND: Topology store '...::37-2' is not known`, sys.exit, job
   cancelled at 60 min. Confirm: the ListVettedPackages failure between `Setting status of ... 37-2) to Active` and
   `LSU: About to copy topology` on the same participant. Fix: retry the read (and the 10180 one, still unwrapped).
+- 11682 (variant C, third hit, 2026-11-20, main 7b71d35779, Canton 3.7.4): test 2 step "Restart sv2" runs at the
+  upgrade time by construction (the test sleeps until it, then stops and starts sv2). sv2Participant's automatic
+  LSU sets 37-0 to LSU source at 11:10:36.776 and 37-2 to Active at .789; the sv2 SV app's
+  `DsoPartyHosting.isDsoPartyAuthorizedOn` in `JoiningNodeInitializer.joinDsoAndOnboardNodes` (unretried, the
+  tolerance only applies with manualConnect=true) sends `ListPartyToParticipant` on the logical store at .788:
+  `TOPOLOGY_STORE_NOT_FOUND: No active synchronizer found`, sys.exit, job cancelled at 60 min. Confirm: the
+  `ListPartyToParticipant` failure from `SV=sv<n>` between `Setting status of ... to LSU source` and `Automatic upgrade
+  was successful` on the same participant. Not a duplicate of 11404 (other app, other read, its fix does not cover
+  it). Variant C call sites so far: `NodeInitializer.rotateOwnerToKeyMappingNotSignedByKeys` (10180),
+  `ParticipantAdminDarsConnection.vetDars` (11404), `JoiningNodeInitializer` (11682).
+  Fix branch `pperek/fix-11682-sv-init-dso-party-read-retry` (6189f34745): retry around the read, not pushed.
 - Checking an ignore pattern: `LINE=$(zcat ... | grep -a -m1 '<text>'); echo "$LINE" | rg -c -e '<pattern>'`.
 
 ## H3. Trigger pause timeout: `Waited 5 seconds. (TriggerTestUtil.scala:93)`
@@ -447,6 +570,16 @@ State as recorded in the family section, not rechecked against the tracker on 20
   NOT_CONNECTED_TO_SYNCHRONIZER and NOT_CONNECTED_TO_ANY_SYNCHRONIZER only. Fix: add
   `TransactionRoutingError.ConfigurationErrors.SubmissionSynchronizerNotReady` to `retryableErrorCodes`, branch
   `pperek/fix-11528-retry-submission-synchronizer-not-ready`. A hit on a sha with that fix is a different cause.
+- 10737 (dup 11531): BulkStorageCommitFromStagingTest "wait until all objects are known to the peers, and report
+  disagreement on consensus correctly" fails at line 341-342 with `forAtLeast(1) failed` and a WARN `The following
+  Scan URLs disagreed with consensus` that names only one of scan_5, scan_6 (`did not include substring "scan_5"` or
+  `"scan_6"`). In the last step all 7 mocked scans have data and the BFT call uses the first 2f + 1 = 5 whose
+  `hasData` callback lands (`BftCallExecutor` phase 1), so one disagreeing scan can be left out. Confirm in
+  `canton_network_test.clog.gz`: the `Found enough scans with available data: List(...)` line right before the last
+  WARN of the test lacks scan_5 or scan_6. Hits: 10737 (2026-10-28, PR run 40619618938), 11531 (2026-11-17, main
+  dbf2ab6c8f). Fix: splice PR #8083 (scans 0 and 1 report no data in the last step), open and approved since
+  2026-10-28, not merged as of 2026-11-17; 10737 was closed as completed without it. A hit on a sha with #8083 is a
+  different cause.
 
 
 ## K. Sim time: mediator pruning scheduler backoff after a jump of at least the retention period
@@ -592,6 +725,16 @@ State as recorded in the family section, not rechecked against the tracker on 20
 
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
+- 11680 (cimain docker preflight, 2026-11-20 11:10 UTC): `docker compose up` of the compose validator
+  (`build-tools/splice-compose.sh start`, DockerComposeValidatorPreflightIntegrationTest.scala:26) got one 502 from
+  the token endpoint of the image registry while downloading layers of `canton-participant`; the start is not
+  retried, test fails after 22 s, no container started. Confirm: private CI job output; the registry error comes
+  directly before `Failed to start docker-compose validator`. Rerun; hardening (pull retry in
+  `cluster/compose/validator/start.sh` or in the test) proposed, not written.
+- 11671 (image scan job, 2026-11-20 03:00 UTC): one of 50 `docker pull`s in `build-tools/docker-scan` was answered
+  as unavailable by the registry, neighbours fine, no GitHub incident; the pull had no retry (the Black Duck call
+  has 10). Confirm: private CI job output; the registry error comes directly before the make error of that image.
+  Fix branch `pperek/fix-11671-docker-scan-pull-retry` (pull retried 5 times).
 - Multi-arch image check (deployment_test, `scripts/check-multiarch-images.py`): one skopeo answer decides. 10150 = Docker Hub
   502 (`unable to inspect ... 502` on stderr); 10172 = no stderr line, response without a `manifests` list for a digest
   that is an index. Confirm with the registry probe in the 10172 packet. Fix: `ray/fix-multiarch-check-retry`.
@@ -612,6 +755,17 @@ State as recorded in the family section, not rechecked against the tracker on 20
   five runs at once, compile 12.5 min). 11365 (2026-11-11, release-line-0.9.4 62f3512, wall-clock-time (5), compile
   15 min, killed 15:48:20): third 0.9.4 hit after 11212 and 11231; passing 0.9.4 wall-clock-time (5) runs of 11-05
   used 35 and 39 min of the 40.
+  11660 (2026-11-19, release-line-0.10.1 c12f83f, wall-clock-time (0), Canton 3.7.2, compile 13 min, killed 13:27:18):
+  first hit recorded on 0.10.1, which also lacks #8319.
+  11661 (same run, wall-clock-time (4), compile 13 min, killed 13:28:56, 0 tests failed): second shard of that run.
+  11674 (2026-11-20, release-line-0.10.1 5ddb73d, resource-intensive (0), build 31 min of the 40 on a slow runner,
+  killed 05:12:20 with 2 tests succeeded, 0 failed): third 0.10.1 hit; passing wall-clock shards of that run used 40-45 min
+  of the step.
+  11675 (same run, wall-clock-time (8), build 32 min, killed 05:12:31 seven minutes into the first of nine suites,
+  0 failed): fourth 0.10.1 hit.
+  11676 (2026-11-20, release-line-0.10.0 500817c, wall-clock-time (0), Canton 3.7.1, build 11 min, killed 05:12:50
+  with six of eight suites finished, 37 tests succeeded, 0 failed): first hit recorded on 0.10.0, same backport
+  (#8521) and same hour as 11674/11675.
   Fix: splice #8319 (ray-roestenburg-da, merged 2026-11-05 21:06 UTC) compiles the tests in their own step before the
   timed step, in `.github/actions/tests/scala_test/action.yml` only. Covers GHA scala_test shards on main; release
   lines only once backported. Does not cover the CircleCI preflight jobs (11221, 10677, 10736:
@@ -655,10 +809,24 @@ State as recorded in the family section, not rechecked against the tracker on 20
   11417: the sv-da-1 job of the 16:01 Devnet Backup timed out on cantonBft (17:02) and cn-apps (18:28), each ready on
   the retry within minutes; participant is backed up last, started 18:53, after the 18:08 status check. Loop
   unchanged on main 6a996a302c.
+  11426 (11-15), 11522 (11-16), 11549 (11-17): three 18:00 checks in a row. 11549: the backup run timed out on one
+  database after another, each attempt restarting at the first, and the participant backup started hours late. Loop
+  unchanged on main facc9443d3.
+  11667 (11-19): two stale instances, an sv-da-1 participant and the sequencer of the SV runbook (namespace `sv`),
+  on the first run after the runbook node was added to the Devnet backup and to the status check. Expect runbook
+  instances in the stale list from now on. Loop unchanged on main 1e80ae1dea.
+  11677 (11-20): first Mainnet hit, an sv-da-1 participant stale at the 09:05 check (4 h threshold). Mainnet runs
+  node-backup.sh from splice release-line-0.10.0, which has neither #8310 nor #8520 (c20fdd262b, 11-17: await the same
+  operation, accept any successful backup of the description). The backup create ran over the client wait three
+  times, each retry made a second backup with the same RUN_ID description, and the status poll then saw two entries
+  that never compare equal to `SUCCESSFUL`. Needs the backport.
+  11683 (11-20): second Mainnet hit, 12:05 check, the other node: an sv-1 participant stale, same mechanism; the
+  backup had queued behind the earlier run. Release line unchanged at 500817c15d.
 - Cluster reset race (parent 11170): during `cncluster ci_reset_unlock` the `sv` stack deletes
   namespace `sv` while `sv-runbook` still uninstalls its Helm releases there; `uninstall: Release not loaded:
   cluster-ingress-sv: release: not found`, abort, other stacks `context canceled`. scratche 11170 (11-03), 11196
-  (11-05), 11343 (11-10); scratchnetc 11345 (11-10, first other cluster). Confirm: `[id=sv]` Namespace delete by `sv.sv.<cluster>` before the sv-runbook
+  (11-05), 11343 (11-10); scratchnetc 11345 (11-10, first other cluster); scratchnetd 11556 (11-17, third cluster,
+  namespace delete 21:12:47, release delete 21:12:53, error 21:13:01). Confirm: `[id=sv]` Namespace delete by `sv.sv.<cluster>` before the sv-runbook
   `[id=sv/cluster-ingress-sv]` Release delete.
 - GitHub incidents: CircleCI `Checkout submodule` or git clone failing with `Permission denied (publickey)` or
   `Repository not found` for canton-foundation/configs(-private) or splice. Parent 10213 (2026-09-23, Github flake);
@@ -920,6 +1088,27 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - Hits: 10739 (2026-10-28, simtime (1), Canton globalSequencerSv2; closed not planned), 11141 (2026-11-02,
   frontend-wall-clock-time (2), 7 app pools). Fix in test config: `connectionTimeout = 15000` in
   `apps/app/src/test/resources/include/storage-postgres.conf` (and the Canton test storage config). No ignore pattern.
+- 11533 (2026-11-17, wall-clock-time (3), mainnet-Daml nightly): not at shard start but at the 8th environment of the
+  shard (ScanIntegrationTest, one environment per test), 7 minutes in. One pool (splitwellValidator) timed out after
+  6.0 s, three others of the same environment connected after 1.2 to 2.5 s, all other 292 app pools of the shard
+  within 0.5 s. So the signature holds for any environment start, and the confirming grep is the same. 11523
+  (2026-11-16, wall-clock-time (9)) was closed as a duplicate without a packet here.
+- 11536 (2026-11-17, frontend-simtime (0), main): the 11141 shape again, first environment of the shard, all 7 app
+  pools time out after 6.288 s; the retry connects 662 ms after the WARN (359 ms after the retry started), so read
+  "within 300 ms" above as "on the first retry".
+- 11641 (2026-11-18, wall-clock-time (1), main): the 11533 shape, environment start of the 8th and last suite of the
+  shard (MultiHostValidatorOperatorIntegrationTest), 22 minutes in. 5 of 7 app pools time out after 6.009 s, the other
+  two connect after 2.7 s; the retries connect within 8 ms.
+- Variant, NOT confirmed by the grep above (11653, 2026-11-19, wall-clock-time (8), main): environment start of the 7th
+  suite (WalletSweepToValidatorOperatorIntegrationTest). The pools connect within 0.45 s, then Postgres stops
+  answering: the apps' `connId=db-migration` lock connections (Canton `DbMigrations.withDb`, one lock id for all apps
+  on `splice_apps`) get no answer for 15 s and five hit the 15 s network timeout of `DbLockedConnection`
+  (`SocketTimeoutException: Read timed out` in the DEBUG line `Failed to get lock owners`). Flagged: `Lock <id> was
+  lost` plus `Locked connection was lost, trying to rebuild` per app, WARN. Canton nodes quiet for the last 7 s with
+  `Task connection check read-only still not completed after 7500 milliseconds` (INFO). Confirm: `Read timed out` at
+  the first flagged timestamp, `Creating new DB lock` 15 s earlier, no `NoConnectionAvailable` (that is 10438, family
+  G). No splice fix (timeout and lock config are Canton), no ignore pattern. Packet
+  `11653-postgres-stall-migration-lock-read-timeout.md`.
 
 ## Note 2026-11-02
 - U: second hit 11107 (simtime, main 3525c637db), dup of 10907.
@@ -1030,6 +1219,24 @@ State as recorded in the family section, not rechecked against the tracker on 20
   blast radius. Confirm: `Timeout while waiting for initialization of sv<N>` in `Running setup` with the node's
   `app initialization` phases still advancing; compare `Finished loading package signatures` minus `Loading` against
   about 30 s.
+- 11550 (2026-11-17, frontend-wall-clock-time (2), main c20fdd262b, Canton 3.7.4-snapshot.20261112): dup of 11373,
+  same wait, sv3 first, `Onboarding mediator` 55 ms before the timeout. Not a slow runner (signature loading 30.9 s,
+  sv2 4m13s) and the DAR dedup is in (65 per SV, 0 repeats): sv3, the last joiner, spent 57.6 s in Canton's
+  `InitializeSequencerFromOnboardingStateV2` (sv2 3.6 s, sv4 2.6 s a minute earlier; topology import 25.5 s, 29
+  Flyway migrations over 23 s) while database writes were slow for every node from 19:01:03 (single-node splitwell
+  epochs 3 s to 5-10 s; cause not in the artifacts). Compare per joining SV: `InitializeSequencerFromOnboardingStateV2`
+  `received a message` to `sending response` on its sequencer. Remaining fixes: one overall init deadline, reset on
+  setup failure.
+- 11558 (2026-11-18, frontend-wall-clock-time (2), main 49d03025a2, scheduled mainnet-Daml nightly, Canton
+  3.7.4-snapshot.20261112): dup of 11373, slow-runner shape again: signature loading 61.1 s, sv1 2m38s, joiner vetting
+  100-113 s, sv3 `Onboarding sequencer` 1 s before the timeout (sequencer init itself 7.3 s, so not the 11550
+  variant). 6 suites aborted. Not Daml-version specific (same nightly shard green 11-14, 11-16, 11-17). Third hit in
+  8 days, two within 11 hours.
+- 11654 (2026-11-19, frontend-wall-clock-time (2), main 77c89208ee, attempt 1, Canton 3.7.4-snapshot.20261112): dup of
+  11373, 11550 side of the comparison: signature loading 31.3 s (runner CPU at baseline), but sv1 2m01s, joiner vetting
+  101-114 s, sv3 `onboard/sv/start` 37.6 s and domain time up to 21 s behind wall clock from 10:29 to 10:31 (cause not in
+  the artifacts). No joiner reached `Onboarding sequencer`; sv3 was retrying `add sv to Dso` 7 s before the timeout.
+  6 later environments aborted (one as a failed test, AnsAuth0FrontendIntegrationTest). Fourth hit in 9 days.
 
 ## AN. cimain SV backup snapshots a CometBFT volume on a CantonBFT cluster (node-backup.sh `enableBftSequencer // false`)
 - Signature: cni `Deploy cimain` (earlier CircleCI deploy_basic) `Backup cluster (sv-1|sv-da-1)`: `Backing up
@@ -1107,6 +1314,14 @@ State as recorded in the family section, not rechecked against the tracker on 20
   docker-large runners; the stalls ended 2.6 s apart (23:26:16.5, 23:26:19.1). No recurrence by 2026-11-10.
   Hardening if it recurs: one more attempt in `FrontendTestCommon.eventually` when the deadline passed during an
   attempt, plus a test-thread stack dump when an attempt exceeds the budget.
+- 11561 (2026-11-18, cimain docker preflight, splice e74e9bf844,
+  DockerComposeValidatorPreflightIntegrationTest tapAmulets, 115.7 s): dup, same point as 10920 (after the
+  `.tx-amount-amulet` text of the validator's own top-up tap, before `GetSpliceInstanceNames`). Lead: that call is
+  the first console HTTP command of the JVM, which builds `SpliceConsoleEnvironment.httpCommandRunner` and so loads
+  the package signatures of all DAR resources (lazy, unlogged, 30-61 s in the apps on CI shards); suites without
+  local apps (preflight, compose, LocalNet) pay it inside the `tapAmulets` attempt. Extra confirm for this variant:
+  `grep -a -c 'Running on '` before the stall is 0. Does not explain 10918 (no console command). Candidate fix:
+  resolve `amuletNameAcronym` before the `eventually`.
 
 ## AU. Retry budget includes external process startup (withCanton does not wait)
 - Signature: `Failed clue: We can tap and list after Canton restart and domain reconnection` with `Authorization
@@ -1180,6 +1395,18 @@ State as recorded in the family section, not rechecked against the tracker on 20
   Successor nodes are skipped when uninitialized, legacy nodes are not.
 - 11379 (2026-11-12, ciperiodic-lsu deploy_lsu_operator, splice 0.10.2-snapshot.20261111): parent. The pod without the
   legacy block (01:39:05) proceeded to `Onboarding sequencer ... through sponsoring SV`. Not AW (no P2P flips).
+- 11557 (2026-11-18, same workflow, job and step, splice 0.10.3-snapshot.20261117 facc9443): duplicate, confirmed.
+  The legacy block is in the SV app config on all three starts of the pod; the init failed twice after the retries
+  against the legacy sequencer ran out. The cluster config declares the pre-LSU migration as legacy from the retire
+  step until the archive step, and the SV redeploy and its preflight run in between. Also on the first run with
+  splice#7795 (snapshot download ok).
+- 11642 (2026-11-19, same workflow, job and step, splice 0.10.3-snapshot.20261118 e5938144): duplicate, confirmed.
+  Here the archive step overlapped the wait: the pod rolled out after it, without the legacy block, got through
+  the sequencer onboarding 4 minutes after the wait had ended. Second night in a row for a nightly workflow: hard
+  broken.
+- 11689 (2026-11-21, same workflow, job and step, splice 0.10.4-snapshot.20261120 a0e74065 = main tip, Canton
+  3.7.4): duplicate, confirmed. Same shape as 11642; the replacement pod got through 3 minutes after the wait had
+  ended. Third failure of this job in four nights (11-20 failed earlier, 11670).
 
 ## AZ. Cluster hostnames NXDOMAIN during the cluster certificate renewal (DNS-01 challenge hides the wildcard)
 - Signature (preflight canton_network_test.clog): `HTTP request failed` with `java.net.UnknownHostException:
@@ -1219,3 +1446,321 @@ State as recorded in the family section, not rechecked against the tracker on 20
   no env-ec threads). Trigger of the exhaustion unknown.
 - Parent 11405, first hit; 5549 (2025, closed without analysis) has the same warning in a setup.
 - Fix: none proposed; test infrastructure or Canton RemoteClock.
+
+## BC. Wait for a resumed wallet trigger starts while the SV closes the issuing round it uses (11532)
+- Signature: `WalletRewardsTimeBasedIntegrationTest ... 0E-10 was not greater than or equal to 1006.00 delta=0E-10
+  should be at least V2 coupons (1006.00) (WalletRewardsTimeBasedIntegrationTest.scala:299)` in a simtime shard.
+- Confirm (canton_network_test.clog, bobValidator end-user party of the validator, loggers TreasuryService and
+  CollectRewardsAndMergeAmuletsTrigger): after `Resuming trigger.`, `Batch failed with ABORTED:
+  LOCAL_VERDICT_LOCKED_CONTRACTS` then `Batch failed with NOT_FOUND: LOCAL_VERDICT_INACTIVE_CONTRACTS` on the same
+  contract id, then `Completing operation ... COO_MergeTransferInputs` after the `Failed clue: Bob's balance reflects
+  his own V2 coupon` timestamp; the contract id is the argument of sv1's `DsoRules_MiningRound_Close`
+  (ExpireIssuingMiningRoundTrigger) submitted within a second of the resume.
+- Mechanism: `advanceTimeForRewardAutomationToRunForCurrentRound` advances to 5 s past the issuing round's closing
+  time; the wait for bob's minting starts while sv1 closes that round, so bob's merge is rejected twice (locked,
+  then inactive from a stale round) before it succeeds without the round. Three round trips: 3-4 s normally, 27.7 s
+  when each takes 8-10 s.
+- 11532 (2026-11-17, simtime (1), main dbf2ab6c8f, mainnet-Daml nightly, Canton 3.7.4-snapshot.20261112): round trips
+  8-10 s from 05:50:52 to 05:57:04 (BFT epochs 17-33 s instead of 7-8 s on the 4-node ordering topology left by the
+  previous suite; PBFT round per block 0.3 s instead of 0.015 s). Cause of the slow window open; the 11375 check
+  (second shard of the run) could not be run, artifact download refused (egress limit).
+- Fix: `eventually(60.seconds)` in the clue, branch `pperek/fix-11532-wallet-rewards-v2-mint-wait` (edcac5eb9a, local,
+  not run). Does not address the slow window.
+
+## BD. Sponsor SV app deadlock: sequencer onboarding state queued behind a blocked ACS export (11539)
+- Signature (cluster deploy): the SV app Helm release of every joining SV times out, founding SV fine. In tests
+  expect a joining SV init timeout with the joiner logging `download onboarding snapshot <id> from sponsor ...
+  UNAVAILABLE: Onboarding snapshot <id> is queued` until the end.
+- Confirm on the sponsor SV app: `SvOnboardingSnapshotService` logs `Starting onboarding snapshot export <a>` for an
+  `Acs(...)` key with no `Finished` for it, then `Queued onboarding snapshot export <b> for
+  SequencerOnboardingState(...)` with no `Starting ... <b>`; on the sponsor sequencer the last `New epoch` has
+  `size = 2` (or the size that first includes the joiner) right after `below strong quorum size`, followed only by
+  `Dropping network message to unknown SEQ::<joiner>`. Zero `P2P connectivity is not ready`, zero blacklisting:
+  not family B.
+- Mechanism: since splice#7795 (69b922dca8, 2026-11-17) the sequencer onboarding state goes through the same export
+  queue as the DSO party ACS (#7794), default `parallelism = 1`. An ACS export for joiner X started just before
+  joiner Y's sequencer enters the ordering topology waits on the synchronizer (participant answers
+  `EFFECTIVE_PARTY_TO_PARTICIPANT_MAPPING_NOT_FOUND` every 120 s, retried inside the job); the synchronizer waits on
+  Y's sequencer, which waits on its queued onboarding state. Race: needs two joiners at one sponsor.
+- 11539 (2026-11-17, cimain cluster deploy, splice 08a89e8dcc, Canton 3.7.4-snapshot.20261112): sv-1 sponsor, ACS
+  export for sv-3 started 12:30:39.950, 1 -> 2 (sv-da-1) at 12:30:40.574, sv-da-1 state queued 12:30:41.144, frozen
+  until the Helm timeout 12:34:52. Evidence: private CI job output and cluster logs; not reproduced on this branch. Fix on local branch
+  `pperek/fix-11539-sequencer-snapshot-export-lane` (86631f9ed5).
+
+## BE. New cluster node cannot pull the istio sidecar image, registry.istio.io 403 (11541)
+- Signature (cluster deploy and its preflights): the preflight wait for the validator-app pod finds no pod, or
+  times out on it, until it gives up; the deploy job has several Helm releases of one namespace timing out at
+  once. No container log from the affected pods at all.
+- Confirm: private CI job output and cluster logs; not reproduced on this branch. The pulls of the istio proxy image fail with 403 Forbidden from registry.istio.io on the anonymous
+  token request, all from one node that registered minutes before; other nodes already have the image.
+- Not BD: zero `onboarding snapshot` lines on the sponsor SV app, and the joining SV app never starts.
+- Mechanism: the runbook stacks need more CPU than the cluster has, the autoscaler adds a node, the node has no
+  cached sidecar image and the registry refuses the pull; every pod with a sidecar on that node stays in
+  ImagePullBackOff, the Helm releases time out, later stacks (the validator of the SV runbook) are never created.
+- 11541 (2026-11-17, cimain, splice 772d394449, istio 1.30.5 since #7454): parent. One new node, first 403
+  16:01:58, still 403 at 18:35; last successful pull on any node 15:53:33. Open: registry-side change or rate limit
+  versus node-specific egress. Fix is infra (serve the istio images from a registry the cluster controls); no test
+  change.
+- Same cimain run: 11542 (SV preflight), 11544 (validator preflight; the awaited pod is itself on that node), 11545
+  (validator runbook deploy), 11546 (SV runbook deploy). The pull failures end a few minutes after the node joins
+  (the kubelet then reports only the back-off), so look from the start of the runbook deploy, not only over the
+  job's own window.
+- ciperiodic, full cluster deploys after a reset: 11547 (SV re-onboarding test; all three app nodes are new, so
+  every node is affected) and 11551 (upgrade test on release-line-0.10.2, 90 minutes later on the same three
+  nodes). A node need not be new: it only needs to lack the image, so every deploy on these nodes fails until the
+  registry answers again.
+- Later cimain deploys the same day: 11548, 11552, 11555. The node survives the cluster reset and gets pods of each
+  new deploy. Most pod-initializing lines of a deploy log are transient: only pods on the bad node carry the 403.
+
+## BF. Sv1BootstrapProtocolVersion36IntegrationTest GetId polls refused after the admin API is up (11228)
+- Signature: `sv1 bootstraps a fresh synchronizer with protocol version 36 and sv2 joins *** FAILED ***` with
+  `UNAVAILABLE: io exception. (Sv1BootstrapProtocolVersion36IntegrationTest.scala:98)`, `Failed clue: Canton nodes are
+  running but have no identity`.
+- Confirm: in canton-standalone-sv1-bootstrap-pv36.clog.gz,
+  `grep -a -E 'Starting admin-api services on AdminServerConfig\(127.0.0.1,Some\(27102\)'` is 40-60 s after
+  `Running clue: Canton nodes are running but have no identity` in canton_network_test.clog, yet the
+  `GetId to 127.0.0.1:27102: failed with UNAVAILABLE/io exception` polls after it fail in the millisecond they are
+  sent (`Connection refused`), and the standalone log has no `GetId` line.
+- Mechanism: the test builds its admin connections before withCantonSvNodes spawns Canton and polls them for 60 s per
+  node. Canton starts sequencers, mediators, participants in sequence with Flyway migrations each (45-55 s to the
+  participant admin API on a busy runner); the long-failing channel does not reconnect in the rest of the budget
+  (gRPC reconnect backoff, inferred, not verified). Test issue. Related pattern: AU (withCanton does not wait).
+- 11228 (2026-11-05, wall-clock-time (2), main fc8bacfc18, Canton 3.7.2), parent: admin API up 45 s in, 3 polls
+  refused.
+- 11553 (2026-11-17, wall-clock-time (7), main d52fe77b48, Canton 3.7.4-snapshot.20261112): admin API up 54.7 s in
+  (19:44:40.885), polls 19:44:44.458 and 19:44:46.199 refused.
+- Fix (proposed on 11228, not written): build the connections after Canton is up or use a fresh one per poll, and
+  raise the budget above the startup time.
+
+## BG. Compose override passes a HOCON substitution with a single `$`, docker compose blanks it (11562)
+- Signature: `Failed to start docker-compose validator (with auth) (DockerComposeValidatorFrontendIntegrationTest.scala:76)`
+  (or any `splice-compose.sh start -a`), `container splice-validator-validator-1 is unhealthy`,
+  `ERROR: Validator failed to become ready` seconds after the start.
+- Confirm: the job log has the docker compose warning
+  `grep -a '_participant_client_admin_api_auth_config.. variable is not set'`, and compose-validator.clog.gz has
+  `grep -a 'Failed to read config at startup'` with `/app/additional-config.conf: 16: Cannot concatenate object or
+  list with a non-object-or-list, Unquoted(\"canton.validator-apps.validator_backend.storage\")`.
+- Mechanism: `cluster/compose/validator/compose-enable-participant-admin-api-auth.yaml` (splice#8216, loaded by
+  `start.sh -a --enable-participant-admin-api-auth`) writes `${_admin_api_auth_service}` and
+  `${_participant_client_admin_api_auth_config}` (HOCON objects defined in the images) without the `$$` escape. The
+  validator gets `auth-config = ` with no value and cannot parse its config; the participant gets `auth-services=[]`
+  and starts with admin API auth off. Deterministic, not a flake: every run from main 8399d63908 on until fixed.
+- 11562 (2026-11-18, docker-compose (1), main 8399d63908, Canton 3.7.4-snapshot.20261112), parent: first run of the
+  path, the docker-compose job was skipped on every run of the PR.
+- 11563 (2026-11-18, docker-compose (1), main ec059037fa, the commit after #8216, Canton 3.7.4-snapshot.20261112):
+  same warning 12:48:30, `Failed to read config at startup` 12:48:42.066.
+- 11597 (2026-11-18, docker-compose (1), main 465b29cc47 (#8551), run 44322981802, Canton 3.7.4-snapshot.20261112):
+  same warning 14:59:37, `Failed to read config at startup` 14:59:49.995; override unchanged on origin/main 53e7efb8e2.
+- 11639 (2026-11-18, docker-compose (1), main 53e7efb8e2 (#8569), run 44364590139, Canton 3.7.4-snapshot.20261112):
+  same warning 18:40:57, `Failed to read config at startup` 18:41:06.565; no `cluster/compose` change since 465b29cc47.
+- Fix (2 lines, `$${...}`, uncommitted in worktree fix-11562, not verified): open point is whether the Auth0 test
+  tenant has the `https://participant_admin_api.example.com` API and a grant for the Docker-Compose Validator App.
+
+## BH. Main test sources do not compile after a merge race (11566)
+- Signature: every failed job of a post-merge main run (docs, static_tests and all scala_test shards) ends in
+  `[error] (<project> / Test / compileIncremental) Compilation failed`, no test runs.
+- Confirm, per job id:
+  `gh api --allow-escape-sequences repos/canton-network/splice/actions/jobs/<JOB>/logs | grep -a -c 'SvOnboardingSnapshotServiceTest.scala:361:42: wrong number of arguments for pattern'`
+  (1 = this occurrence). For a new occurrence, grep `\[error\] .*\.scala:[0-9]+:[0-9]+:` and find the two PRs.
+- Mechanism: splice#7796 (merged 2026-11-18 12:09Z) changed `SvOnboardingSnapshotService.SnapshotState.Ready` to
+  `Ready(file, sha256Base64)`; splice#8558, branched before it and not rebuilt, added `case Some(SnapshotState.Ready(_))`
+  to SvOnboardingSnapshotServiceTest and merged at 14:44Z. Hard broken, not a flake.
+- 11566 (2026-11-18, docs, main a4ca636ec0, run 44327510557), parent. Same line in all 35 failed jobs of
+  44327510557 and all 35 of 44328806873 (main 10de6749e0); issues 11566-11636 except 11597 (other run, BG).
+- 11637 (2026-11-18, cimain deploy, build tests job, splice 10de6749e0): same compile error. A later cimain run on
+  53e7efb8e2 built the tests green.
+- Fix: splice#8569 (53e7efb8e2, merged 17:58:38Z, `Ready(_, _)`); run 44364590139 has docs and static_tests green.
+
+## BI. validator1 with disableAuth: validator-app needs a participant admin API secret nobody installs (11638)
+- Signature (ciperiodic SV re-onboarding test, cluster deploy): the deploy step fails while every SV, splitwell and
+  infra namespace is healthy; only namespace validator1 keeps warning to the end of the job.
+- Confirm: private CI job output and cluster logs; not reproduced on this branch. The validator-app pod of validator1 waits on a participant admin API auth secret that does not
+  exist. Not BE: no sidecar image pull failures.
+- Mechanism: only this workflow deploys validator1 with `disableAuth=true`.
+  `installValidatorApp` then installs no validator secrets, but splice#8216 (8399d63908, merged 2026-11-18 10:49
+  UTC) renders `participantClient.adminApi.disableAuth` (and the participant's `adminApi.disableAuth`) from
+  `disableParticipantAdminApiAuth` only, so the chart references the missing secret. The mock config has the same
+  combination, so `cluster/expected/validator1` on main already shows `disableAuth: false` without the secret.
+  Hard broken from the first sv_reonboard run on a splice commit with #8216.
+- 11638 (2026-11-18, splice 10de6749e0): parent. Fix branch pperek/fix-11638-validator1-disable-auth-admin-api
+  (9eb5f3b841, not pushed): `disableAuth ||` the separate flag in common-validator validator.ts and participant.ts.
+- 11638 was closed 2026-11-19 09:16 UTC on the revert splice#8571 (e59381448e); the revert was reverted by
+  splice#8577 (5eff61ca40, merged 12:27 UTC) with the validator1 code unchanged, so BI is back on main.
+- 11666 (2026-11-19, splice c34a2a5b91, contains 5eff61ca40): expected BI by the code and the deployed
+  configuration, NOT confirmed from the cluster.
+- 11678 (2026-11-20, splice 6c71d08233, contains 5eff61ca40): confirmed. Fixed on main by splice#8617
+  (ae237a8ac9, merged 2026-11-20 11:43 UTC): `config.disableAuth ||` the separate flag in validator.ts and
+  participant.ts; the unpushed 11638 fix branch is superseded.
+
+## BJ. Release deploy reads main's v1 fixed-token cache, ledger API auth secrets without token (11640)
+- Signature (ciperiodic upgrade test, base release deploy): SV, scan, splitwell and validator app pods cannot start
+  because their ledger API auth secret has no `token` key.
+- Confirm: private CI job output and cluster logs; not reproduced on this branch. The deployed base must lack splice#8494 (ba914d47e5), and an earlier main deploy must have
+  rewritten the fixed-token cache secrets of the affected namespaces.
+- Mechanism: splice#8494 stores `{version: 1, <clientId>: {ledgerApi, participantAdminApi}}` under the same secret
+  name as before; release-line-0.10.2 `auth0.ts` parses each entry as `{accessToken, expiry}`, `new Date(undefined)`
+  is Invalid Date, the expiry check is false, the undefined `accessToken` is returned, and `ledgerApiSecretContent`
+  creates the Secret without `token`. #8216 forces the rewrite (new participant admin tokens). The caches live in
+  namespace default and survive the cluster reset.
+- 11640 (2026-11-18, base splice 48f45bf33): parent. The caches of four SV stacks and splitwell had been rewritten
+  by the 11638 run (splice 10de6749e0); the errors appear in exactly those five namespaces, validator1 (cache not
+  rewritten) has none.
+- 11656 (2026-11-19, same base splice 48f45bf33): dup, the next daily run. No cache write in between, same five
+  namespaces. #8216 was reverted and re-landed on main in between; irrelevant, the caches stay.
+- 11669 (2026-11-19, base splice b12a1318f, release-line-0.10.2 three backports later, still without #8494): dup, a
+  second run the same day, same five namespaces.
+
+## BK. Cluster reset: refresh of a Cloud SQL user fails 404 after its instance is gone (11644)
+
+The scheduled cluster reset refreshes then destroys every stack (`downStack` in splice
+`cluster/pulumi/pulumiOperations.ts`). When a Cloud SQL instance of the cluster's canton-network stack no longer
+exists in the cloud project, the refresh drops the instance from the state, but the read of a SQL user resource on
+it fails with a 404 for the missing instance; the refresh exits 1 and the abort cancels the other stacks. Sticky:
+the user stays in the state, so every hourly run fails until it is removed by hand (`pulumi state delete`). Not the
+Cluster reset race (11170): no missing Helm release error, and the first failed operation is the destroy of the
+canton-network stack.
+
+- Parent 11644 (scratchnetc, 2026-11-19 05:11; the deployment of the lock holder had been interrupted, 3 stacks
+  with pending create operations).
+- Duplicates, each confirmed from its own job log, all 2026-11-19 on scratchnetc: 11646 (06:19), 11647 (07:12),
+  11648 (08:15), 11652 (10:11), 11655 (11:10), 11657 (12:16). The runs at 09:12 and 13:11 failed too (conclusions
+  only).
+- Confirm: private CI job output; not reproduced on this branch.
+- Open: what deleted the instance outside the stack state; fix in the reset (tolerate the failed refresh or drop
+  children of a missing instance) is an owner decision.
+
+## BL. daml_test: damlc cannot create the script context, gRPC Deadline Exceeded (11651)
+
+`sbt damlTest` runs up to four `dpm test` processes at once (`Tags.limit(damlTestTag, 4)` in
+`project/BuildCommon.scala`, tuned for the large executor), each with its own script service JVM, on
+`self-hosted-k8s-small`. When the start of one process overlaps several heavy ones, the creation of the script
+context does not finish within the gRPC deadline and the whole module fails with a compiler diagnostic at `1:1-2:1`
+instead of test results; sbt reports `damlc test failed <package dir>`. No Daml code involved. Not the runner network
+failures of the same job (9172, 7205, 7172: github.com unreachable, ETIMEDOUT).
+
+- Signature: `ScriptBackendException {scriptNote = "Failed to create script context", scriptBackendError =
+  BErrorClient (ClientIOError (GRPCIOBadStatusCode StatusDeadlineExceeded` followed by `Finishing shakeRun (took
+  1m..s, completed)` and `[error] damlc test failed`.
+- 11651 (2026-11-19, main 7666260d8d, splitwell-test, TestSplitwell.daml: 75 s from process start to the
+  diagnostic, 16-18 s to `test: ok` in passing runs; three overlapping runs of over a minute, sbt 591 s against
+  437-460 s).
+- Earlier, before the catalogue: 6724 (2026-01-07, same module, same message), closed as duplicate of the catch-all
+  6681 (slow CI jobs, pod CPU maxed out at the time of the error), closed completed 2026-02-11.
+- Confirm: `grep -a -c 'Failed to create script context' job.clean.log` > 0 with `StatusDeadlineExceeded` on the
+  same line, and no `<module>.daml:<test>: ok` line for the module named in the `File:` line above it.
+- Open: runner CPU at the time (Grafana); owner decision between lower damlTest concurrency, a larger runner, a
+  longer script service timeout, or leaving it at this frequency.
+
+## BM. Frontend test navigates away while the register call of the onboarding button is pending (11658)
+
+`FrontendLoginUtil.withAuth0LoginCheck(onboardThroughWalletUI = true)` clicks "Onboard yourself" and returns when
+`#logged-in-user` is shown. The wallet UI shows it as soon as the 1 s `user-status` poll sees the WalletAppInstall,
+while `POST /v0/register` only returns after the ValidatorRight has been created too (one more transaction). A test
+that navigates right away (WalletAuth0FrontendIntegrationTest "persist user name on refresh" reloads,
+AnsAuth0FrontendIntegrationTest goes to the ANS UI) aborts the pending request; the onboarding mutation has
+`retry: 3`, and the old document sends the register again 1 s later, as long as the new page has not committed. The
+second register overlaps the first: createValidatorRight gets `SUBMISSION_ALREADY_IN_FLIGHT`, then
+`DUPLICATE_COMMAND`, logged at WARN by HttpValidatorHandler, HTTP 409. All tests pass, checkErrors fails.
+
+- Signature: `The operation 'createValidatorRight' failed with a non-retryable error, not retrying:` ...
+  `DUPLICATE_COMMAND` from `HttpValidatorHandler` of a validator in an Auth0 frontend suite.
+- 11658 (2026-11-19, main 5eff61ca40, frontend-wall-clock-time (1): click 12:43:30.347, navigate 12:43:34.645,
+  second register 12:43:35.649, first register 200 at 12:43:35.985, WARN 12:43:36.199).
+- Confirm: two `POST /api/validator/v0/register ... received request` lines of the same validator within the suite,
+  the second before the first `Responding with status code: 200`; in the browser log a `WebDriver:Navigate` between
+  the two `validator calling POST .../v0/register` lines, both from the same realm, and no `validator got response`.
+- Not the tap family (3536, 9207): there one HTTP request is retried by the wallet backend after a 10 s deadline.
+- Fix proposed, not committed or verified (packet 11658): wait for the URL `/transactions` in the helper. Product
+  side open: register is not idempotent under overlap (`SpliceUtil.createValidatorRight`), UI `retry: 3`.
+
+## BN. Un-retried `findAll` on a list the UI re-renders on its poll (11664)
+
+scalatest-selenium `findAll(...).toList` is one `FindElements` call plus two to three WebDriver round trips per
+element (tag name and `type` attribute, to build the typed element), about 50-100 ms per element on CI. The splice
+UIs poll every query each second. A list whose rows are keyed by contract id drops a row when the contract is
+recreated, and a reference held by the test goes stale. Inside `eventually` or the check of `actAndCheck` this is
+retried (StaleElementReferenceException is retryable there); a bare read between two blocks fails the test.
+
+- Signature: `org.openqa.selenium.StaleElementReferenceException`, `Command: [..., getElementAttribute {name=type,
+  ...}]`, stack `WebBrowser$Query.$anonfun$findAllElements$1` under a test line that is not inside `eventually`.
+- 11664 (2026-11-19, main c34a2a5b91, frontend-wall-clock-time (2)): SvFrontendIntegrationTest "can prepare an
+  onboarding secret for new validator", `val licenseRows = getLicensesTableRows` (SvFrontendIntegrationTest.scala:155).
+  sv2Validator's ReceiveFaucetCouponTrigger recorded liveness activity 16:00:39.035, which recreates its
+  ValidatorLicense (sv1 ingest 16:00:40.205); FindElements 16:00:40.554 (7 rows), UI poll 16:00:40.749-.813, fifth
+  row stale 16:00:40.896.
+- Confirm: job log `-> class name: validator-licenses-table-row]` with `getLicensesTableRows` and
+  `SvFrontendIntegrationTest.scala:155` in the stack; in the sv1 browser log a `sv calling GET
+  .../v0/admin/validator/licenses` between the `WebDriver:FindElements` of `.validator\\-licenses\\-table\\-row` and
+  the `stale element reference` answer.
+- Not the ANS search button entry of section F (11187): that one is a click on a button remounted by a debounced
+  lookup, already inside `eventuallyClickOn`.
+- Fix on a local branch, no PR: `val licenseRows = eventually()(getLicensesTableRows)`; the suite passes locally
+  with it (13 of 13), the race itself was not reproduced.
+
+## BO. Wait for a confirmed DSO action covers two round trips, one stuck behind a BFT epoch boundary and view change (11665)
+
+- Signature: `WalletTimeBasedIntegrationTest ... allow a user to list multiple subscriptions in different states`,
+  `had length 1 instead of expected length 2 (WalletTimeBasedIntegrationTest.scala:105)`, clue `(check) subscription
+  is created` in a simtime shard, in a loop iteration after the 10 d advance.
+- Confirm (canton_network_test.clog, `SV=sv1`): AnsSubscriptionInitialPaymentTrigger `Completed processing with
+  outcome: confirmed to create ans entry` within the wait, ExecuteConfirmedActionTrigger `Acquired lock after
+  PT0.0...S` (lock free, so not BA), and its `SubmitAndWaitForTransaction ... succeeded(OK)` after the `Failed clue`
+  timestamp. In canton-simtime.clog, by the trace id of that submission: `Phase 4: Sending` to `Phase 5: Received`
+  tens of seconds apart, the response batch `Ignoring proposal because we cannot assign more slots` at the end of an
+  epoch, and `moving from view number 0 to 1 after reaching local timeout` in the next epoch.
+- Mechanism: the Subscription is created by sv1 in two sequential ledger round trips after alice accepts the request.
+  On the 4-node ordering topology the previous suite leaves behind (80 blocks per epoch, 7-8 s per epoch when
+  healthy), a message batched after its sequencer used the last slot of its segment waits for the next epoch. In
+  11665 that epoch started with pre-prepare writes of 1.4-3.3 s on all four sequencers, the 5 s PBFT timer fired, all
+  four segments changed view, the proposed block was dropped and the batch was ordered an epoch later: 31 s for the
+  two confirmation responses, 35.5 s for the round trip, 44 s from the start of the 20 s wait.
+- 11665 (2026-11-19, simtime (5), main dacc71079a, Canton 3.7.4): epochs 79 and 80, 23.7 s and 25.5 s (17:24:12 to
+  17:25:01), right after `advancing time by PT240H` and `PT10M`; sv1Scan's Postgres writes stay at 1-3 ms in the same
+  seconds, no JVM pause. Why the sequencers' writes stall is not visible in the artifacts.
+- Related slow ordering windows, cause open in each: 11532 (BC, simtime, also the suite after
+  TimeBasedTestNetPreviewIntegrationTest, epochs 17-33 s for 6 min), 11375 (wall-clock, two shards at once, infra).
+- Fix: `actAndCheck(timeUntilSuccess = 60.seconds)` on the `Accept subscription request` check, on the local branch
+  `pperek/fix-11665-wallet-subscription-created-wait` (155cd7a595), no PR; Test/compile and the suite pass locally
+  (3 of 3), the slow window was not reproduced. Does not address the slow window.
+
+## BP. Stacks read the infra auth0 output before the infra stack adds the participant admin audience (11670)
+- Signature (ciperiodic deploy through the Pulumi operator, main with #8216/#8577, after a release-line deploy
+  without it on the same cluster): token requests of the stacks fail on a missing audience parameter (auth0.ts,
+  `clientCredentialsGrant`), participants reject their own apps on an audience mismatch for about 12 minutes, the
+  operator stops retrying sv-runbook at its retry limit, and namespace sv ends with a scan app and no SV app.
+- Confirm: private CI job output and cluster logs; not reproduced on this branch. Not BJ: no missing-token secret error after the deploy starts.
+- Mechanism: the operator runs all stacks at once. `getParticipantAdminApiAudience` and
+  `participantAdminApiSecretContent` read `audiences.participantAdminApi` from the infra stack output without a
+  check. Before the infra update finishes, token requests throw (fast failed updates) and participant charts are
+  installed with the literal `undefined` as admin API target audience, so SV and splitwell apps get UNAUTHENTICATED
+  from their own participant until the stack's first update times out (13 min) and the retry redeploys. validator1
+  crash-loops on the scan connection meanwhile. sv-runbook needs validator1 within 175 s per update
+  (`getValidator1PartyId`, 20 retries) and normally spends one failed update on that; operator 2.10.0 stops after
+  the fourth failure (`maxUpdateFailures = 3`, counter from 0). A stack whose first update succeeded (sv-canton.sv)
+  keeps the `undefined` participant.
+- 11670 (2026-11-20, ciperiodic LSU test, base deploy, splice dbb2a2c9d, after the release deploy of 11669): parent.
+  Four failed sv-runbook updates (two on the audience, two on the validator1 wait) reach the retry limit; the
+  audience mismatch lasts about 12 minutes in the four SV namespaces and splitwell.
+- Fix (not written, owner decision): throw on a missing audience instead of rendering `undefined`; order or gate the
+  dependent stacks on the infra stack; a longer validator1 wait in sv-runbook; re-request reconciliation of a stack
+  at the retry limit. Ends by itself once the release line on ciperiodic carries the audience.
+
+## BQ. Joining SV: domain time trigger gives up before the sponsor SV is ready (11673)
+- Signature (log check only, tests pass): ERROR `Skipping processing of PeriodicTask(...) due to unexpected failure`
+  from `DomainTimeIngestionTrigger:<suite>/config=.../SV=sv<2-4>` with `INVALID_ARGUMENT: Not connected to any
+  synchronizer with id global-domain::...`, during the environment setup of a suite that starts all SVs at once.
+- Confirm (`canton_network_test.clog`, lines of that SV): `RegisterSynchronizer ... succeeded` about 110 s before the
+  ERROR, `Total maximum number of retries 35 exceeded` 2 ms before it, `Got 'DSO party ID from sponsoring SV'` and the
+  first `ReconnectSynchronizers` only after it; on sv1 `SV1Initializer bootstrapping Dso finished after` above about
+  1m45s. Not 8190 (same line, but a connected validator whose reconnect after a sequencer config change never
+  completed) and not 9445 (`GetConnectedSynchronizers ... INTERNAL`).
+- Mechanism: `JoiningNodeInitializer` registers the synchronizer (handshake only) and then waits for the sponsor's
+  `/v0/dso`. The trigger skips NOT_FOUND from `getSynchronizerId` (not registered yet) but retries the "not connected"
+  answer of `FetchTime` with the default budget. In tests the sponsor sv1 bootstraps at the same time; its DSO
+  bootstrap is dominated by the DAR uploads on a cold Canton (87 with 22 repeats before #8467, 65 after).
+- 11673 (2026-11-20, release-line-0.10.1 5ddb73d3d9, roll-forward-lsu (1), Canton 3.7.2): sv1 bootstrap 108.8 s (87
+  uploads in 91 s, mean 3.04 s; 32 s on 2026-11-12 in the 11384 run), sv4 gives up 04:50:10.450, sponsor answers
+  04:50:11.607; sv2 and sv3 at 31 and 33 failures. Signature loading 49.9 s (1.35x to 1.65x slow runner). Parent.
+- Fix (not written, owner decision): return `TaskNoop` for the "not connected" answer in
+  `DomainTimeIngestionTrigger.completeTask` (production log semantics change), or backport #8467 (87d584aa16) to the
+  release lines below 0.10.3 (shortens the window only).
