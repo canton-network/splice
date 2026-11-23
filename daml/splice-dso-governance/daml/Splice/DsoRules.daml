@@ -2308,14 +2308,13 @@ template DsoRules with
           -- fields are preserved.
         newInfo : SvRightOwnerInfo
           -- ^ The target info.
-          -- Beneficiaries can't be modified using this choice.
+          -- The beneficiaries and default beneficiary of existing SV node assignments can't be modified using this choice.
           -- SV Right Owners can use DsoRules_UpdateSvRightOwnerBeneficiaries instead.
       controller dso
       do
         requireOnLedgerSvRightOwners this
         requireSvRightOwnerExists this name
-        require "Beneficiaries cannot be changed through DsoRules_UpdateSvRightOwnerInfo" $
-          baseInfo.beneficiaries == newInfo.beneficiaries
+        requireSameBeneficiaries baseInfo newInfo
         requireRewardNodeOperatorExists this newInfo
         requireValidSvRightOwnerInfo newInfo
         now <- getTime
@@ -2343,6 +2342,7 @@ template DsoRules with
         assertWithinDeadline "updateSvRightOwnerInfoInstruction.expiresAt" instruction.expiresAt
         currentSvRightOwner <- fetchAndArchive (ForSv with dso; svName = instruction.name) svRightOwnerCid
         let info = patch instruction.newInfo instruction.baseInfo currentSvRightOwner.info
+        requireSameBeneficiaries currentSvRightOwner.info info
         requireRewardNodeOperatorExists this info
         requireValidSvRightOwnerInfo info
         svRightOwner <- create currentSvRightOwner with info
@@ -2368,17 +2368,24 @@ template DsoRules with
       with
         name : Text -- ^ The name of the SV right owner whose beneficiaries are set.
         baseInfo : SvRightOwnerInfo
+          -- ^ The info that this update was created against.
         newInfo : SvRightOwnerInfo
+          -- ^ The target info; only the beneficiaries and default beneficiaries of existing SV node assignments may differ from `baseInfo`.
         rightOwner : Party -- ^ The party of the SV rights owner.
       controller rightOwner
       do
         requireOnLedgerSvRightOwners this
         requireSvRightOwnerExists this name
-        currentSvRightOwner <- fetchAndArchive (ForSv with dso; svName = name) svRightOwnerCid
+        (svRightOwnerCid, currentSvRightOwner) <- fetchByKey @SvRightOwner (SvRightsOwnerKey with dso; name)
         require "Beneficiaries are set by the SV right owner itself" $
           currentSvRightOwner.info.rightOwnerParty == rightOwner
-        let info = currentSvRightOwner.info with beneficiaries
+        let withoutBeneficiaries info = info with svNodeAssignments = fmap (\assignment -> assignment with beneficiaries = Map.empty; defaultBeneficiary = dso) info.svNodeAssignments
+        require "Only beneficiaries are changed through DsoRules_UpdateSvRightOwnerBeneficiaries" $
+          withoutBeneficiaries baseInfo == withoutBeneficiaries newInfo
+        let info = patch newInfo baseInfo currentSvRightOwner.info
         requireValidSvRightOwnerInfo info
+        -- Fetched via `fetchByKey` above
+        potentiallyUnsafeArchive svRightOwnerCid
         svRightOwner <- create currentSvRightOwner with info
         return DsoRules_UpdateSvRightOwnerBeneficiariesResult with svRightOwner
 
@@ -2386,18 +2393,19 @@ template DsoRules with
       -- ^ Rotate the party of an SV right owner, e.g., to move it to a new key.
       with
         name : Text -- ^ The name of the SV right owner whose party is rotated.
-        svRightOwnerCid : ContractId SvRightOwner
-        newRightOwnerParty : Party -- ^ The new party; must not be one of the beneficiaries.
-        currentRightOwnerParty : Party -- ^ The current party of the SV right owner; must own `svRightOwnerCid`.
+        newRightOwnerParty : Party -- ^ The new party; the default beneficiaries are not changed.
+        currentRightOwnerParty : Party -- ^ The current party of the SV rights owner.
       controller currentRightOwnerParty
       do
         requireOnLedgerSvRightOwners this
         requireSvRightOwnerExists this name
-        currentSvRightOwner <- fetchAndArchive (ForSv with dso; svName = name) svRightOwnerCid
+        (svRightOwnerCid, currentSvRightOwner) <- fetchByKey @SvRightOwner (SvRightsOwnerKey with dso; name)
         require "The party is rotated by the SV right owner itself" $
           currentSvRightOwner.info.rightOwnerParty == currentRightOwnerParty
         let info = currentSvRightOwner.info with rightOwnerParty = newRightOwnerParty
         requireValidSvRightOwnerInfo info
+        -- Fetched via `fetchByKey` above
+        potentiallyUnsafeArchive svRightOwnerCid
         svRightOwner <- create currentSvRightOwner with info
         return DsoRules_UpdateSvRightOwnerPartyResult with svRightOwner
 
@@ -2436,6 +2444,16 @@ requireRemovableSvRightOwner this name = do
   requireSvRightOwnerExists this name
   require "There is more than one SV right owner" $
     Set.size (getSvRightOwners this) > 1
+
+requireSameBeneficiaries : SvRightOwnerInfo -> SvRightOwnerInfo -> Update ()
+requireSameBeneficiaries reference info =
+  require "Beneficiaries cannot be changed through DsoRules_UpdateSvRightOwnerInfo" $
+    all sameBeneficiaries (TextMap.toList info.svNodeAssignments)
+  where
+    sameBeneficiaries (svNodeAssignmentId, assignment) = case TextMap.lookup svNodeAssignmentId reference.svNodeAssignments of
+      None -> True
+      Some referenceAssignment ->
+        (referenceAssignment.beneficiaries, referenceAssignment.defaultBeneficiary) == (assignment.beneficiaries, assignment.defaultBeneficiary)
 
 requireRewardNodeOperatorExists : DsoRules -> SvRightOwnerInfo -> Update ()
 requireRewardNodeOperatorExists this info =

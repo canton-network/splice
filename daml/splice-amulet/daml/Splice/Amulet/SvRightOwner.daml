@@ -10,7 +10,7 @@ import DA.Map (Map)
 import qualified DA.Map as Map
 import DA.TextMap (TextMap)
 import Splice.Types (ForDso(..))
-import Splice.Util (HasCheckedFetch(..), Patchable(..), patchListAsScalar, require)
+import Splice.Util (HasCheckedFetch(..), Patchable(..), patchScalar, require)
 
 data SvRightsOwnerKey = SvRightsOwnerKey with
     dso : Party
@@ -61,8 +61,9 @@ data SvNodeAssignment = SvNodeAssignment
       -- ^ The weight held in escrow; minted as one coupon to `escrowParty`, which is not claimed and expires into the unclaimed rewards. Changed only by a vote.
     escrowParty : Party
       -- ^ Receives the coupon for the escrowed weight, e.g., today's ghost party of the owner. Changed only by a vote.
-    beneficiaries : [BeneficiaryInfo]
-      -- ^ At most 20 beneficiaries, paid in order until no weight remains.
+    beneficiaries : Map Party BeneficiaryInfo
+      -- ^ Map of beneficiaries and their percentages of `rewardWeight`.
+      -- At most 20 beneficiaries are allowed to bound the number of coupons minted per round.
     defaultBeneficiary : Party
       -- ^ Receives the weight not paid to the beneficiaries.
   deriving (Eq, Show, Serializable)
@@ -73,21 +74,31 @@ instance Patchable SvNodeAssignment where
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
       escrowedRewardWeight = patch new.escrowedRewardWeight base.escrowedRewardWeight current.escrowedRewardWeight
       escrowParty = patch new.escrowParty base.escrowParty current.escrowParty
-      beneficiaries = patchListAsScalar new.beneficiaries base.beneficiaries current.beneficiaries
+      beneficiaries = patch new.beneficiaries base.beneficiaries current.beneficiaries
       defaultBeneficiary = patch new.defaultBeneficiary base.defaultBeneficiary current.defaultBeneficiary
 
 -- | Information about a beneficiary.
 data BeneficiaryInfo = BeneficiaryInfo
   with
-    beneficiary : Party
-    weight : Int
+    rewardRatio : Decimal
+      -- ^ The proportion of the reward weight of the SV node assignment that is shared with this beneficiary. It should be >0.0 and <=1.0
   deriving (Eq, Show, Serializable)
+
+instance Patchable BeneficiaryInfo where
+  patch new base current = BeneficiaryInfo
+    with
+      rewardRatio = patchScalar new.rewardRatio base.rewardRatio current.rewardRatio
 
 svRightOwnerInfoChecks : [(SvRightOwnerInfo -> Bool, Text)]
 svRightOwnerInfoChecks =
-  [ (all ((>= 0) . (.rewardWeight)) . (.svNodeAssignments), "SV right owner's reward weight is non-negative")
-  , (all (all ((> 0) . (.weight)) . (.beneficiaries)) . (.svNodeAssignments), "Beneficiary weights are positive")
-  , (all ((<= 20) . length . (.beneficiaries)) . (.svNodeAssignments), "There are at most 20 beneficiaries")
+  map (\(check, message) -> (all check . (.svNodeAssignments), message)) svNodeAssignmentChecks
+
+svNodeAssignmentChecks : [(SvNodeAssignment -> Bool, Text)]
+svNodeAssignmentChecks =
+  [ (\SvNodeAssignment{..} -> rewardWeight >= 0, "SV right owner's reward weight is non-negative")
+  , (\SvNodeAssignment{..} -> all ((> 0.0) . rewardRatio) beneficiaries, "Beneficiary reward ratios are positive")
+  , (\SvNodeAssignment{..} -> sum (fmap (.rewardRatio) beneficiaries) <= 1.0, "Beneficiary reward ratios add up to at most 1.0")
+  , (\SvNodeAssignment{..} -> Map.size beneficiaries <= 20, "There are at most 20 beneficiaries")
   ]
 
 validSvRightOwnerInfo : SvRightOwnerInfo -> Bool
@@ -100,9 +111,7 @@ requireValidSvRightOwnerInfo info =
 -- | The absolute reward weight for each party that receives rewards in the context of this SV node assignment.
 svRewardCouponWeights : SvNodeAssignment -> Map Party Int
 svRewardCouponWeights SvNodeAssignment{..} =
-  Map.filter (> 0) $ Map.insertWith (+) defaultBeneficiary remainingWeight $ Map.fromListWithR (+) paidWeights
+  Map.insertWith (+) defaultBeneficiary remainingWeight beneficiaryWeights
   where
-    (remainingWeight, paidWeights) = foldl pay (rewardWeight, []) beneficiaries
-    pay (remaining, paid) BeneficiaryInfo{beneficiary, weight} =
-      let paidWeight = min weight remaining
-      in (remaining - paidWeight, (beneficiary, paidWeight) :: paid)
+    remainingWeight = rewardWeight - sum beneficiaryWeights
+    beneficiaryWeights = fmap (\BeneficiaryInfo{rewardRatio} -> floor (intToDecimal rewardWeight * rewardRatio)) beneficiaries
