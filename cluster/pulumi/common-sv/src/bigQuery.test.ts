@@ -202,7 +202,12 @@ describe('configureScanBigQuery', () => {
     }
     const appends = [...bodies].filter(([routineId]) => routineId.startsWith('sp_append_'));
     expect(appends).toHaveLength(6);
-    const checking = new Set(['scan_verdict_store', 'app_activity_record_store']);
+    const checking = new Set([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
     for (const [routineId, body] of appends) {
       const tableName = routineId.replace('sp_append_', '');
       expect(body).not.toContain('{{');
@@ -272,10 +277,15 @@ describe('configureScanBigQuery', () => {
         .split('\n')
         .map(call => /^ {2}CALL `[\w.-]+\.sp_fix_prod_schema_(\w+)`\(\);$/.exec(call)?.[1])
         .filter(tableName => tableName)
-    ).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    ).toEqual([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
     // each CALL in its own block, so that a failing one doesn't skip
     // the others
-    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(2);
+    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(4);
     expect(fixQuery).toContain("RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');");
     const [, appendSchedule] = queries.get('mock_scan_verdict_store Hourly Append Pipeline')!;
     expect(fixSchedule).not.toBe(appendSchedule);
@@ -431,7 +441,12 @@ describe('replicatedTablesFor', () => {
     const migrating = Object.entries(replicatedTablesFor('V074__string_interning.sql'))
       .filter(([, table]) => table.migratesSchema)
       .map(([tableName]) => tableName);
-    expect(migrating).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    expect(migrating).toEqual([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
   });
 
   // Production tables keep the columns they were created with, and
