@@ -33,11 +33,6 @@
       pass through the `Range` and `Content-Range` headers; otherwise interrupted downloads start again
       from the beginning.
 
-  - Daml
-
-    - The versions of `splice-util-batched-markers` and `splice-util-token-standard-wallet` that validators vet
-      now follow the voted `splice-wallet` version, which depends on them.
-
   - Deployment
 
     - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
@@ -103,6 +98,9 @@
         SV apps pass the node states once this version is vetted.
 
       - Security hardening: add extra assertions to the `WalletAppInstall` choices.
+
+      - `splice-wallet` now depends on `splice-util-batched-markers` and `splice-util-token-standard-wallet`.
+        The versions of these packages that validators vet now follow the voted `splice-wallet` version.
 
       - All Canton Coin transactions now emit token standard V2 transaction-history events, i.e.,
         `EventLog_HoldingsChange` events reported by the DSO party. Clients can rely on these events
