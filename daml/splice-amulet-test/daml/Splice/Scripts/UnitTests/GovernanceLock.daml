@@ -5,6 +5,7 @@ module Splice.Scripts.UnitTests.GovernanceLock where
 
 import DA.Assert
 import DA.Optional
+import DA.Text qualified as Text
 import DA.TextMap qualified as TextMap
 
 import Daml.Script
@@ -12,6 +13,7 @@ import Daml.Script
 import Splice.Api.Token.MetadataV1
 import Splice.GovernanceLock
 import Splice.GovernanceLock.Request
+import Splice.TextLimits (textTooLongFailure)
 import Splice.TokenStandard.Utils
 
 testAdmin : Party
@@ -36,6 +38,20 @@ test_parseGovernanceLockRequestTSv1_memo = do
     fullSpecification === FullLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv"
   where
     parse = parseGovernanceLockRequestTSv1 testAdmin lockManagerParty None
+
+-- | The SV name of a lock request is bounded in length; the limit is spelled out to notice accidental changes.
+test_parseGovernanceLockRequestTSv1_svNameLimit : Script ()
+test_parseGovernanceLockRequestTSv1_svNameLimit = do
+    GLR_CreateGovernanceLock{fullSpecification} <- parse (svName 255)
+    fullSpecification === FullLockSpecification with kind = GLK_SuperValidatorRightsOwner (svName 255)
+    result <- tryFailureStatus (parse (svName 256))
+    case result of
+      Left failure -> failure === textTooLongFailure "svName" 255 256
+      Right request -> fail $ "Expected a failure, but parsed " <> show request
+  where
+    svName nameLength = Text.implode (replicate nameLength "s")
+    parse name = parseGovernanceLockRequestTSv1 testAdmin lockManagerParty None $ Metadata $
+      TextMap.singleton reasonMetaKey ("cip-127/memo:request=create-lock&lock-kind=sv-lock&lock-subject=" <> name)
 
 -- | Round-trip testing to cover the GovernanceLockKind space in the parsers.
 -- A lock's memo, with a request added, parses back to the lock's specification.

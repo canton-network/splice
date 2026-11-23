@@ -132,7 +132,7 @@ test_governanceLockKindParser = do
   expectErrors ["Invalid SV name for sv-lock: " <> invalidSVName] $
     run [kind GLT_SuperValidator, subject invalidSVName]
 
-  -- The length of SV names is checked by `requireGovernanceLockKindWithinTextLimits`, not by the parser
+  -- The length of SV names is checked by `parseGovernanceLockRequestTSv1`, not by this parser
   let longSvName = Text.implode (replicate 256 "s")
   expectSuccess (GLK_SuperValidatorRightsOwner longSvName) $ run [kind GLT_SuperValidator, subject longSvName]
 

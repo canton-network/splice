@@ -27,6 +27,7 @@ module Splice.GovernanceLock.Request (
 
 import Prelude hiding (forA)
 import DA.Action (unless)
+import DA.Fail (ActionFailWithStatus)
 import DA.Assert
 import DA.NonEmpty qualified as NonEmpty
 import DA.Optional
@@ -45,6 +46,7 @@ import Splice.ExternalPartyConfigState
 import Splice.GovernanceLock
 import Splice.GovernanceLock.Substitution
 import Splice.GovernanceLock.Transfer
+import Splice.TextLimits (maxIdentifierLength, requireMaxLength)
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 import Splice.TokenStandard.Utils.Internal.Conversions (relTimeFromMeta, timeFromMeta)
 import Splice.Util
@@ -122,12 +124,6 @@ governanceLock_transferFactoryV1_transferImpl dso actors arg@V1.TransferFactory_
 
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
   request <- parseGovernanceLockRequestTSv1 dso transfer.receiver state.governanceLockConfig transfer.meta
-  requireGovernanceLockKindWithinTextLimits $ case request of
-    GLR_CreateGovernanceLock{fullSpecification} -> fullSpecification.kind
-    GLR_UnlockGovernanceLock{fullSpecification} -> fullSpecification.kind
-    GLR_TransferLock{specification} -> governanceLockKind specification
-    GLR_WithdrawVestingLock{vestingSpecification} -> vestingSpecification.kind
-    GLR_SubstituteLock{target} -> governanceLockKind target.specification
 
   case request of
     GLR_CreateGovernanceLock{fullSpecification} ->
@@ -494,10 +490,28 @@ governanceLockRequestTSv1Parser dso receiver config = governanceLockRequestTagPa
     checkReceiverIsLockManager =
       unless (receiver == lockManagerParty) $ assertFail ("Invalid receiver: '" <> show receiver <> "'")
 
-parseGovernanceLockRequestTSv1 : CanAssert m => Party -> Party -> Optional GovernanceLockConfig -> Metadata -> m GovernanceLockRequest
+-- | Parse a TSv1 governance lock request from the metadata of a transfer.
+-- Fails with `textTooLongFailure` if the SV name of the lock kind is too long.
+parseGovernanceLockRequestTSv1
+  :  (CanAssert m, ActionFailWithStatus m)
+  => Party -> Party -> Optional GovernanceLockConfig -> Metadata -> m GovernanceLockRequest
 parseGovernanceLockRequestTSv1 dso receiver config rawMeta = do
   meta <- parseGovernanceLockMetadata rawMeta
-  assertParsed (governanceLockRequestTSv1Parser dso receiver config) meta
+  request <- assertParsed (governanceLockRequestTSv1Parser dso receiver config) meta
+  -- Checked here rather than in the parser, as the parser cannot fail with a `FailureStatus`.
+  requireGovernanceLockKindWithinTextLimits $ case request of
+    GLR_CreateGovernanceLock{fullSpecification} -> fullSpecification.kind
+    GLR_UnlockGovernanceLock{fullSpecification} -> fullSpecification.kind
+    GLR_TransferLock{specification} -> governanceLockKind specification
+    GLR_WithdrawVestingLock{vestingSpecification} -> vestingSpecification.kind
+    GLR_SubstituteLock{target} -> governanceLockKind target.specification
+  pure request
+
+requireGovernanceLockKindWithinTextLimits : ActionFailWithStatus m => GovernanceLockKind -> m ()
+requireGovernanceLockKindWithinTextLimits kind = case kind of
+  GLK_FeaturedApp _ -> pure ()
+  GLK_ProvisionalFeaturedApp _ -> pure ()
+  GLK_SuperValidatorRightsOwner svName -> requireMaxLength "svName" maxIdentifierLength svName
 
 amountParser : Text -> Parser Metadata Decimal
 amountParser key = requiredMetadataParser key >>= \t ->

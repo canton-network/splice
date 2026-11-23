@@ -43,7 +43,7 @@ maxSvOnboardingTokenLength = 1900
 
 -- | Require that the `Text` value named `name` is at most `maxLength` characters long.
 -- Fails with `textTooLongFailure` otherwise.
-requireMaxLength : Text -> Int -> Text -> Update ()
+requireMaxLength : ActionFailWithStatus m => Text -> Int -> Text -> m ()
 requireMaxLength name maxLength value =
   if Text.length value <= maxLength
     then pure ()
@@ -52,7 +52,7 @@ requireMaxLength name maxLength value =
 -- | Require that the SV onboarding token `token` only consists of the characters of a JWT:
 -- the base64url alphabet `A-Z`, `a-z`, `0-9`, `-`, `_`, and the separator `.`.
 -- Fails with `invalidTokenCharactersFailure` otherwise.
-requireSvOnboardingTokenCharacters : Text -> Update ()
+requireSvOnboardingTokenCharacters : ActionFailWithStatus m => Text -> m ()
 requireSvOnboardingTokenCharacters token =
   if all isJwtCodePoint (Text.toCodePoints token)
     then pure ()

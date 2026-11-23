@@ -3437,7 +3437,7 @@ object DarResources {
   )
   lazy val amulet_0_1_26 = DarResource(
     "splice-amulet-0.1.26.dar",
-    "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
+    "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
     PackageMetadata(
       PackageName.assertFromString("splice-amulet"),
       PackageVersion.assertFromString("0.1.26"),
@@ -3500,7 +3500,7 @@ object DarResources {
   )
   lazy val amulet_current = DarResource(
     "splice-amulet-current.dar",
-    "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
+    "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
     PackageMetadata(
       PackageName.assertFromString("splice-amulet"),
       PackageVersion.assertFromString("0.1.26"),
@@ -5197,25 +5197,22 @@ object DarResources {
   )
   lazy val dsoGovernance_0_1_32 = DarResource(
     "splice-dso-governance-0.1.32.dar",
-    "269ffb9e1d77c507dadf1e29be6b1dbbfbc943cdce366b4587f5a694ec560a38",
+    "d99934a5fd797fcac2fe41bc261473a4bcacce3f2c11c8e2c21ffda1c91151f7",
     PackageMetadata(
       PackageName.assertFromString("splice-dso-governance"),
       PackageVersion.assertFromString("0.1.32"),
       None,
     ),
     Set(
-      "d51caae7593cf8d766c6dc007eb6043f71af6fe6aeafd2c1e51fc9068ebc87d1",
       "c31d9aa561964deeb57ccc7e0eda4114299cc19cad67fd359dee0f4543a13153",
       "9e70a8b3510d617f8a136213f33d6a903a10ca0eeec76bb06ba55d1ed9680f69",
       "7adc4c2d07fa3a51173c843cba36e610c1168b2dbbf53076e20c0092eae8763d",
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
-      "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -5241,10 +5238,13 @@ object DarResources {
       "19f0df5fdaf5a96e137b6ea885fdb378f37bd3166bd9a47ee11518e33fa09a20",
       "a1fa18133ae48cbb616c4c148e78e661666778c3087d099067c7fe1868cbb3a1",
       "4b7ecfc366d79ccc5ed07c80f26fe489cf2dfd43ce2856c06a78e6a048db7032",
+      "77d0430eb12b1d9d0954b88038d10257f47fb012ece2588dd7813df202d5ea0d",
+      "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "86d888f34152dae8729900966b44abcb466b9c111699678de58032de601d2b04",
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -5263,25 +5263,22 @@ object DarResources {
   )
   lazy val dsoGovernance_current = DarResource(
     "splice-dso-governance-current.dar",
-    "269ffb9e1d77c507dadf1e29be6b1dbbfbc943cdce366b4587f5a694ec560a38",
+    "d99934a5fd797fcac2fe41bc261473a4bcacce3f2c11c8e2c21ffda1c91151f7",
     PackageMetadata(
       PackageName.assertFromString("splice-dso-governance"),
       PackageVersion.assertFromString("0.1.32"),
       None,
     ),
     Set(
-      "d51caae7593cf8d766c6dc007eb6043f71af6fe6aeafd2c1e51fc9068ebc87d1",
       "c31d9aa561964deeb57ccc7e0eda4114299cc19cad67fd359dee0f4543a13153",
       "9e70a8b3510d617f8a136213f33d6a903a10ca0eeec76bb06ba55d1ed9680f69",
       "7adc4c2d07fa3a51173c843cba36e610c1168b2dbbf53076e20c0092eae8763d",
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
-      "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -5307,10 +5304,13 @@ object DarResources {
       "19f0df5fdaf5a96e137b6ea885fdb378f37bd3166bd9a47ee11518e33fa09a20",
       "a1fa18133ae48cbb616c4c148e78e661666778c3087d099067c7fe1868cbb3a1",
       "4b7ecfc366d79ccc5ed07c80f26fe489cf2dfd43ce2856c06a78e6a048db7032",
+      "77d0430eb12b1d9d0954b88038d10257f47fb012ece2588dd7813df202d5ea0d",
+      "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "86d888f34152dae8729900966b44abcb466b9c111699678de58032de601d2b04",
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -7028,7 +7028,7 @@ object DarResources {
   )
   lazy val wallet_0_1_27 = DarResource(
     "splice-wallet-0.1.27.dar",
-    "6177025eb0103db0ce37564e5d2d5543c61e8ee41a2926bcfab140f03500d069",
+    "845d4601b158dcb21e9eb2c70eda7a9236e2bcce29dcf67776bae794cb6d435e",
     PackageMetadata(
       PackageName.assertFromString("splice-wallet"),
       PackageVersion.assertFromString("0.1.27"),
@@ -7041,11 +7041,10 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -7075,6 +7074,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -7093,7 +7093,7 @@ object DarResources {
   )
   lazy val wallet_current = DarResource(
     "splice-wallet-current.dar",
-    "6177025eb0103db0ce37564e5d2d5543c61e8ee41a2926bcfab140f03500d069",
+    "845d4601b158dcb21e9eb2c70eda7a9236e2bcce29dcf67776bae794cb6d435e",
     PackageMetadata(
       PackageName.assertFromString("splice-wallet"),
       PackageVersion.assertFromString("0.1.27"),
@@ -7106,11 +7106,10 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -7140,6 +7139,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -8537,7 +8537,7 @@ object DarResources {
   )
   lazy val amuletNameService_0_1_27 = DarResource(
     "splice-amulet-name-service-0.1.27.dar",
-    "d51caae7593cf8d766c6dc007eb6043f71af6fe6aeafd2c1e51fc9068ebc87d1",
+    "77d0430eb12b1d9d0954b88038d10257f47fb012ece2588dd7813df202d5ea0d",
     PackageMetadata(
       PackageName.assertFromString("splice-amulet-name-service"),
       PackageVersion.assertFromString("0.1.27"),
@@ -8550,11 +8550,10 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -8584,6 +8583,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -8602,7 +8602,7 @@ object DarResources {
   )
   lazy val amuletNameService_current = DarResource(
     "splice-amulet-name-service-current.dar",
-    "d51caae7593cf8d766c6dc007eb6043f71af6fe6aeafd2c1e51fc9068ebc87d1",
+    "77d0430eb12b1d9d0954b88038d10257f47fb012ece2588dd7813df202d5ea0d",
     PackageMetadata(
       PackageName.assertFromString("splice-amulet-name-service"),
       PackageVersion.assertFromString("0.1.27"),
@@ -8615,11 +8615,10 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -8649,6 +8648,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -9971,7 +9971,7 @@ object DarResources {
   )
   lazy val walletPayments_0_1_26 = DarResource(
     "splice-wallet-payments-0.1.26.dar",
-    "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+    "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
     PackageMetadata(
       PackageName.assertFromString("splice-wallet-payments"),
       PackageVersion.assertFromString("0.1.26"),
@@ -9984,7 +9984,6 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
@@ -10017,6 +10016,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -10035,7 +10035,7 @@ object DarResources {
   )
   lazy val walletPayments_current = DarResource(
     "splice-wallet-payments-current.dar",
-    "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+    "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
     PackageMetadata(
       PackageName.assertFromString("splice-wallet-payments"),
       PackageVersion.assertFromString("0.1.26"),
@@ -10048,7 +10048,6 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
@@ -10081,6 +10080,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -11477,7 +11477,7 @@ object DarResources {
   )
   lazy val splitwell_0_1_27 = DarResource(
     "splitwell-0.1.27.dar",
-    "2799a82a60c5bc39b4acde5083637c1c3db6aa262f60e75bfa1098786226d2fb",
+    "aeeef5be876235a66da7f40c07693b4695d05b1c16b65e64990e9ecb3ba96e5e",
     PackageMetadata(
       PackageName.assertFromString("splitwell"),
       PackageVersion.assertFromString("0.1.27"),
@@ -11490,11 +11490,10 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -11524,6 +11523,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
@@ -11542,7 +11542,7 @@ object DarResources {
   )
   lazy val splitwell_current = DarResource(
     "splitwell-current.dar",
-    "2799a82a60c5bc39b4acde5083637c1c3db6aa262f60e75bfa1098786226d2fb",
+    "aeeef5be876235a66da7f40c07693b4695d05b1c16b65e64990e9ecb3ba96e5e",
     PackageMetadata(
       PackageName.assertFromString("splitwell"),
       PackageVersion.assertFromString("0.1.27"),
@@ -11555,11 +11555,10 @@ object DarResources {
       "5b4294e3059cb8ed4152b06bcbd46c922e4425b21efe3642aa1f52b78894410e",
       "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
       "54f85ebfc7dfae18f7d70370015dcc6c6792f60135ab369c44ae52c6fc17c274",
-      "b9dcb8bea536d58bed1390fa7dbfdd1ae2471f88ea83d9714619e17e83392765",
       "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
       "4039f60273388c5701e27950ab3e8c3044433b0876535a3b48fb042cc77bf02a",
       "7cff38e34bd192d498d5a7606aa3b893e35b0f632d582b273f66dab90f2f14ef",
-      "27518e878431d76c11aebaadc7baf1a832438dde1036fb599d50f36f95c94f3c",
+      "705ae5dd85eb90d44a8490fa44d5c1d6005e7bcfea23bce0ff3b15344e4bea82",
       "bde4bd30749e99603e5afa354706608601029e225d4983324d617825b634253a",
       "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
       "c3bb0c5d04799b3f11bad7c3c102963e115cf53da3e4afcbcfd9f06ebd82b4ff",
@@ -11589,6 +11588,7 @@ object DarResources {
       "6da1f43a10a179524e840e7288b47bda213339b0552d92e87ae811e52f59fc0e",
       "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
       "c280cc3ef501d237efa7b1120ca3ad2d196e089ad596b666bed59a85f3c9a074",
+      "90e7a8e6f2a2e83aca5c055bcae38c0e8814cc3eb9f0a3bf07d810534aa53fbf",
       "22ffcbab726e64e179deebd895307fad94efbae3f72b07677e24038d0fbf4467",
       "3cde94fe9be5c700fc1d9a8ad2277e2c1214609f8c52a5b4db77e466875b8cb7",
       "9d1a644e686435cf934f2f3f049138a424863b2a800130046dadc0c994ea5df3",
