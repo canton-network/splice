@@ -561,9 +561,9 @@ class DbVotesStoreTest
         } yield {
           // Make sure the comparison is not trivially satisfied by two empty stores
           expected should have size txLogVoteFixtures.flatMap(_.votes).size.toLong
-          // The contract id is not in the txlog, see the test below
+          // The contract ids, which are not in the txlog, are found in the update history
           all(expected.map(_.contractId)) shouldBe Some(dsoRulesCid)
-          actual shouldBe expected.map(_.copy(contractId = None))
+          actual shouldBe expected
           expectedFirstIngested should not be empty
           // Where live ingestion started is not up to the migration
           firstIngested shouldBe expectedFirstIngested
@@ -573,28 +573,32 @@ class DbVotesStoreTest
         }
       }
 
-      "fill the contract id from the update history, and leave rows without a match null" in {
+      "not copy anything if the update history does not have the contract id of a vote" in {
         for {
           stores <- mkStores()
           _ <- ingestAll(stores, txLogVoteFixtures)
-          updateIds <- listContractIds().map(_.map(_._1).distinct.sorted)
-          (withHistory, withoutHistory) = updateIds.splitAt(updateIds.size / 2)
-          historyId <- insertHistory(participantName, dsoParty.toProtoPrimitive)
-          _ <- MonadUtil.sequentialTraverse(withHistory.zipWithIndex) { case (updateId, i) =>
-            insertExercise(historyId, updateId, 0, "DsoRules_CloseVoteRequest", s"cid-$i")
-          }
           _ <- clearVotesStore(stores)
           _ <- markHistoriesComplete(stores)
+          // The update history misses the exercise of one vote
+          removed <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              sqlu"""delete from update_history_exercises
+                     where row_id = (select min(row_id) from update_history_exercises
+                                     where choice = 'DsoRules_CloseVoteRequest')""",
+              "test.removeExercise",
+            )
+          )
           _ <- runTxLogMigration()
-          contractIds <- listContractIds()
+          rows <- listAllRows(stores.votesStore)
+          cursor <- stores.votesStore.getBackfillingCursor()
+          complete <- stores.votesStore.isBackfillingComplete()
         } yield {
-          withHistory should not be empty
-          withoutHistory should not be empty
-          contractIds.map(_._1) should contain theSameElementsAs updateIds
-          forAll(contractIds) { case (updateId, contractId) =>
-            val i = withHistory.indexOf(updateId)
-            contractId shouldBe (if (i >= 0) Some(s"cid-$i") else None)
-          }
+          removed shouldBe 1
+          txLogVoteFixtures.size should be > 1
+          // All or nothing: the votes that have a contract id are not copied either
+          rows shouldBe empty
+          cursor shouldBe empty
+          complete shouldBe false
         }
       }
 
@@ -616,11 +620,27 @@ class DbVotesStoreTest
         ),
         "the update history has not ingested up to where the votes store started" -> (
           (_, firstIngested) =>
-            setUpdateHistoryState(
-              participantName,
-              complete = true,
-              ingestedUpTo = firstIngested.minusSeconds(1),
-            )
+            for {
+              _ <- setUpdateHistoryState(
+                participantName,
+                complete = true,
+                ingestedUpTo = firstIngested.minusSeconds(1),
+              )
+              // Also remove the updates of the votes from that point on
+              _ <- futureUnlessShutdownToFuture(
+                storage.underlying.queryAndUpdate(
+                  DBIO
+                    .seq(
+                      sqlu"""delete from update_history_exercises
+                             where record_time >= ${firstIngested.toMicros}""",
+                      sqlu"""delete from update_history_transactions
+                             where record_time >= ${firstIngested.toMicros}""",
+                    )
+                    .map(_ => ()),
+                  "test.truncateUpdateHistory",
+                )
+              )
+            } yield ()
         ),
         "the votes store has not started ingesting" -> ((_, _) =>
           futureUnlessShutdownToFuture(
@@ -714,8 +734,7 @@ class DbVotesStoreTest
           all.map(_.votesStore.storeId).distinct should have size 3
           expectedRows.map(_.size) shouldBe Seq(2, txLogVoteFixtures.size - 2, 1)
           // Each store gets exactly its own votes, and the txlog of the reset ACS store is not affected
-          // The contract id is not in the txlog, and there is no update history to fill it from
-          actualRows shouldBe expectedRows.map(_.map(_.copy(contractId = None)))
+          actualRows shouldBe expectedRows
           completes shouldBe Seq(true, true, true)
           // The keys are in the key value store of the participant of the txlog store, once per txlog store
           completeKeys.toSet shouldBe Set(
@@ -1119,7 +1138,9 @@ class DbVotesStoreTest
       )
     } yield ()
 
-  /** The state of an SV on a long-running network, for which the migration copies the votes. */
+  /** The state of an SV on a long-running network, for which the migration copies the votes:
+    * the txlog and the update history are complete, and the update history has the exercise of every vote.
+    */
   private def markHistoriesComplete(
       stores: Stores,
       participantName: String = participantName,
@@ -1127,7 +1148,49 @@ class DbVotesStoreTest
     for {
       _ <- setTxLogBackfillingComplete(stores, complete = true)
       _ <- setUpdateHistoryState(participantName, complete = true)
+      historyId <- insertHistory(participantName, dsoParty.toProtoPrimitive)
+      _ <- insertTxLogVoteExercises(stores, historyId)
     } yield ()
+
+  /** Inserts the transaction and the DsoRules_CloseVoteRequest exercise (on [[dsoRulesCid]]) of every vote
+    * in the txlog of the given store into the update history, like the ingestion of the update history would.
+    */
+  private def insertTxLogVoteExercises(stores: Stores, historyId: Int): Future[Unit] = {
+    val storeId = stores.votesStore.storeId
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(
+        DBIO
+          .seq(
+            sqlu"""insert into update_history_transactions
+                     (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
+                      effective_at, root_event_ids)
+                   select $historyId, substring(t.event_id from '^#?(.*):[0-9]+$$'), t.record_time,
+                          t.transaction_offset, t.domain_id, t.migration_id, t.record_time, array['#0']
+                   from scan_txlog_store t
+                   where t.store_id = $storeId and t.entry_type = 'vot'
+                   on conflict do nothing""",
+            sqlu"""insert into update_history_exercises
+                     (history_id, event_id, update_row_id, child_event_ids, choice, package_name,
+                      template_id_package_id, template_id_module_name, template_id_entity_name, contract_id,
+                      consuming, argument, result, acting_parties, record_time, update_id, domain_id, migration_id)
+                   select $historyId, '#' || u.update_id || ':0', u.row_id, array[]::text[],
+                          'DsoRules_CloseVoteRequest', 'splice-dso-governance', 'pkg', 'Splice.DsoRules', 'DsoRules',
+                          $dsoRulesCid, false, '{}'::jsonb, '{}'::jsonb, array[]::text[],
+                          u.record_time, u.update_id, u.domain_id, u.migration_id
+                   from scan_txlog_store t
+                            join update_history_transactions u
+                                 on u.history_id = $historyId
+                                     and u.migration_id = t.migration_id
+                                     and u.domain_id = t.domain_id
+                                     and u.update_id = substring(t.event_id from '^#?(.*):[0-9]+$$')
+                   where t.store_id = $storeId and t.entry_type = 'vot'
+                   on conflict do nothing""",
+          )
+          .map(_ => ()),
+        "test.insertTxLogVoteExercises",
+      )
+    ).map(_ => ())
+  }
 
   private def setFirstIngestedRecordTime(
       stores: Stores,

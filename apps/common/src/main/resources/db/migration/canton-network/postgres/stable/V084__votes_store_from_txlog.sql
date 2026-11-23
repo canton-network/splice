@@ -124,8 +124,7 @@ begin
                 --   - its exercises by a prefix of the index updt_hist_exer_unique (update_row_id, event_id).
                 --   The txlog and the update history are ingested from the same updates, so the migration id and the
                 --   synchronizer id of a vote are the same in both. The record time is not needed to find the row.
-                --   The contract id stays null if the update is not found, which does not make the copy fail
-                --   (the column is nullable). Such rows are counted and logged below.
+                --   The contract id stays null if the update is not found. This is checked below.
                 -- - Votes that are in votes_store_results already (ingested live) are skipped.
                 insert
                 into votes_store_results(store_id, record_time, synchronizer_id, update_id, event_number,
@@ -163,6 +162,29 @@ begin
                   and t.entry_data -> 'result' is not null
                 on conflict do nothing;
                 get diagnostics num_copied = row_count;
+
+                -- Mark the votes store as complete: it now has every vote result since the start of the network.
+                insert
+                into key_value_store(key, value, store_id)
+                values ('votes_store_backfill_complete_' || scan.txlog_store_id, to_jsonb(true), scan.kv_store_id)
+                on conflict on constraint uc_key_value_store do update set value = excluded.value;
+
+                -- Check 5: every vote result has a contract id, including the ones that were in the votes store
+                -- already (filled by V081__votes_store_contract_id.sql). With the checks above, all of them are
+                -- expected to be found in the update history. A missing one means that one of our assumptions is
+                -- wrong, and a vote result without a contract id cannot be served to peers (see
+                -- HttpScanHandler.encodeVoteResultForBackfilling). So fail instead of marking the votes store as
+                -- complete: the copy is rolled back, the txlog stays as the source of the vote results, and the
+                -- failure is logged as a warning below.
+                -- Uses a prefix of the primary key (store_id, record_time, event_number).
+                select count(*)
+                into num_without_contract_id
+                from votes_store_results v
+                where v.store_id = scan.txlog_store_id
+                  and v.contract_id is null;
+                if num_without_contract_id > 0 then
+                    raise exception '% vote results have no contract id', num_without_contract_id;
+                end if;
 
                 -- Mark the votes store as complete: it now has every vote result since the start of the network.
                 insert
