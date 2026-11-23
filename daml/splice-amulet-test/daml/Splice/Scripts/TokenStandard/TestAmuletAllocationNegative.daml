@@ -572,7 +572,8 @@ test_settleBatchV2_nonIterated_noNextIterationFunding = test_settleBatchV2_gener
         extraArgs = emptyExtraArgs
         actors = [provider1, provider2]
   pure $ (,) choiceArg $
-    expectMessageContains "no next iteration funding allowed when iterated settlement is disabled"
+    expectMessageContains "'finalizedAllocation.nextIterationFunding' is not equal to 'expected value'" <>
+    expectMessageContains "expected value: None"
 
 test_settleBatchV2_wrongAllocationAdmin: Script ()
 test_settleBatchV2_wrongAllocationAdmin = do
@@ -617,7 +618,26 @@ test_settleBatchV2_nextIterationFunding_wrongInstrumentId = test_settleBatchV2_g
         extraArgs = emptyExtraArgs
         actors = [provider1, provider2]
   pure $ (,) choiceArg $
-    expectMessageContains "'nextIterationFunding.instrumentId' is not equal to 'expected value'" <>
+    expectMessageContains "'finalizedAllocation.nextIterationFunding.instrumentId' is not a member of 'allowed instrument ids'" <>
+    expectMessageContains "BAD_INSTRUMENT_ID"
+
+test_settleBatchV2_extraTransferLegSides_wrongInstrumentId: Script ()
+test_settleBatchV2_extraTransferLegSides_wrongInstrumentId = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do
+  -- the authorizer did not allow this instrument in its allocation's nextIterationFunding
+  let otherLeg = legV2 with
+        transferLegId = "leg2"
+        instrumentId = "BAD_INSTRUMENT_ID"
+  let choiceArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        transferLegs = [legV2, otherLeg]
+        allocations =
+          [ V2.FinalizedAllocation aliceAllocCid [TSU.senderSide legV2, TSU.senderSide otherLeg] None
+          , V2.FinalizedAllocation bobAllocCid [] None
+          ]
+        extraArgs = emptyExtraArgs
+        actors = [provider1, provider2]
+  pure $ (,) choiceArg $
+    expectMessageContains "'finalizedAllocation.extraTransferLegSides.instrumentId' is not a member of 'allowed instrument ids'" <>
     expectMessageContains "BAD_INSTRUMENT_ID"
 
 
@@ -628,7 +648,7 @@ test_settleBatchV2_decimal_overflow = do
   let aliceAllocationV2 = allocationV2
   let bobAllocationV2 = aliceAllocationV2 with
         authorizer = TSU.basicAccount bob
-        nextIterationFunding = Some mempty
+        nextIterationFunding = Some $ TextMap.fromList [(instrId.id, 0.0)]
   let maxDecimal = 9999999999999999999999999999.9999999999 : Decimal
   let leg1 = legV2
   let leg2 = legV2 with

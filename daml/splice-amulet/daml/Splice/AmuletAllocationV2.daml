@@ -100,9 +100,8 @@ template AmuletAllocationV2
         let actualTransferLegSides = allocation.transferLegSides ++ arg.extraTransferLegSides
         -- note: we allow allocations with no transfer legs, as they can be used to bump the expiry,
         -- and the traffic cost of that bump is what protects the SV node's storage space
-        unless (isSome allocation.nextIterationFunding) $ do
-          require "no extra transfer legs allowed when iterated settlement is disabled" (null arg.extraTransferLegSides)
-          require "no next iteration funding allowed when iterated settlement is disabled" (isNone arg.nextIterationFunding)
+        validateNextIterationArgs "arg" allocation.nextIterationFunding
+          arg.extraTransferLegSides arg.nextIterationFunding
         validateAmuletTransferLegSides actualTransferLegSides
         outputFundingAmount <- validateAmuletNextIterationFunding arg.nextIterationFunding
 

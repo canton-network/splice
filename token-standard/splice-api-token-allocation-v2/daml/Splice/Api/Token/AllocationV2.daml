@@ -35,6 +35,10 @@ import Splice.Api.Token.HoldingV2 (Holding, Account)
 --
 -- The `executors` MUST ensure that the triple of `(id, cid, meta)` is unique
 -- across settlements.
+--
+-- Wallets MUST copy the `SettlementInfo` verbatim from the settlement request
+-- when creating an allocation, including the order of the `executors` and all
+-- `meta` entries. Registries MAY require an exact match to settle the allocation.
 data SettlementInfo = SettlementInfo
   with
     executors : [Party]
@@ -105,22 +109,30 @@ data AllocationSpecification = AllocationSpecification with
       -- ^ The account authorizing the transfers as part of the settlement.
     transferLegSides : [TransferLegSide]
       -- ^ The sides of transfer legs authorized by this allocation.
+      --
+      -- Wallets MUST copy the transfer leg sides verbatim from the transfer
+      -- legs of the settlement request, including their `meta` entries.
+      -- Registries MAY require an exact match to settle the allocation.
     settlementDeadline : Optional Time
       -- ^ The executors' and authorizer's agreed time-to-live for the allocation.
       --
       -- After this time, if set, the allocation can no longer be settled, and
       -- the authorizer can withdraw the allocation to release the funds.
     nextIterationFunding : Optional (TextMap.TextMap Decimal)
-      -- ^ Amounts reserved for funding the next settlement iteration.
-      --
-      -- Amounts are keyed by instrument id and MUST be positive.
+      -- ^ The instruments allowed in iterated settlement and the amounts
+      -- reserved for funding the next settlement iteration.
       --
       -- Setting this to `None` indicates that iterated settlement is disabled,
       -- and the allocation can only be settled once with exactly its specified
-      -- transfer legs. Setting this to an empty map indicates that iterated settlement
-      -- is enabled, but that no funding for the next iteration is reserved by
-      -- the authorizer. This can be used when the authorizer expects incoming
-      -- transfers in the next iteration, and thus does not need to reserve any funding.
+      -- transfer legs.
+      --
+      -- Setting this to `Some fundings` indicates that iterated settlement is
+      -- enabled for exactly the instruments whose ids are keys of `fundings`.
+      -- Registries MUST reject extra transfer leg sides and next iteration
+      -- funding for any other instrument. The amounts MUST be non-negative.
+      -- An amount of `0.0` allows an instrument without reserving funding for
+      -- it, which can be used when the authorizer expects only incoming
+      -- transfers of that instrument in the next iteration.
     committed : Bool
       -- ^ Whether the authorizer commits to the allocation until either
       --
@@ -211,10 +223,12 @@ data FinalizedAllocation = FinalizedAllocation with
       -- in this settlement iteration.
       --
       -- They MUST be empty unless iterated settlement was enabled by the allocation's authorizer.
+      -- Their instruments MUST be keys of the allocation's `nextIterationFunding`.
     nextIterationFunding : Optional (TextMap.TextMap Decimal)
       -- ^ The funding to reserve for the next settlement iteration.
       --
       -- This MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer.
+      -- Its keys MUST be keys of the allocation's `nextIterationFunding`.
   deriving (Show, Eq, Serializable)
 
 -- | A contract representing the approval of the authorizer to send or receive
@@ -260,12 +274,15 @@ interface Allocation where
         -- ^ Extra transfer leg sides to settle as part of settlement.
         --
         -- They MUST NOT be set unless iterated settlement was enabled by the
-        -- allocation's authorizer.
+        -- allocation's authorizer. Their instruments MUST be keys of the
+        -- allocation's `nextIterationFunding`.
       nextIterationFunding : Optional (TextMap.TextMap Decimal)
         -- ^ The funds to reserve for the next settlement iteration, if there is any.
         --
         -- This MUST NOT be set unless iterated settlement was enabled by the
-        -- allocation's authorizer.
+        -- allocation's authorizer. Its keys MUST be keys of the allocation's
+        -- `nextIterationFunding`, so that the executors cannot widen the set
+        -- of instruments allowed by the authorizer.
         --
         -- Setting this to `None` indicates that no further settlement
         -- iterations will be executed after this one.
@@ -413,7 +430,9 @@ interface SettlementFactory where
         -- To minimize the risk of allocations being settled in the wrong
         -- context, implementations MUST ensure that:
         --
-        --  - the allocations were created for the `settlement` being settled
+        --  - the allocations were created for the `settlement` being settled,
+        --    which implementations MAY check by requiring an exact match of
+        --    the allocations' `settlement`
         --  - the transfer legs of the allocations authorize both send and
         --    receipt for the transfers specified in `transferLegs`
         --  - the `transferLegs` cover exactly the transfers authorized by the

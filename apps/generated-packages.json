@@ -3,7 +3,7 @@
     "directory": "common/frontend/daml.js",
     "aliases": {
       "ans": "splice-amulet-name-service-0.1.27",
-      "splice-amulet": "splice-amulet-0.1.25",
+      "splice-amulet": "splice-amulet-0.1.26",
       "splice-dso-governance": "splice-dso-governance-0.1.32",
       "splice-validator-lifecycle": "splice-validator-lifecycle-0.1.10",
       "splice-wallet": "splice-wallet-0.1.27",

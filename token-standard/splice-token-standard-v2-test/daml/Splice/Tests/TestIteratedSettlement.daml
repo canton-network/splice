@@ -39,12 +39,18 @@ amulet_test_locked_funds = mkAmuletTestCase >>= test_locked_funds
 amulet_test_refresh_and_withdrawal : Script ()
 amulet_test_refresh_and_withdrawal = mkAmuletTestCase >>= test_refresh_and_withdrawal
 
+amulet_test_allowed_instruments : Script ()
+amulet_test_allowed_instruments = mkAmuletTestCase >>= test_allowed_instruments
+
 
 testTokenV2_test_locked_funds : Script ()
 testTokenV2_test_locked_funds = mkTestTokenV2TestCase >>= test_locked_funds
 
 testTokenV2_test_refresh_and_withdrawal : Script ()
 testTokenV2_test_refresh_and_withdrawal = mkTestTokenV2TestCase >>= test_refresh_and_withdrawal
+
+testTokenV2_test_allowed_instruments : Script ()
+testTokenV2_test_allowed_instruments = mkTestTokenV2TestCase >>= test_allowed_instruments
 
 mkAmuletTestCase : Script TestCase
 mkAmuletTestCase = do
@@ -256,6 +262,110 @@ test_locked_funds TestCase {..} = do
     WalletClientV2.checkBalance provider instrId 0.5
 
   pure ()
+
+
+-- | Test that the instrument ids in an allocation's `nextIterationFunding` limit
+-- the instruments that the executors can use in iterated settlement, and that a
+-- funding amount of `0.0` allows an instrument without reserving funds for it.
+test_allowed_instruments : TestCase -> Script ()
+test_allowed_instruments TestCase {..} = do
+  let allowedInstrId :: otherInstrIds = instrIds
+  let settlement = V2.SettlementInfo with
+        executors = [provider]
+        id = "payments/<uuid>"
+        cid = None
+        meta = emptyMetadata
+  let allowOnly instrId = Some (TextMap.fromList [(instrId.id, 0.0 : Decimal)])
+  now <- getTime
+
+  -- the provider allows receiving payments in only one instrument, without reserving any funds
+  enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+    settlement
+    allocation = V2.AllocationSpecification with
+      authorizer = basicAccount provider
+      admin
+      transferLegSides = []
+      settlementDeadline = None
+      nextIterationFunding = allowOnly allowedInstrId
+      committed = False
+      meta = emptyMetadata
+    requestedAt = now
+    inputHoldingCids = []
+    actors = [provider]
+    extraArgs = emptyExtraArgs
+  result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  let V2.AllocationInstructionResult_Completed providerAllocationCid = result.output
+
+  -- alice allocates a payment in every instrument
+  let paymentLeg instrId = V2.TransferLeg with
+        transferLegId = "payment-" <> instrId.id
+        sender = basicAccount alice
+        receiver = basicAccount provider
+        amount = 1.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+  aliceAllocationCids <- forA instrIds $ \instrId -> do
+    inputHoldingCids <- WalletClientV2.listHoldingCids alice instrId
+    enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+      settlement
+      allocation = V2.AllocationSpecification with
+        authorizer = basicAccount alice
+        admin
+        transferLegSides = [senderSide (paymentLeg instrId)]
+        settlementDeadline = None
+        nextIterationFunding = None
+        committed = False
+        meta = emptyMetadata
+      requestedAt = now
+      inputHoldingCids
+      actors = [alice]
+      extraArgs = emptyExtraArgs
+    result <- WalletClientV2.submitAndCheckTxHistory admins (actAs alice <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+    let V2.AllocationInstructionResult_Completed allocationCid = result.output
+    pure (instrId, allocationCid)
+
+  let settle instrId nextIterationFunding = do
+        let Some aliceAllocationCid = lookup instrId aliceAllocationCids
+        let leg = paymentLeg instrId
+        V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
+          actors = [provider]
+          settlement
+          transferLegs = [leg]
+          allocations =
+            [ V2.FinalizedAllocation with
+                allocationCid = providerAllocationCid
+                extraTransferLegSides = [receiverSide leg]
+                nextIterationFunding
+            , nonIteratedAllocation aliceAllocationCid
+            ]
+          extraArgs = emptyExtraArgs
+
+  -- the executors cannot widen the set of allowed instruments
+  forA_ otherInstrIds $ \otherInstrId -> do
+    enrichedChoice <- settle otherInstrId (allowOnly allowedInstrId)
+    submitMustFail''
+      (expectMessageContains "'finalizedAllocation.extraTransferLegSides.instrumentId' is not a member of 'allowed instrument ids'")
+      (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+        exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+    enrichedChoice <- settle allowedInstrId (Some (TextMap.fromList [(allowedInstrId.id, 0.0), (otherInstrId.id, 0.0)]))
+    submitMustFail''
+      (expectMessageContains "'finalizedAllocation.nextIterationFunding.instrumentId' is not a member of 'allowed instrument ids'")
+      (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+        exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  -- the executors can settle payments in the allowed instrument
+  enrichedChoice <- settle allowedInstrId (allowOnly allowedInstrId)
+  result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  let [providerSettleResult, _] = result.allocationSettleResults
+  let Some nextProviderAllocationCid = WalletClientV2.extractNextIterationAllocationCid providerSettleResult
+  WalletClientV2.checkBalance provider allowedInstrId 1.0
+
+  -- the limit is kept for the next iteration
+  Some nextProviderAllocView <- queryInterfaceContractId provider nextProviderAllocationCid
+  nextProviderAllocView.allocation.nextIterationFunding === allowOnly allowedInstrId
 
 
 -- | Test that refresh on settlement and withdrawal of iterated allocations works as expected.
