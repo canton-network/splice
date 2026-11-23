@@ -15,11 +15,14 @@ module Splice.TextLimits
 
   requireMaxLength,
   requireSvOnboardingTokenCharacters,
+
+  textTooLongFailure,
+  invalidTokenCharactersFailure,
 ) where
 
+import DA.Fail
 import DA.Text qualified as Text
-
-import Splice.Util
+import DA.TextMap qualified as TextMap
 
 -- | Maximum length of names and identifiers, e.g., ANS entry names and SV names.
 maxIdentifierLength : Int
@@ -39,18 +42,42 @@ maxSvOnboardingTokenLength : Int
 maxSvOnboardingTokenLength = 1900
 
 -- | Require that the `Text` value named `name` is at most `maxLength` characters long.
-requireMaxLength : CanAssert m => Text -> Int -> Text -> m ()
+-- Fails with `textTooLongFailure` otherwise.
+requireMaxLength : Text -> Int -> Text -> Update ()
 requireMaxLength name maxLength value =
-  require
-    (name <> " is at most " <> show maxLength <> " characters long, but has length " <> show (Text.length value))
-    (Text.length value <= maxLength)
+  if Text.length value <= maxLength
+    then pure ()
+    else failWithStatus $ textTooLongFailure name maxLength (Text.length value)
 
 -- | Require that the SV onboarding token `token` only consists of the characters of a JWT:
 -- the base64url alphabet `A-Z`, `a-z`, `0-9`, `-`, `_`, and the separator `.`.
-requireSvOnboardingTokenCharacters : CanAssert m => Text -> m ()
+-- Fails with `invalidTokenCharactersFailure` otherwise.
+requireSvOnboardingTokenCharacters : Text -> Update ()
 requireSvOnboardingTokenCharacters token =
-  require "token only contains the characters A-Z, a-z, 0-9, '-', '_' and '.'"
-    (all isJwtCodePoint (Text.toCodePoints token))
+  if all isJwtCodePoint (Text.toCodePoints token)
+    then pure ()
+    else failWithStatus invalidTokenCharactersFailure
+
+-- | The failure reported if the `Text` value named `name` is `actualLength` characters long,
+-- which exceeds `maxLength`.
+textTooLongFailure : Text -> Int -> Int -> FailureStatus
+textTooLongFailure name maxLength actualLength = FailureStatus with
+  errorId = "splice.lfdecentralizedtrust.org/text-too-long"
+  category = InvalidIndependentOfSystemState
+  message = name <> " must be at most " <> show maxLength <> " characters long, but has length " <> show actualLength
+  meta = TextMap.fromList
+    [ ("field", name)
+    , ("maxLength", show maxLength)
+    , ("actualLength", show actualLength)
+    ]
+
+-- | The failure reported if an SV onboarding token contains characters that a JWT does not contain.
+invalidTokenCharactersFailure : FailureStatus
+invalidTokenCharactersFailure = FailureStatus with
+  errorId = "splice.lfdecentralizedtrust.org/invalid-token-characters"
+  category = InvalidIndependentOfSystemState
+  message = "token must only contain the characters A-Z, a-z, 0-9, '-', '_' and '.'"
+  meta = TextMap.empty
 
 isJwtCodePoint : Int -> Bool
 isJwtCodePoint c =

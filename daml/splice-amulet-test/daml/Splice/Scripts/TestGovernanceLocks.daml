@@ -30,6 +30,7 @@ import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
+import Splice.TextLimits (textTooLongFailure)
 import Splice.TokenStandard.Utils
 import Splice.TokenStandard.Utils.Internal.Conversions (encodeRelTime, encodeTime)
 
@@ -208,6 +209,24 @@ testGovernanceLockMinimumAmountsScenario ops = do
 
   None <- expectSuccess $ ops.vestingWithdraw env stillVestingCid alice (withdrawMeta now)
   pure ()
+
+testGovernanceLockSvNameLimitScenario : GovernanceLockOperations i r t -> Script ()
+testGovernanceLockSvNameLimitScenario ops = do
+  env@TestEnv{..} <- setupTest
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 180000.0
+  -- the limit is spelled out to notice accidental changes
+  let svKind nameLength = GLK_SuperValidatorRightsOwner (Text.implode (replicate nameLength "s"))
+
+  actionMustFail (expectFailureStatus (== textTooLongFailure "svName" 255 256)) $
+    ops.governanceLock (testEnvRegistries env) alice 20000.0 (svKind 256)
+  _ <- expectSuccess $ ops.governanceLock (testEnvRegistries env) alice 20000.0 (svKind 255)
+  pure ()
+
+testGovernanceLockSvNameLimitTSv1 : Script ()
+testGovernanceLockSvNameLimitTSv1 = testGovernanceLockSvNameLimitScenario tsv1Operations
+
+testGovernanceLockSvNameLimitTSv2 : Script ()
+testGovernanceLockSvNameLimitTSv2 = testGovernanceLockSvNameLimitScenario tsv2Operations
 
 testGovernanceLockProvisionalUnlockTSv1 : Script ()
 testGovernanceLockProvisionalUnlockTSv1 = testGovernanceLockProvisionalUnlockScenario tsv1Operations

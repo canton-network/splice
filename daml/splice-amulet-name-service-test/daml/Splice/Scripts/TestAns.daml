@@ -13,6 +13,7 @@ import Splice.AmuletRules
 import Splice.Scripts.Util
 import Splice.Ans
 import Splice.Scripts.AnsRulesParameters
+import Splice.TextLimits (textTooLongFailure)
 import Splice.Wallet.Subscriptions
 import Splice.TokenStandard.Utils qualified as TSU
 
@@ -237,5 +238,9 @@ testRequestEntryNameLimit = script do
       maxName = Text.implode (replicate 255 "n")
 
   _ <- submit (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName
-  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry (maxName <> "n")
+  result <- trySubmit (actAs alice.primaryParty <> readAs app.dso) $ requestEntry (maxName <> "n")
+  case result of
+    Left (FailureStatusError err) -> err === textTooLongFailure "name" 255 256
+    Left err -> fail $ "Expected a FailureStatusError, got: " <> show err
+    Right _ -> fail "Expected the request to fail"
   pure ()

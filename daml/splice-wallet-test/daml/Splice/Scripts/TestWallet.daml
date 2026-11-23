@@ -16,6 +16,7 @@ import DA.TextMap as TextMap
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.AmuletConfig (defaultTransferPreapprovalFee, defaultTransferPreapprovalBaseDuration)
+import Splice.TextLimits (textTooLongFailure)
 import Splice.Types
 import Splice.Schedule
 import Splice.DecentralizedSynchronizer
@@ -1102,9 +1103,11 @@ testBuyTrafficRequestTrackingIdLimit = script do
 
   -- via the wallet install
   _ <- submit (actAs aliceValidator.primaryParty <> readAs alice.primaryParty) $ viaInstall maxTrackingId
-  submitMustFail (actAs aliceValidator.primaryParty <> readAs alice.primaryParty) $ viaInstall (maxTrackingId <> "t")
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "trackingId" 279 280))
+    (actAs aliceValidator.primaryParty <> readAs alice.primaryParty) $ void $ viaInstall (maxTrackingId <> "t")
 
   -- via a direct create
   _ <- submit alice.primaryParty $ direct maxTrackingId
+  -- the `ensure` clause rejects it
   submitMustFail alice.primaryParty $ direct (maxTrackingId <> "t")
   pure ()

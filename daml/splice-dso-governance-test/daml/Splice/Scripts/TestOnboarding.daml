@@ -3,6 +3,7 @@
 
 module Splice.Scripts.TestOnboarding where
 
+import DA.Action (void)
 import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional (fromSome)
@@ -22,6 +23,8 @@ import Splice.SvOnboarding
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)
 import Splice.AmuletRules (AmuletRules)
+import Splice.Testing.Utils (expectFailureStatus, submitMustFail'')
+import Splice.TextLimits (invalidTokenCharactersFailure, textTooLongFailure)
 import Splice.Types
 
 
@@ -430,20 +433,25 @@ testSvOnboardingTextLimits = do
 
   -- the candidate name and token are bounded
   _ <- submit (actAs sv2 <> readAs dso) $ startOnboarding maxName maxToken
-  submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding (maxName <> "n") maxToken
-  submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding maxName (maxToken <> "t")
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "candidateName" 255 256)) (actAs sv2 <> readAs dso) $
+    void $ startOnboarding (maxName <> "n") maxToken
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "token" 1900 1901)) (actAs sv2 <> readAs dso) $
+    void $ startOnboarding maxName (maxToken <> "t")
 
   -- the token only contains the characters of a JWT
   _ <- submit (actAs sv2 <> readAs dso) $ startOnboarding "svX" "azAZ09-_.azAZ09-_.azAZ09-_"
   forA_ ["=", "+", "/", " ", "\x00e9", "\x1F600"] $ \char ->
-    submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding "svX" ("header.payload" <> char <> ".signature")
+    submitMustFail'' (expectFailureStatus (== invalidTokenCharactersFailure)) (actAs sv2 <> readAs dso) $
+      void $ startOnboarding "svX" ("header.payload" <> char <> ".signature")
 
   -- the name of a confirmed SV is bounded
   _ <- submit dso $ confirm maxName
-  submitMustFail dso $ confirm (maxName <> "n")
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "newSvName" 255 256)) (actAs dso) $
+    void $ confirm (maxName <> "n")
 
   -- the name of an added SV is bounded
-  submitMustFail dso $ addSv (Text.implode (replicate 256 "m"))
+  submitMustFail'' (expectFailureStatus (== textTooLongFailure "newSvName" 255 256)) (actAs dso) $
+    void $ addSv (Text.implode (replicate 256 "m"))
   _ <- submit dso $ addSv (Text.implode (replicate 255 "m"))
   pure ()
 
