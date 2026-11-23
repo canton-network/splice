@@ -57,31 +57,38 @@ data SvNodeAssignment = SvNodeAssignment
   with
     rewardWeight : Int
       -- ^ The weight of the SV rights owner at this SV node.
-    escrowedRewardWeight : Int
-      -- ^ The weight held in escrow; minted as one coupon to `escrowParty`, which is not claimed and expires into the unclaimed rewards. Changed only by a vote.
-    escrowParty : Party
-      -- ^ Receives the coupon for the escrowed weight, e.g., today's ghost party of the owner. Changed only by a vote.
+    escrowBeneficiaries : [EscrowBeneficiary]
+      -- ^ The parts of `rewardWeight` held in escrow. Changed only by a vote.
+      -- At most 20 escrow beneficiaries are allowed to bound the number of coupons minted per round.
     beneficiaries : Map Party BeneficiaryInfo
-      -- ^ Map of beneficiaries and their percentages of `rewardWeight`.
+      -- ^ Map of beneficiaries and their percentages of `rewardWeight` minus the escrowed weight.
       -- At most 20 beneficiaries are allowed to bound the number of coupons minted per round.
     defaultBeneficiary : Party
-      -- ^ Receives the weight not paid to the beneficiaries.
+      -- ^ Receives the non-escrowed weight not paid to the beneficiaries.
   deriving (Eq, Show, Serializable)
 
 instance Patchable SvNodeAssignment where
   patch new base current = SvNodeAssignment
     with
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
-      escrowedRewardWeight = patch new.escrowedRewardWeight base.escrowedRewardWeight current.escrowedRewardWeight
-      escrowParty = patch new.escrowParty base.escrowParty current.escrowParty
+      escrowBeneficiaries = patchScalar new.escrowBeneficiaries base.escrowBeneficiaries current.escrowBeneficiaries
       beneficiaries = patch new.beneficiaries base.beneficiaries current.beneficiaries
       defaultBeneficiary = patch new.defaultBeneficiary base.defaultBeneficiary current.defaultBeneficiary
+
+-- | A part of the reward weight held in escrow, minted as a coupon to `beneficiary`.
+data EscrowBeneficiary = EscrowBeneficiary
+  with
+    beneficiary : Party
+      -- ^ Receives the coupon for the escrowed weight.
+    rewardWeight : Int
+      -- ^ The escrowed weight; part of the SV node assignment's `rewardWeight`.
+  deriving (Eq, Show, Serializable)
 
 -- | Information about a beneficiary.
 data BeneficiaryInfo = BeneficiaryInfo
   with
     rewardRatio : Decimal
-      -- ^ The proportion of the reward weight of the SV node assignment that is shared with this beneficiary. It should be >0.0 and <=1.0
+      -- ^ The proportion of the non-escrowed reward weight of the SV node assignment that is shared with this beneficiary. It should be >0.0 and <=1.0
   deriving (Eq, Show, Serializable)
 
 instance Patchable BeneficiaryInfo where
@@ -99,7 +106,13 @@ svNodeAssignmentChecks =
   , (\SvNodeAssignment{..} -> all ((> 0.0) . rewardRatio) beneficiaries, "Beneficiary reward ratios are positive")
   , (\SvNodeAssignment{..} -> sum (fmap (.rewardRatio) beneficiaries) <= 1.0, "Beneficiary reward ratios add up to at most 1.0")
   , (\SvNodeAssignment{..} -> Map.size beneficiaries <= 20, "There are at most 20 beneficiaries")
+  , (\SvNodeAssignment{..} -> all ((> 0) . (.rewardWeight)) escrowBeneficiaries, "Escrowed reward weights are positive")
+  , (\assignment -> escrowedRewardWeight assignment <= assignment.rewardWeight, "Escrowed reward weights add up to at most the reward weight")
+  , (\SvNodeAssignment{..} -> length escrowBeneficiaries <= 20, "There are at most 20 escrow beneficiaries")
   ]
+
+escrowedRewardWeight : SvNodeAssignment -> Int
+escrowedRewardWeight = sum . map (.rewardWeight) . (.escrowBeneficiaries)
 
 validSvRightOwnerInfo : SvRightOwnerInfo -> Bool
 validSvRightOwnerInfo info = all (\(check, _) -> check info) svRightOwnerInfoChecks
@@ -108,10 +121,13 @@ requireValidSvRightOwnerInfo : SvRightOwnerInfo -> Update ()
 requireValidSvRightOwnerInfo info =
   forA_ svRightOwnerInfoChecks $ \(check, message) -> require message (check info)
 
--- | The absolute reward weight for each party that receives rewards in the context of this SV node assignment.
+-- | The absolute reward weight for each party that receives rewards in the context of this SV node assignment,
+-- including the escrowed weights for the escrow beneficiaries.
 svRewardCouponWeights : SvNodeAssignment -> Map Party Int
-svRewardCouponWeights SvNodeAssignment{..} =
-  Map.insertWith (+) defaultBeneficiary remainingWeight beneficiaryWeights
+svRewardCouponWeights assignment@SvNodeAssignment{..} =
+  Map.unionWith (+) escrowWeights $ Map.insertWith (+) defaultBeneficiary remainingWeight beneficiaryWeights
   where
-    remainingWeight = rewardWeight - sum beneficiaryWeights
-    beneficiaryWeights = fmap (\BeneficiaryInfo{rewardRatio} -> floor (intToDecimal rewardWeight * rewardRatio)) beneficiaries
+    escrowWeights = Map.fromListWithR (+) $ map (\escrow -> (escrow.beneficiary, escrow.rewardWeight)) escrowBeneficiaries
+    activeRewardWeight = rewardWeight - escrowedRewardWeight assignment
+    remainingWeight = activeRewardWeight - sum beneficiaryWeights
+    beneficiaryWeights = fmap (\BeneficiaryInfo{rewardRatio} -> floor (intToDecimal activeRewardWeight * rewardRatio)) beneficiaries
