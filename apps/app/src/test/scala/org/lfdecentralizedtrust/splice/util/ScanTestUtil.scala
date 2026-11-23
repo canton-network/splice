@@ -2,7 +2,7 @@ package org.lfdecentralizedtrust.splice.util
 
 import org.lfdecentralizedtrust.splice.console.ScanAppReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import definitions.DamlValueEncoding.members.CompactJson
+import definitions.DamlValueEncoding.members.LedgerApiJson
 import definitions.EventHistoryItem
 import definitions.UpdateHistoryItemV2.members.{
   UpdateHistoryReassignment,
@@ -25,7 +25,7 @@ trait ScanTestUtil {
       val page = scan.getEventHistory(
         count = pageLimit,
         after = after,
-        encoding = CompactJson,
+        encoding = LedgerApiJson,
       )
       if (page.isEmpty) acc
       else {

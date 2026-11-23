@@ -201,7 +201,6 @@ spec:
                 canton.sv-apps.sv.domain-migration-dump-path = "/domain-upgrade-dump/domain_migration_dump.json"
             {{- if .Values.domain }}
             - name: ADDITIONAL_CONFIG_SV_DOMAIN
-              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.current {
                   sequencer {
@@ -233,7 +232,6 @@ spec:
             {{- range $syncName, $sync := .Values.synchronizers }}
             {{- if kindIs "map" $sync }}
             - name: ADDITIONAL_CONFIG_SV_DOMAIN_{{ $syncName | upper }}
-              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.{{ $syncName }} {
                   sequencer {
@@ -265,7 +263,6 @@ spec:
             {{- end }}
             {{- range $i, $sync := .Values.synchronizers.additionalLegacy }}
             - name: ADDITIONAL_CONFIG_SV_DOMAIN_ADDITIONAL_LEGACY_{{ $i }}
-              #TODO(#930) - switch to port 443 https://github.com/DACH-NY/canton/issues/23835
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.{{ $i }} {
                   sequencer {
@@ -403,6 +400,15 @@ spec:
             {{- end }}
             - name: FAIL_ON_APP_VERSION_MISMATCH
               value: {{ .Values.failOnAppVersionMismatch | quote }}
+            # TODO(DACH-NY/canton-network-internal#8256): change this condition to .Values.disableAuth and remove .Values.participantClient.adminApi.disableAuth once we're ready to enable admin API auth by default
+            {{- if .Values.participantClient.adminApi.disableAuth }}
+            - name: ADDITIONAL_CONFIG_DISABLE_PARTICIPANT_ADMIN_API_AUTH
+              value: |
+                canton.sv-apps.sv.participant-client.admin-api.auth-config = ""
+                canton.sv-apps.sv.participant-client.admin-api.auth-config = { type = "none" }
+            {{- else }}
+            {{- include "splice-util-lib.auth0-participant-admin-api-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens "secretOverrides" (.Values.participantClient.adminApi.auth).secretOverrides "secretName" (.Values.participantClient.adminApi.auth).secretName) | indent 12}}
+            {{- end }}
             {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 12}}
             {{- include "splice-util-lib.log-level" .Values | indent 12}}
             - name: SPLICE_APP_CONTACT_POINT

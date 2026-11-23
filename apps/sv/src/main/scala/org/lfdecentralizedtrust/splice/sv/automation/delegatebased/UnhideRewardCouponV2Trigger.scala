@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
@@ -16,6 +17,7 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_UnhideRewardCouponsV2
+import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -40,31 +42,34 @@ class UnhideRewardCouponV2Trigger(
   override protected def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[Task]] = {
-    val now = context.clock.now
     for {
       providerParties <- store.listNonObserverRewardCouponsV2ProvidersSample(
         PageLimit.tryCreate(svConfig.delegatelessAutomationUnhideRewardCouponV2SampleSize)
       )
-      supported <- Future.traverse(providerParties) { party =>
-        svTaskContext.packageVersionSupport
-          .supportsTrafficBasedAppRewards(Seq(party), now)
-          .map(support => (party, support.supported))
-      }
-    } yield supported.collect { case (party, true) => Task(party) }
+      supportedProviders <- MonadUtil.sequentialTraverseFilter(providerParties)(provider =>
+        hasSupportedAmuletVersion(provider).map(Option.when(_)(provider))
+      )
+    } yield supportedProviders.map(Task(_))
   }
+
+  // The provider becomes an observer, so its participant must vet a supported Amulet version.
+  private def hasSupportedAmuletVersion(provider: PartyId)(implicit
+      tc: TraceContext
+  ): Future[Boolean] =
+    svTaskContext.vettingLookupService
+      .lookupVettingState(provider, PackageIdResolver.Package.SpliceAmulet)
+      .map(_.exists(version => !svConfig.allIgnoredAmuletVersions.contains(version.toString)))
 
   override protected def isStaleTask(task: Task)(implicit
       tc: TraceContext
   ): Future[Boolean] = {
-    val now = context.clock.now
     for {
       coupons <- store.listNonObserverRewardCouponsV2ForProvider(
         task.providerParty,
         PageLimit.tryCreate(1),
       )
-      support <- svTaskContext.packageVersionSupport
-        .supportsTrafficBasedAppRewards(Seq(task.providerParty), now)
-    } yield coupons.isEmpty || !support.supported
+      supported <- hasSupportedAmuletVersion(task.providerParty)
+    } yield coupons.isEmpty || !supported
   }
 
   override def completeTaskAsDsoDelegate(

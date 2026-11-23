@@ -171,7 +171,10 @@ function main() {
   case "$namespace" in
       sv|sv-[0-9]|sv-[0-9][0-9]|sv-da-*)
           is_sv=true
-          full_instance="$namespace-cn-apps-pg"
+          local apps_instance
+          apps_instance=$(create_component_instance "cn-apps" \
+            "$migration_id" "$namespace")
+          full_instance="$namespace-$apps_instance-pg"
           expected_components="cn-apps sequencer participant mediator"
           local bft_db_enabled
           bft_db_enabled=$(canton_bft_db_enabled "$migration_id" "$config")

@@ -145,8 +145,7 @@ case class ScanAppBackendConfig(
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig
-    with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
-    {
+    with BaseScanAppConfig {
   require(
     updateHistoryPartitionRunwayDays > 0,
     "updateHistoryPartitionRunwayDays cannot be below 1 day",

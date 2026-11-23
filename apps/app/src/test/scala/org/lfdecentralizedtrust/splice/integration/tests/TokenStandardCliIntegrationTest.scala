@@ -14,7 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferins
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllScanAppConfigs_
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.LedgerApiJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTest,
@@ -219,7 +219,7 @@ class TokenStandardCliIntegrationTest
       // to minimize the impact on overall runtime of integration tests
       clue("SV1 Scan backend has been updated") {
         eventuallySucceeds() {
-          sv1ScanBackend.getUpdateHistory(10, None, encoding = CompactJson)
+          sv1ScanBackend.getUpdateHistory(10, None, encoding = LedgerApiJson)
         }
       }
 

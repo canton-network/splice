@@ -6,6 +6,8 @@ BEGIN
 
   {{createProdTable}}
 
+  {{checkProdSchema}}
+
   -- 2. Create central watermark tracking table using INT64 (microseconds)
   CREATE TABLE IF NOT EXISTS {{watermarksTable}} (
     table_name STRING,
@@ -50,8 +52,8 @@ BEGIN
 
   -- 6. Filter incremental data with Primary Key Deduplication & Partition Pruning
   CREATE TEMP TABLE temp_incremental AS (
-    SELECT 
-      staging.*, 
+    SELECT
+      {{stagingColumns}},
       {{recordDateExpr}} AS record_date
     FROM {{stagingTable}} AS staging
     WHERE (
@@ -74,8 +76,16 @@ BEGIN
   -- 7. Perform append and update watermark if valid new records exist
   IF EXISTS (SELECT 1 FROM temp_incremental) THEN
     
-    INSERT INTO {{prodTable}}
-    SELECT * FROM temp_incremental;
+    -- by column name: columns added to production since it was
+    -- created come after record_date
+    INSERT INTO {{prodTable}} (
+      {{columns}},
+      record_date
+    )
+    SELECT
+      {{columns}},
+      record_date
+    FROM temp_incremental;
 
     UPDATE {{watermarksTable}}
     SET last_watermark_time = UNIX_MICROS(max_closed_timestamp)

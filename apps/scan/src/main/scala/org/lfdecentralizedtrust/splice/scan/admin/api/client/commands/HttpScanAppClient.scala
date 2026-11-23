@@ -21,10 +21,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   AppTransferContext,
   TransferPreapproval,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommandCounter,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   ClosedMiningRound,
   IssuingMiningRound,
@@ -668,52 +665,6 @@ object HttpScanAppClient {
     }
   }
 
-  case class LookupTransferCommandCounterByParty(
-      party: PartyId
-  ) extends InternalBaseCommand[http.LookupTransferCommandCounterByPartyResponse, Option[
-        ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]
-      ]] {
-
-    override def submitRequest(
-        client: ScanClient,
-        headers: List[HttpHeader],
-    ) = client.lookupTransferCommandCounterByParty(party.toProtoPrimitive, headers)
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case http.LookupTransferCommandCounterByPartyResponse.OK(response) =>
-        ContractWithState
-          .fromHttp(TransferCommandCounter.COMPANION)(response.transferCommandCounter)
-          .map(Some(_))
-          .leftMap(_.toString)
-      case http.LookupTransferCommandCounterByPartyResponse.NotFound(_) =>
-        Right(None)
-    }
-  }
-
-  case class LookupTransferCommandStatus(
-      sender: PartyId,
-      nonce: Long,
-  ) extends InternalBaseCommand[http.LookupTransferCommandStatusResponse, Option[
-        definitions.LookupTransferCommandStatusResponse
-      ]] {
-
-    override def submitRequest(
-        client: ScanClient,
-        headers: List[HttpHeader],
-    ) = client.lookupTransferCommandStatus(Codec.encode(sender), nonce, headers)
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case http.LookupTransferCommandStatusResponse.OK(ev) =>
-        Right(Some(ev))
-      case http.LookupTransferCommandStatusResponse.NotFound(_) =>
-        Right(None)
-    }
-  }
-
   final case class RateStep(
       amount: BigDecimal,
       rate: BigDecimal,
@@ -1062,6 +1013,7 @@ object HttpScanAppClient {
       pageSize: Int = 100,
       partyIds: Option[Vector[PartyId]] = None,
       templates: Option[Vector[PackageQualifiedName]] = None,
+      damlValueEncoding: Option[definitions.DamlValueEncoding] = None,
   ) extends InternalBaseCommand[
         http.GetAcsSnapshotAtV2Response,
         Option[definitions.AcsResponseV2],
@@ -1079,6 +1031,7 @@ object HttpScanAppClient {
           pageSize,
           partyIds.map(_.map(_.toProtoPrimitive)),
           templates.map(_.map(_.toString)),
+          damlValueEncoding,
         ),
         headers,
       )
@@ -1103,6 +1056,7 @@ object HttpScanAppClient {
       recordTimeMatch: Option[definitions.HoldingsStateRequestV2.RecordTimeMatch],
       after: Option[String] = None,
       pageSize: Int = 100,
+      damlValueEncoding: Option[definitions.DamlValueEncoding] = None,
   ) extends InternalBaseCommand[
         http.GetHoldingsStateAtV2Response,
         Option[definitions.AcsResponseV2],
@@ -1119,6 +1073,7 @@ object HttpScanAppClient {
           after,
           pageSize,
           partyIds.map(_.toProtoPrimitive),
+          damlValueEncoding,
         ),
         headers,
       )

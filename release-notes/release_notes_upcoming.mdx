@@ -4,9 +4,9 @@
 
   - Scan App
 
-    - `/v0/transfer-command/status` and the validator's `/v0/scan-proxy/transfer-command/status` are deprecated.
-      After Scan switches to the partitioned update history tables, they no longer find transfer commands created after
-      the switch.
+    - Removed the internal `/v0/transfer-command-counter/{party}` and `/v0/transfer-command/status` endpoints.
+      Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0, this removes
+      the remaining parts.
     - The `DeleteCorruptAcsSnapshotTrigger` is removed because it is obsolete.
     - Scan switches its update history to tables partitioned by record time. On the first start, a database migration
       renames the existing update history tables to `*_legacy` (no data is copied) and creates the new tables. Scan reads
@@ -14,23 +14,12 @@
     - ACS snapshots are now always stored in per-snapshot tables. The `per-acs-snapshot-tables-enabled` setting is
       deprecated: `true` is accepted and has no effect, `false` is rejected at startup. Remove it from your configuration.
     - An SV that joins after the switch cannot backfill update history from other SVs until a later release.
-    - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true` (Helm
-      value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
-      per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
-      releases extend this setting to the daily snapshots once they are in bulk storage.
-      ACS snapshot queries with `record_time_match=exact` for a time whose snapshot was pruned then return not found.
 
-  - SV App
+  - Validator App
 
-    - Joining SVs now download the DSO party ACS from their sponsor as a file instead of receiving it in memory,
-      so onboarding works with large snapshots. SVs that restrict SV app ingress must allow other SVs to reach
-      the new `/v0/onboard/sv/party-migration/prepare` and `/v0/onboard/sv/download/{id}` endpoints.
-
-  - Deployment
-
-    - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
-      that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
-      `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
+    - Removed the `/v0/scan-proxy/transfer-command-counter/{party}` and `/v0/scan-proxy/transfer-command/status`
+      endpoints. Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0,
+      this removes the remaining parts.
 
 ## Upcoming for next minor release (template):
 

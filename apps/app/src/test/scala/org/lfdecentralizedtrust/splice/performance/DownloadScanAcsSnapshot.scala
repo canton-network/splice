@@ -8,7 +8,11 @@ import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.actor.{ActorSystem, Scheduler}
 import org.lfdecentralizedtrust.splice.http.{HttpClient, HttpClientMetrics}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.AcsRequestV2.RecordTimeMatch
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV2, ActiveContract}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  AcsResponseV2,
+  ActiveContract,
+  DamlValueEncoding,
+}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.GetAcsSnapshotAtV2
 
 import java.nio.charset.StandardCharsets
@@ -54,6 +58,7 @@ class DownloadScanAcsSnapshot(
               Some(RecordTimeMatch.AtOrBefore),
               after = after,
               pageSize = 1000,
+              damlValueEncoding = Some(DamlValueEncoding.LedgerApiJson),
             )
             command
               .submitRequest(command.createClient(host), Nil)

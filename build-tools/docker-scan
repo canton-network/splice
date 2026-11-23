@@ -34,6 +34,20 @@ EOF
   echo "$last_layer"
 }
 
+function pull_image() {
+  local image="$1"
+
+  for attempt in {1..5}; do
+    if docker pull --platform linux/amd64 "$image"; then
+      return 0
+    fi
+    echo "docker pull failed (attempt $attempt) for image: $image, retrying in 10 seconds..."
+    sleep 10
+  done
+  echo "docker pull failed after 5 attempts for image: $image"
+  return 1
+}
+
 function do_scan() {
 
   local image="$1"
@@ -53,7 +67,7 @@ function do_scan() {
 
   # Ensure the image is available locally. On K8s runners the image is not
   # built in the same job, so we need to pull it from the registry first.
-  docker pull --platform linux/amd64 "$image"
+  pull_image "$image"
 
   # Convert the image to a single-platform OCI archive. Docker Inspector
   # cannot handle the multi-platform manifest list produced by docker save.
@@ -68,7 +82,7 @@ function do_scan() {
   success=0
   for i in {1..10}; do
     set +e
-    bash <(curl -s https://detect.blackduck.com/detect10.sh) \
+    bash <(curl -s https://detect.blackduck.com/detect12.sh) \
       --blackduck.url=https://digitalasset.blackducksoftware.com/ \
       --blackduck.api.token="$BLACKDUCK_HUBDETECT_TOKEN" \
       --detect.docker.tar="${image_dir}/image.tar" \

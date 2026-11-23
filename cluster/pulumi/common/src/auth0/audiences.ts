@@ -17,3 +17,16 @@ export function getValidatorAppApiAudience(auth0Config: Auth0Config, namespace: 
 export function getLedgerApiAudience(auth0Config: Auth0Config, namespace: string): string {
   return getNamespaceConfig(auth0Config, namespace).audiences.ledgerApi;
 }
+
+export function getParticipantAdminApiAudience(
+  auth0Config: Auth0Config,
+  namespace: string
+): string {
+  const audience = getNamespaceConfig(auth0Config, namespace).audiences.participantAdminApi;
+  if (audience === undefined) {
+    throw new Error(
+      `Participant Admin API audience is not defined for namespace ${namespace}. Perhaps, infra did not update in time.`
+    );
+  }
+  return audience;
+}

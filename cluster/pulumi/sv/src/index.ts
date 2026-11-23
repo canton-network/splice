@@ -10,12 +10,12 @@ async function main() {
   const clientType = sv === 'sv' ? Auth0ClientType.RUNBOOK : Auth0ClientType.MAINSTACK;
   const auth0FetchOutput = getAuth0Config(clientType);
   auth0FetchOutput.apply(async auth0Fetch => {
-    await auth0Fetch.loadAuth0Cache();
+    await auth0Fetch.loadFixedTokensCache();
 
     // defining resources in an apply callback is wrong...
     await installNode(sv, auth0Fetch);
 
-    await auth0Fetch.saveAuth0Cache();
+    await auth0Fetch.persistFixedTokensCache();
   });
 }
 

@@ -77,6 +77,11 @@
           }
         },
         "participantAddress": "participant",
+        "participantClient": {
+          "adminApi": {
+            "disableAuth": true
+          }
+        },
         "participantIdentitiesDumpPeriodicBackup": {
           "backupInterval": "10m",
           "location": {

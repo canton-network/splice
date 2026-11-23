@@ -223,6 +223,14 @@ object ExcludedBucket extends Bucket {
   override val shouldNotExist = false
 }
 
+object SqlMigrationBucket extends Bucket {
+  override val name =
+    "TODOs are not allowed in Flyway migrations (files are immutable once released; a TODO there can never be resolved)"
+  override val classPosition = 5
+  override val withinClassPosition = (0, "")
+  override val shouldNotExist = true
+}
+
 case class CrossRefIssueBucket(number: Int, org: String, repo: String) extends Bucket {
   override val name = s"Issue #$number in $org/$repo"
   override val classPosition = 7
@@ -313,6 +321,7 @@ val todoStyleExcludePrefixes =
     "project/CantonDependencies.scala",
     "experiments/",
     "CONTRIBUTING.md",
+    "AGENTS.md",
     "token-standard/dependencies",
     ".github/actions/tests/split_tests/dist/",
     "gha-scripts/actions/parse_backport_comments/",
@@ -320,6 +329,20 @@ val todoStyleExcludePrefixes =
   )
 val todoStyleExcludeSuffixes =
   Seq("/checkTodos.sc", "/build.static_tests.yml", "/migrate-github-issues.py")
+
+// Flyway versioned migrations are checksummed and must never be edited after merging,
+// so a TODO in one can never be resolved. Migrations up to and including V083 contain
+// pre-existing TODOs and are ignored; any TODO in a newer migration fails the check.
+val sqlMigrationDir = "apps/common/src/main/resources/db/migration/canton-network/postgres/stable/"
+val sqlMigrationGrandfatheredMaxVersion = 83
+val sqlMigrationFileRegex = "V([0-9]+)__.*\\.sql".r
+
+def sqlMigrationVersion(path: String): Option[Int] =
+  if (path.startsWith(sqlMigrationDir))
+    sqlMigrationFileRegex
+      .findFirstMatchIn(path.stripPrefix(sqlMigrationDir))
+      .map(_.group(1).toInt)
+  else None
 
 def addToBucket(
     acc: Map[Bucket, List[String]],
@@ -348,17 +371,27 @@ def matchTODOWithBuckets(line: String, bucketsForLine: String): List[(Bucket, St
 }
 
 def processScalaStyleTodo(line: String): List[(Bucket, String)] = {
-  val excluded = todoStyleExcludePrefixes.exists(line.startsWith) ||
-    todoStyleExcludeSuffixes.exists(suffix => line.takeWhile(c => c != ':').endsWith(suffix))
-  if (excluded)
-    List(ExcludedBucket -> line)
-  else if (line.toUpperCase.contains("FIXME"))
-    List(FixmeBucket -> line)
-  else {
-    identifierRegex.findFirstMatchIn(line) match {
-      case Some(contents) => matchTODOWithBuckets(line, contents.matched)
-      case None => List(UnknownBucket -> line)
-    }
+  val path = line.takeWhile(c => c != ':')
+  sqlMigrationVersion(path) match {
+    case Some(v) if v <= sqlMigrationGrandfatheredMaxVersion =>
+      // Existing TODOs in already-applied migrations cannot be removed (Flyway checksums).
+      List(ExcludedBucket -> line)
+    case Some(_) =>
+      // Any TODO in a new migration is permanent -> fail CI.
+      List(SqlMigrationBucket -> line)
+    case None =>
+      val excluded = todoStyleExcludePrefixes.exists(line.startsWith) ||
+        todoStyleExcludeSuffixes.exists(suffix => path.endsWith(suffix))
+      if (excluded)
+        List(ExcludedBucket -> line)
+      else if (line.toUpperCase.contains("FIXME"))
+        List(FixmeBucket -> line)
+      else {
+        identifierRegex.findFirstMatchIn(line) match {
+          case Some(contents) => matchTODOWithBuckets(line, contents.matched)
+          case None => List(UnknownBucket -> line)
+        }
+      }
   }
 }
 

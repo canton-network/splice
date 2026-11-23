@@ -45,6 +45,32 @@ valueFrom:
 {{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "scope" "secretName" $secretName "secretKey" "scope" "optional" true) | indent 2 }}
 {{- end }}
 {{- end -}}
+{{- define "splice-util-lib.auth0-participant-admin-api-env-vars" -}}
+{{- $app := .appName }}
+{{- $keyName := .keyName }}
+{{- $fixedTokens := .fixedTokens }}
+{{- $secretName := .secretName | default (printf "splice-app-%s-participant-admin-api-auth" $keyName) }}
+{{- if .fixedTokens }}
+- name: ADDITIONAL_CONFIG_FIXED_TOKENS_PARTICIPANT_ADMIN_API_AUTH
+  value: |
+    _participant_client_admin_api_auth_config = null
+    _participant_client_admin_api_auth_config = {
+      type = "static"
+      token = ${SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_TOKEN}
+    }
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_TOKEN"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "token" "secretName" $secretName "secretKey" "token" "optional" false) | indent 2 }}
+{{ else }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_AUDIENCE"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "audience" "secretName" $secretName "secretKey" "audience" "optional" false) | indent 2 }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_URL"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "url" "secretName" $secretName "secretKey" "url" "optional" false) | indent 2 }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_CLIENT_ID"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientId" "secretName" $secretName "secretKey" "client-id" "optional" false) | indent 2 }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_CLIENT_SECRET"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientSecret" "secretName" $secretName "secretKey" "client-secret" "optional" false) | indent 2 }}
+{{- end }}
+{{- end -}}
 {{- define "splice-util-lib.auth0-user-env-var" -}}
 {{- $app := .appName }}
 {{- $keyName := .keyName }}
@@ -117,7 +143,7 @@ spec:
       # but never retries nor indicates non-readiness, so we unfortunately need to wait for it
       # to be ready before spinning up postgres-exporter.
       - name: postgres-exporter-init
-        image: postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+        image: postgres:18.7-trixie@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc
         env:
           - name: PGPASSWORD
 {{ include "splice-util-lib.secret" (dict "overrides" $persistence.secretOverrides "overrideKey" "postgresPassword" "secretName" $persistence.secretName "secretKey" "postgresPassword") | indent 12 }}

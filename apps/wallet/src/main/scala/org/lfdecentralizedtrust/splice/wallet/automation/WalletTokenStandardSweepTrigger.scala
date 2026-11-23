@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.wallet.automation
 
 import org.lfdecentralizedtrust.splice.automation.TriggerContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{AmuletConfig, USD}
-import org.lfdecentralizedtrust.splice.environment.PackageVersionSupport
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection.CommandId
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
@@ -27,7 +26,6 @@ class WalletTokenStandardSweepTrigger(
     scanConnection: ScanConnection,
     treasury: TreasuryService,
     dedupDuration: DedupDuration,
-    packageVersionSupport: PackageVersionSupport,
 )(implicit
     override val ec: ExecutionContext,
     override val tracer: Tracer,
@@ -48,19 +46,7 @@ class WalletTokenStandardSweepTrigger(
     .asRuntimeException
 
   override protected def extraRetrieveTasksValidation()(implicit tc: TraceContext): Future[Unit] =
-    packageVersionSupport
-      .supportsTokenStandard(
-        Seq(store.key.endUserParty, store.key.dsoParty, config.receiver),
-        context.clock.now,
-      )
-      .map { support =>
-        if (!support.supported)
-          throw Status.FAILED_PRECONDITION
-            .withDescription(
-              s"Token standard is not supported for sweeping to ${config.receiver}; disable `use-token-standard-transfer`"
-            )
-            .asRuntimeException
-      }
+    Future.unit
 
   override protected def sweep(
       task: WalletSweepTrigger.Task,

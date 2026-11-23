@@ -43,7 +43,6 @@ import scala.annotation.nowarn
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
-// TODO(DACH-NY/canton-network-node#14568) Merge this into ExternallySignedPartyOnboardingTest
 class ExternalPartySetupProposalIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
@@ -212,15 +211,6 @@ class ExternalPartySetupProposalIntegrationTest
           tp.contract.contractId
         ) contains onboardingBobExtPartySetupResult.transferPreapprovalCid
 
-      // Lookup transfer command counter before any transfer command
-      aliceValidatorBackend.scanProxy.lookupTransferCommandCounterByParty(aliceParty) shouldBe None
-
-      // Lookup transfer command that does not exist
-      aliceValidatorBackend.scanProxy.lookupTransferCommandStatus(
-        aliceParty,
-        0L,
-      ) shouldBe None
-
       val (_, issuingRound) = actAndCheck(
         s"Advance rounds until there is at least one issuing round", {
           advanceRoundsByOneTickViaAutomation()
@@ -330,7 +320,6 @@ class ExternalPartySetupProposalIntegrationTest
     }
   }
 
-  // TODO(DACH-NY/canton-network-node#15468): Simplify this test to not require a ledger submission
   "TransferPreapprovals get expired by SV automation" in { implicit env =>
     val onboarding = onboardExternalParty(aliceValidatorBackend)
     val externalParty = onboarding.party

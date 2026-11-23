@@ -7,7 +7,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodeg
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_ConfirmSvOnboarding
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_ConfirmSvOnboarding
+import eu.rekawek.toxiproxy.model.ToxicDirection
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.integration.plugins.toxiproxy.UseToxiproxy
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 
 import scala.jdk.OptionConverters.*
@@ -24,6 +26,9 @@ class SvOnboardingAddlIntegrationTest
     extends SvIntegrationTestBase
     with WalletTestUtil
     with SvTestUtil {
+
+  private val toxiproxy = UseToxiproxy(createSvSponsorProxies = true, instanceFilter = _ == "sv2")
+  registerPlugin(toxiproxy)
 
   override def environmentDefinition
       : org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition =
@@ -333,10 +338,45 @@ class SvOnboardingAddlIntegrationTest
         )
       }
 
-      clue("Start SV2") {
+      clue(
+        "Start SV2, which resumes its DSO party ACS download after the sponsor connection is cut"
+      ) {
         // we don't start scan and validator here as they are not useful for this test
         // but scan (required by validator) could emit errors that we'd then need to deal with
-        sv2Backend.startSync()
+        val SnapshotDownload =
+          "HTTP GET /api/sv/v0/onboard/sv/download/(\\S+) from .*: Responding with status code: (\\d{3} [^,]+).*".r
+        loggerFactory.assertEventuallyLogsSeq(
+          (SuppressionRule.LoggerNameContains("JoiningNodeDsoPartyHosting") &&
+            SuppressionRule.LevelAndAbove(Level.INFO)) ||
+            (SuppressionRule.LoggerNameContains("HttpRequestLogger") &&
+              SuppressionRule.LoggerNameContains("SV=sv1") &&
+              SuppressionRule.LevelAndAbove(Level.DEBUG))
+        )(
+          {
+            val cut = toxiproxy
+              .proxies(UseToxiproxy.svSponsorApi("sv2"))
+              .toxics()
+              .limitData("cut-snapshot-download", ToxicDirection.DOWNSTREAM, 2048L)
+            try {
+              sv2Backend.start()
+              eventually(timeUntilSuccess = 2.minutes) {
+                loggerFactory.fetchRecordedLogEntries.exists { entry =>
+                  entry.loggerName.contains("JoiningNodeDsoPartyHosting") &&
+                  entry.loggerName.contains("SV=sv2") &&
+                  entry.message.contains("Download of onboarding snapshot was interrupted")
+                } shouldBe true
+              }
+            } finally cut.remove()
+            sv2Backend.waitForInitialization()
+          },
+          entries => {
+            def downloads(status: String) = entries
+              .map(_.message)
+              .collect { case SnapshotDownload(id, `status`) => id }
+              .toSet
+            downloads("200 OK") intersect downloads("206 Partial Content") should not be empty
+          },
+        )
       }
       sv1Backend.getDsoInfo().dsoRules.payload.svs should have size 2 withClue "dsoRules.svs"
 

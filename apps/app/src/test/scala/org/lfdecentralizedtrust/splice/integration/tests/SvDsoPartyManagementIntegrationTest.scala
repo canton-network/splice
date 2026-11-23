@@ -3,23 +3,39 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicClient
+import org.lfdecentralizedtrust.splice.http.v0.sv_public.{
+  OnboardSvSequencerPrepareResponse,
+  SvPublicClient,
+}
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.sv.onboarding.joining.{
   JoiningNodeDsoPartyHosting,
   SvOnboardingSnapshotDownload,
 }
+import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient
+import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
+import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
+import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService.SnapshotState
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
-import org.lfdecentralizedtrust.splice.util.WalletTestUtil
+import org.lfdecentralizedtrust.splice.util.{Codec, WalletTestUtil}
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
-import com.digitalasset.canton.topology.{PartyId, UniqueIdentifier}
+import com.digitalasset.canton.topology.{PartyId, SequencerId, UniqueIdentifier}
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.Http
-import org.apache.pekko.http.scaladsl.model.{HttpMethods, HttpRequest, ResponseEntity, StatusCodes}
+import org.apache.pekko.http.scaladsl.model.headers.{ByteRange, Range}
+import org.apache.pekko.http.scaladsl.model.{
+  ContentRange,
+  HttpMethods,
+  HttpRequest,
+  ResponseEntity,
+  StatusCodes,
+}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.util.ByteString
 
 import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.{Base64, UUID}
 
 class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with WalletTestUtil {
 
@@ -216,6 +232,73 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
         }
       }
 
+      clue(
+        "SV1 serves the onboarding state of sv3's sequencer as a snapshot that can be downloaded in ranges"
+      ) {
+        val sequencerId =
+          sv3Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection.getSequencerId.futureValue
+        def prepare(sequencer: SequencerId) =
+          sponsor
+            .onboardSvSequencerPrepare(
+              definitions.OnboardSvSequencerRequest(Codec.encode(sequencer))
+            )
+            .value
+            .futureValue
+        val sponsorStream = sponsorStreamClient()
+        def download(id: String, offset: Long = 0) =
+          sponsorStream
+            .onboardSvDownload(
+              id,
+              if (offset > 0) List(Range(ByteRange.fromOffset(offset))) else Nil,
+            )
+            .value
+            .futureValue
+
+        val id = inside(prepare(sequencerId)) {
+          case Right(OnboardSvSequencerPrepareResponse.OK(response)) => response.id
+        }
+        prepare(sequencerId) shouldBe Right(
+          OnboardSvSequencerPrepareResponse.OK(
+            definitions.OnboardSvSnapshotPrepareResponse(id)
+          )
+        )
+        val (file, sha256Base64) = eventually() {
+          inside(
+            sv1Backend.appState.svAutomation.onboardingSnapshotService
+              .lookup(SvOnboardingSnapshotId(id))
+          ) { case Some(SnapshotState.Ready(file, sha256Base64)) =>
+            (file, sha256Base64)
+          }
+        }
+        val snapshot = Files.readAllBytes(file)
+        Base64.getEncoder.encodeToString(
+          MessageDigest.getInstance("SHA-256").digest(snapshot)
+        ) shouldBe sha256Base64
+        val reprDigest = Some(s"sha-256=:$sha256Base64:")
+        val length = snapshot.length.toLong
+
+        inside(download(id)) {
+          case Right(SvStreamClient.OnboardSvDownloadResponse.OK(entity, digest)) =>
+            digest shouldBe reprDigest
+            bytesOf(entity) shouldBe snapshot
+        }
+        inside(download(id, length / 2)) {
+          case Right(
+                SvStreamClient.OnboardSvDownloadResponse.PartialContent(entity, range, digest)
+              ) =>
+            range shouldBe Some(ContentRange(length / 2, length - 1, length))
+            digest shouldBe reprDigest
+            bytesOf(entity) shouldBe snapshot.drop((length / 2).toInt)
+        }
+        download(id, length) shouldBe Right(
+          SvStreamClient.OnboardSvDownloadResponse.RangeNotSatisfiable
+        )
+        inside(download(UUID.randomUUID().toString)) { case Left(Right(response)) =>
+          response.status shouldBe StatusCodes.NotFound
+          new String(bytesOf(response.entity)) should include("not found")
+        }
+      }
+
       clue("SV1 answers unknown onboarding paths with 404") {
         implicit val actorSystem: ActorSystem = env.actorSystem
         val response = Http()
@@ -230,17 +313,21 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
         new String(bytesOf(response.entity)) should include("could not be found")
       }
 
-      clue("sv3 can restart and deletes a leftover DSO party snapshot download") {
+      clue("sv3 can restart and deletes leftover onboarding snapshot downloads") {
         sv3Backend.stop()
-        val download = SvOnboardingSnapshotDownload.downloadDirectory(
-          sv3Backend.config.onboardingSnapshots,
+        val downloads = Seq(
           JoiningNodeDsoPartyHosting.SnapshotDownloadName,
+          LocalSynchronizerNode.SnapshotDownloadName,
+        ).map(
+          SvOnboardingSnapshotDownload.downloadDirectory(sv3Backend.config.onboardingSnapshots, _)
         )
-        val leftover =
-          Files.write(Files.createDirectories(download).resolve("snapshot"), "leftover".getBytes)
-        Files.exists(leftover) shouldBe true
+        downloads.foreach { download =>
+          val leftover =
+            Files.write(Files.createDirectories(download).resolve("snapshot"), "leftover".getBytes)
+          Files.exists(leftover) shouldBe true
+        }
         sv3Backend.startSync()
-        Files.exists(download) shouldBe false
+        downloads.foreach(download => Files.exists(download) shouldBe false)
       }
   }
 
@@ -248,6 +335,15 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
     implicit val actorSystem: ActorSystem = env.actorSystem
     registerHttpConnectionPoolsCleanup(env)
     SvPublicClient.httpClient(Http().singleRequest(_), sv1Backend.httpClientConfig.url.toString)(
+      env.executionContext,
+      Materializer(actorSystem),
+    )
+  }
+
+  private def sponsorStreamClient()(implicit env: SpliceTestConsoleEnvironment): SvStreamClient = {
+    implicit val actorSystem: ActorSystem = env.actorSystem
+    registerHttpConnectionPoolsCleanup(env)
+    SvStreamClient.httpClient(Http().singleRequest(_), sv1Backend.httpClientConfig.url.toString)(
       env.executionContext,
       Materializer(actorSystem),
     )

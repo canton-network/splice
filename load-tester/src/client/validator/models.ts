@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from 'zod';
 
-// TODO(DACH-NY/canton-network-node#9049)
 const contract = z.object({
   template_id: z.string(),
   contract_id: z.string(),

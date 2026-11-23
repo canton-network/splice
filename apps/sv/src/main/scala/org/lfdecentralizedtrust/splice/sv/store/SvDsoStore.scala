@@ -1496,12 +1496,7 @@ object SvDsoStore {
           rewardWeight = Some(contract.payload.weight),
         )
       },
-      mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
-        co => co.payload.dso == dso,
-        versionGuard = { case (pkgVersionSupport, now) =>
-          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
-        },
-      ) { contract =>
+      mkFilter(splice.amulet.RewardCouponV2.COMPANION)(co => co.payload.dso == dso) { contract =>
         DsoAcsStoreRowData(
           contract,
           rewardRound = Some(contract.payload.round.number),
@@ -1511,22 +1506,16 @@ object SvDsoStore {
           rewardBeneficiaryIsObserver = Some(contract.payload.providerIsObserver),
         )
       },
-      mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
-        co => co.payload.dso == dso,
-        versionGuard = { case (pkgVersionSupport, now) =>
-          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
-        },
+      mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(co =>
+        co.payload.dso == dso
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           miningRound = Some(contract.payload.round.number),
         )
       },
-      mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(
-        co => co.payload.dso == dso,
-        versionGuard = { case (pkgVersionSupport, now) =>
-          (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(dsoParty), now)(tc)
-        },
+      mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(co =>
+        co.payload.dso == dso
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
@@ -1626,7 +1615,6 @@ object SvDsoStore {
             Some(Timestamp.assertFromInstant(contract.payload.nextPaymentDueAt)),
         )
       },
-      // TODO (DACH-NY/canton-network-node#8782) revisit if it makes sense
       mkFilter(sub.TerminatedSubscription.COMPANION)(co =>
         co.payload.subscriptionData.dso == dso && co.payload.subscriptionData.provider == dso
       ) { contract =>
@@ -1702,24 +1690,16 @@ object SvDsoStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
       },
-      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
-        co => co.payload.dso == dso,
-        versionGuard = { case (pkgVersionSupport, now) =>
-          (tc) =>
-            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
-        },
+      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
+        co.payload.dso == dso
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           miningRound = Some(contract.payload.holdingFeesOpenRoundNumber.number),
         )
       },
-      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(
-        co => co.payload.dso == dso,
-        versionGuard = { case (pkgVersionSupport, now) =>
-          (tc) =>
-            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
-        },
+      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(co =>
+        co.payload.dso == dso
       ) {
         DsoAcsStoreRowData(_)
       },

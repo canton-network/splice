@@ -1,5 +1,4 @@
 # -*- shell-script -*-
-# TODO(DACH-NY/canton-network-node#9531): Currently, this is not tested regularly.
 subcommand_whitelist[disaster_recovery_test]='Test disaster recovery in a cluster'
 
 function subcmd_disaster_recovery_test() {

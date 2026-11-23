@@ -15,7 +15,6 @@ import com.digitalasset.daml.lf.data.Time.Timestamp
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProvider}
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
@@ -226,23 +225,6 @@ trait ScanStore
     splice.governancelock.GovernanceLock,
   ]]]
 
-  def lookupTransferCommandCounterByParty(
-      partyId: PartyId
-  )(implicit tc: TraceContext): Future[
-    Option[ContractWithState[
-      splice.externalpartyamuletrules.TransferCommandCounter.ContractId,
-      splice.externalpartyamuletrules.TransferCommandCounter,
-    ]]
-  ]
-
-  def lookupLatestTransferCommandEvents(
-      sender: PartyId,
-      nonce: Long,
-      limit: Int,
-  )(implicit
-      tc: TraceContext
-  ): Future[Map[TransferCommand.ContractId, TransferCommandTxLogEntry]]
-
 }
 
 object ScanStore {
@@ -365,12 +347,7 @@ object ScanStore {
                 Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
             )
         },
-        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
-          },
-        ) { contract =>
+        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanAcsStoreRowData(contract)
         },
         mkFilter(splice.amulet.Amulet.COMPANION)(co => co.payload.dso == dso) { contract =>
@@ -549,13 +526,8 @@ object ScanStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
         ),
-        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) =>
-              pkgVersionSupport
-                .supports24hSubmissionDelay(Seq(key.dsoParty), Seq(key.dsoParty), now)(tc)
-          },
+        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
+          co.payload.dso == dso
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract

@@ -48,6 +48,7 @@ const SvParticipantConfigSchema = z
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
     resources: K8sResourceSchema,
+    disableParticipantAdminApiAuth: z.boolean().optional(),
   })
   .strict();
 const Auth0ConfigSchema = z
@@ -87,12 +88,8 @@ export const ScanBigQueryConfigSchema = z
   .object({
     dataset: z.string(),
     prefix: z.string(),
-    functionsDataset: z.string().optional(),
-    silverDataset: z.string().optional(),
-    goldDataset: z.string().optional(),
     enableLegacyDatastream: z.boolean().default(true),
     enableStagProdDatastream: z.boolean().default(true),
-    useProdDataForFunctions: z.boolean().default(false),
     legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     retentionPeriodSeconds: z

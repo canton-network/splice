@@ -201,10 +201,16 @@ class JoiningNodeInitializer(
       )
       decentralizedSynchronizerId = psid.logical
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
-      dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
-        decentralizedSynchronizerId,
-        registeredGlobalSync,
-        participantId,
+      dsoPartyIsAuthorized <- retryProvider.retry(
+        RetryFor.WaitingOnInitDependency,
+        "isDsoPartyAuthorizedOn",
+        "Check whether the DSO party is authorized on our participant in joinDsoAndOnboardNodes",
+        dsoPartyHosting.isDsoPartyAuthorizedOn(
+          decentralizedSynchronizerId,
+          registeredGlobalSync,
+          participantId,
+        ),
+        logger,
       )
       _ <-
         // do not reconnect if we host the party, as we can be in some LSU stage and the participant cannot reconnect if the new sync is not functional
@@ -516,6 +522,7 @@ class JoiningNodeInitializer(
             physicalSynchronizerId <-
               currentNode.onboardLocalSequencerIfRequired(
                 svConnection.map(_._2),
+                config.onboardingSnapshots,
                 // Add the new local domain node to the DSO rules with an "onboarding" status
                 // This triggers automation in other SV apps, that's why we make sure the sequencer is known first
                 preInit = () =>
@@ -964,7 +971,6 @@ class JoiningNodeInitializer(
 
     private def startHostingDsoPartyInParticipant(): Future[Unit] = {
       dsoPartyHosting
-        // TODO(DACH-NY/canton-network-node#5364): consider inlining the relevant parts from DsoPartyHosting
         .hostPartyOnOwnParticipant(
           config.domains.global.alias,
           synchronizerId,

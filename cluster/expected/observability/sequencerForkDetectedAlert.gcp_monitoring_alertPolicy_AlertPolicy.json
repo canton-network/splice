@@ -1,0 +1,41 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "alertStrategy": {
+      "autoClose": "1800s",
+      "notificationRateLimit": {
+        "period": "7200s"
+      }
+    },
+    "combiner": "OR",
+    "conditions": [
+      {
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"k8s_container\"\nresource.labels.cluster_name=\"cn-mocknet\"\njsonPayload.\"error-code\"=\"SEQUENCER_FORK_DETECTED\"",
+          "labelExtractors": {
+            "container": "EXTRACT(resource.labels.container_name)",
+            "namespace": "EXTRACT(resource.labels.namespace_name)",
+            "pod": "EXTRACT(resource.labels.pod_name)"
+          }
+        },
+        "displayName": "Sequencer fork detected in mock"
+      }
+    ],
+    "displayName": "Sequencer fork detected in mock",
+    "documentation": {
+      "content": "A sequencer fork (`SEQUENCER_FORK_DETECTED`) was reported by `${log.extracted_label.container}` in namespace `${log.extracted_label.namespace}` (pod `${log.extracted_label.pod}`) in mock. This should never happen in normal operation; restoring from a correctly ordered backup is likely required. See the Canton `SEQUENCER_FORK_DETECTED` error documentation for details.",
+      "mimeType": "text/markdown",
+      "subject": "Sequencer fork detected in mock"
+    },
+    "notificationChannels": [
+      null
+    ],
+    "userLabels": {
+      "cluster": "mock"
+    }
+  },
+  "name": "sequencerForkDetectedAlert",
+  "provider": "",
+  "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+}

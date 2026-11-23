@@ -7,7 +7,9 @@ import { z } from 'zod';
 const flywayMigrationsToWaitFor = [
   'V068__app_activity_record_meta.sql',
   'V074__string_interning.sql',
-  'V084__partition_update_history.sql',
+  'V077__verdict_add_round_number.sql',
+  'V082__tbar_v1_1_asset_activity_columns.sql',
+  'V085__partition_update_history.sql',
 ] as const;
 
 export function checkFlywayMigrationsExist(dir: string, migrations: readonly string[]): void {
@@ -22,15 +24,14 @@ checkFlywayMigrationsExist(
   flywayMigrationsToWaitFor
 );
 
-export const FlywayMigrationToWaitForSchema = z
-  .enum(flywayMigrationsToWaitFor)
-  .default('V068__app_activity_record_meta.sql');
+// one of the allowed migrations
+export const FlywayMigrationSchema = z.enum(flywayMigrationsToWaitFor);
+
+export const FlywayMigrationToWaitForSchema = FlywayMigrationSchema.default(
+  'V068__app_activity_record_meta.sql'
+);
 
 export type FlywayMigrationToWaitFor = z.infer<typeof FlywayMigrationToWaitForSchema>;
-
-// V074__string_interning.sql creates interned_strings; earlier
-// migrations don't have it
-const internedStringsFlywayVersion = 74;
 
 export function flywayMigrationVersion(migration: string): number {
   const match = /^V(\d+)__/.exec(migration);
@@ -38,10 +39,4 @@ export function flywayMigrationVersion(migration: string): number {
     throw new Error(`Not a versioned Flyway migration: ${migration}`);
   }
   return parseInt(match[1], 10);
-}
-
-// whether the scan DB is guaranteed to have interned_strings once
-// `migration` has been applied
-export function migrationIncludesInternedStrings(migration: FlywayMigrationToWaitFor): boolean {
-  return flywayMigrationVersion(migration) >= internedStringsFlywayVersion;
 }

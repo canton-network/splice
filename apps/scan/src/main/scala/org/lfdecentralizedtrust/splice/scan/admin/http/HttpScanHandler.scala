@@ -37,10 +37,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCo
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommand,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   ClosedMiningRound,
   IssuingMiningRound,
@@ -109,7 +106,6 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   AppActivityStore,
   ScanEventStore,
   ScanStore,
-  TxLogEntry,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.{
@@ -1258,82 +1254,6 @@ class HttpScanHandler(
     }
   }
 
-  override def lookupTransferCommandCounterByParty(
-      respond: ScanResource.LookupTransferCommandCounterByPartyResponse.type
-  )(
-      party: String
-  )(extracted: TraceContext): Future[ScanResource.LookupTransferCommandCounterByPartyResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.lookupTransferCommandCounterByParty") { _ => _ =>
-      val partyId = PartyId.tryFromProtoPrimitive(party)
-      store
-        .lookupTransferCommandCounterByParty(
-          partyId
-        )
-        .map {
-          case Some(c) =>
-            v0.ScanResource.LookupTransferCommandCounterByPartyResponse.OK(
-              definitions.LookupTransferCommandCounterByPartyResponse(
-                c.toHttp
-              )
-            )
-          case None =>
-            v0.ScanResource.LookupTransferCommandCounterByPartyResponse.NotFound(
-              definitions.ErrorResponse(
-                s"No TransferCommandCounter found for party: $party, use 0 for the nonce"
-              )
-            )
-        }
-    }
-  }
-
-  override def lookupTransferCommandStatus(
-      respond: ScanResource.LookupTransferCommandStatusResponse.type
-  )(
-      sender: String,
-      nonce: Long,
-  )(extracted: TraceContext): Future[ScanResource.LookupTransferCommandStatusResponse] = {
-    implicit val tc = extracted
-    val senderParty = PartyId.tryFromProtoPrimitive(sender)
-    withSpan(s"$workflowId.lookupTransferCommandStatus") { _ => _ =>
-      for {
-        txLogEntryMap <- store.lookupLatestTransferCommandEvents(
-          senderParty,
-          nonce,
-          HttpScanHandler.MAX_TRANSFER_COMMAND_CONTRACTS,
-        )
-        filteredMap <- MonadUtil
-          .sequentialTraverse(txLogEntryMap.view.toList) { case (cid, entry) =>
-            // The update history ingests independently so this lookup can return None temporarily.
-            // We just filter out those contracts.
-            updateHistory
-              .lookupContractById(TransferCommand.COMPANION)(cid)
-              .map(
-                _.map(c =>
-                  cid.contractId -> definitions.TransferCommandContractWithStatus(
-                    c.toHttp,
-                    TxLogEntry.Http.toResponse(entry.status),
-                  )
-                )
-              )
-          }
-          .map(_.flatten.toMap)
-      } yield {
-        if (filteredMap.isEmpty) {
-          v0.ScanResource.LookupTransferCommandStatusResponseNotFound(
-            definitions.ErrorResponse(
-              s"Couldn't find transfer command for sender $senderParty with nonce $nonce created in the last 24h"
-            )
-          )
-        } else {
-          v0.ScanResource.LookupTransferCommandStatusResponseOK(
-            definitions.LookupTransferCommandStatusResponse(filteredMap)
-          )
-        }
-      }
-    }
-  }
-
   /** Filter the given ACS snapshot to contracts the given party is a stakeholder on */
   // TODO(#828) Move this logic inside a Canton gRPC API.
   private def filterAcsSnapshot(input: ByteString, stakeholder: PartyId): ByteString = {
@@ -1677,15 +1597,22 @@ class HttpScanHandler(
 
   }
 
-  private def toAcsV2Response(migrationId: Long, result: QueryAcsSnapshotResult)(implicit
+  private def toAcsV2Response(
+      migrationId: Long,
+      damlValueEncoding: Option[DamlValueEncoding],
+      result: QueryAcsSnapshotResult,
+  )(implicit
       tc: TraceContext
-  ) =
+  ) = {
+    val encodings = ScanHttpEncodings.fromDamlValueEncoding(
+      damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson)
+    )
     definitions.AcsResponseV2(
       Codec.encode(result.snapshotRecordTime),
       migrationId,
       result.createdEventsInPage
         .map(event =>
-          CompactJsonScanHttpEncodings().javaToHttpActiveContract(
+          encodings.javaToHttpActiveContract(
             event.eventId,
             event.recordTime,
             event.event,
@@ -1693,6 +1620,7 @@ class HttpScanHandler(
         ),
       result.afterToken.map(_.encodeToBase64),
     )
+  }
 
   override def getAcsSnapshotAtV2(respond: ScanResource.GetAcsSnapshotAtV2Response.type)(
       body: AcsRequestV2
@@ -1701,7 +1629,7 @@ class HttpScanHandler(
 
     def toResponse(result: QueryAcsSnapshotResult) = {
       ScanResource.GetAcsSnapshotAtV2ResponseOK(
-        toAcsV2Response(body.migrationId, result)
+        toAcsV2Response(body.migrationId, body.damlValueEncoding, result)
       )
     }
     val opId = "getAcsSnapshotAtV2"
@@ -1774,7 +1702,9 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[ScanResource.GetHoldingsStateAtV2Response] = {
     implicit val tc: TraceContext = extracted
     def toResponse(result: QueryAcsSnapshotResult) =
-      ScanResource.GetHoldingsStateAtV2ResponseOK(toAcsV2Response(body.migrationId, result))
+      ScanResource.GetHoldingsStateAtV2ResponseOK(
+        toAcsV2Response(body.migrationId, body.damlValueEncoding, result)
+      )
     val opId = "getHoldingsStateAtV2"
     withSpan(s"$workflowId.$opId") { _ => _ =>
       holdingStateQuery(
@@ -2678,11 +2608,18 @@ class HttpScanHandler(
 
   private def getStorageEncodings(
       damlValueEncoding: Option[DamlValueEncoding]
-  ): NonEmptyList[ScanStorageConfig.Encoding] =
-    NonEmptyList.one(
-      ScanStorageConfig.Encoding
-        .fromDamlValueEncoding(damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson))
-    )
+  ): NonEmptyList[ScanStorageConfig.Encoding] = {
+    // compact_json, the default of the other endpoints, is not available in bulk storage
+    val requested = damlValueEncoding.getOrElse(DamlValueEncoding.LedgerApiJson)
+    val encoding = ScanStorageConfig.Encoding
+      .fromDamlValueEncoding(requested)
+      .getOrElse(
+        throw io.grpc.Status.INVALID_ARGUMENT
+          .withDescription(s"Encoding '${requested.value}' is not available in bulk storage")
+          .asRuntimeException()
+      )
+    NonEmptyList.one(encoding)
+  }
 
   private def encodeBulkStorageObjects(objects: Seq[ObjectKeyAndChecksum], publicUrl: Uri) =
     objects.map { case ObjectKeyAndChecksum(key, digest) =>
@@ -3087,10 +3024,6 @@ object HttpScanHandler {
       case definitions.BulkObjectKind.members.Updates => BulkObjectKind.Updates
       case definitions.BulkObjectKind.members.Snapshots => BulkObjectKind.Snapshots
     }
-
-  // We expect a handful at most but want to somewhat guard against attacks
-  // so we just hardcode a limit of 100.
-  private val MAX_TRANSFER_COMMAND_CONTRACTS: Int = 100
 
   // for DsoSequencers that use the serial instead of the migration we set -1 as the migration id
   // we can't simply make it non required as it's part of the public API and it would break clients

@@ -164,6 +164,20 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
         )
       }
 
+      "handle single create" in {
+        val store = mkStore()
+        for {
+          _ <- initStore(store)
+          _ <- create(domain1, cid1, offset1, party1, store, time(1))
+          updates <- updates(store)
+        } yield checkUpdates(
+          updates,
+          Seq(
+            ExpectedCreate(cid1, domain1)
+          ),
+        )
+      }
+
       "handle transaction with non-standard data" in {
         val store = mkStore()
         for {
