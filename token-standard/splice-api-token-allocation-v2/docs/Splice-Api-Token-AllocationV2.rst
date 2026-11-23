@@ -1,8 +1,3 @@
-..
-   Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
-..
-   SPDX-License-Identifier: Apache-2.0
-
 .. _module-splice-api-token-allocationv2-67287:
 
 Splice.Api.Token.AllocationV2
@@ -108,10 +103,10 @@ Interfaces
          - Set of parties executing the settlement\.  Implementations MUST check these parties to avoid unauthorized settlement execution\. By default, they SHOULD require them to be equal to the allocation ``admin`` and the ``executors``, so that they can jointly guarantee atomic settlement\.  This authorization is typically provided as part of the ``SettlementFactory_SettleBatch`` choice, which should be used by the ``executors`` to settle V2 allocations\.
        * - extraTransferLegSides
          - \[`TransferLegSide <type-splice-api-token-allocationv2-transferlegside-31020_>`_\]
-         - Extra transfer leg sides to settle as part of settlement\.  They MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer\.
+         - Extra transfer leg sides to settle as part of settlement\.  They MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer\. Their instruments MUST be keys of the allocation's ``nextIterationFunding``\.
        * - nextIterationFunding
          - `Optional <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-prelude-optional-37153>`_ (`TextMap <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-lf-textmap-11691>`_ `Decimal <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-decimal-18135>`_)
-         - The funds to reserve for the next settlement iteration, if there is any\.  This MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer\.  Setting this to ``None`` indicates that no further settlement iterations will be executed after this one\.
+         - The funds to reserve for the next settlement iteration, if there is any\.  This MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer\. Its keys MUST be keys of the allocation's ``nextIterationFunding``, so that the executors cannot widen the set of instruments allowed by the authorizer\.  Setting this to ``None`` indicates that no further settlement iterations will be executed after this one\.
        * - extraArgs
          - ExtraArgs
          - Additional context required in order to exercise the choice\.
@@ -294,6 +289,8 @@ Data Types
          - `Text <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-text-51952>`_
          - Identifier of the action\. Namespaced analogously to metadata keys\.
 
+  **instance** Serializable `AllocationAction <type-splice-api-token-allocationv2-allocationaction-86361_>`_
+
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `AllocationAction <type-splice-api-token-allocationv2-allocationaction-86361_>`_
 
   **instance** `Ord <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-ord-6395>`_ `AllocationAction <type-splice-api-token-allocationv2-allocationaction-86361_>`_
@@ -334,6 +331,8 @@ Data Types
        * - meta
          - Metadata
          - Additional metadata specific to the settlement, used for extensibility\.
+
+  **instance** Serializable `AllocationResult <type-splice-api-token-allocationv2-allocationresult-19648_>`_
 
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `AllocationResult <type-splice-api-token-allocationv2-allocationresult-19648_>`_
 
@@ -437,6 +436,8 @@ Data Types
 
     The result of the ``Allocation_Withdraw`` choice when fully authorized\.
 
+  **instance** Serializable `AllocationResult_Output <type-splice-api-token-allocationv2-allocationresultoutput-24769_>`_
+
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `AllocationResult_Output <type-splice-api-token-allocationv2-allocationresultoutput-24769_>`_
 
   **instance** `Show <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-show-show-65360>`_ `AllocationResult_Output <type-splice-api-token-allocationv2-allocationresultoutput-24769_>`_
@@ -479,19 +480,21 @@ Data Types
          - The account authorizing the transfers as part of the settlement\.
        * - transferLegSides
          - \[`TransferLegSide <type-splice-api-token-allocationv2-transferlegside-31020_>`_\]
-         - The sides of transfer legs authorized by this allocation\.
+         - The sides of transfer legs authorized by this allocation\.  Wallets MUST copy the transfer leg sides verbatim from the transfer legs of the settlement request, including their ``meta`` entries\. Registries MAY require an exact match to settle the allocation\.
        * - settlementDeadline
          - `Optional <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-prelude-optional-37153>`_ `Time <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-lf-time-63886>`_
          - The executors' and authorizer's agreed time\-to\-live for the allocation\.  After this time, if set, the allocation can no longer be settled, and the authorizer can withdraw the allocation to release the funds\.
        * - nextIterationFunding
          - `Optional <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-prelude-optional-37153>`_ (`TextMap <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-lf-textmap-11691>`_ `Decimal <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-decimal-18135>`_)
-         - Amounts reserved for funding the next settlement iteration\.  Amounts are keyed by instrument id and MUST be positive\.  Setting this to ``None`` indicates that iterated settlement is disabled, and the allocation can only be settled once with exactly its specified transfer legs\. Setting this to an empty map indicates that iterated settlement is enabled, but that no funding for the next iteration is reserved by the authorizer\. This can be used when the authorizer expects incoming transfers in the next iteration, and thus does not need to reserve any funding\.
+         - The instruments allowed in iterated settlement and the amounts reserved for funding the next settlement iteration\.  Setting this to ``None`` indicates that iterated settlement is disabled, and the allocation can only be settled once with exactly its specified transfer legs\.  Setting this to ``Some fundings`` indicates that iterated settlement is enabled for exactly the instruments whose ids are keys of ``fundings``\. Registries MUST reject extra transfer leg sides and next iteration funding for any other instrument\. The amounts MUST be non\-negative\. An amount of ``0.0`` allows an instrument without reserving funding for it, which can be used when the authorizer expects net incoming transfers of that instrument in the next iteration\.  An empty map allows no instruments\. Registries with a single instrument MAY treat it as allowing that instrument without reserving funding for it\.
        * - committed
          - `Bool <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-bool-66265>`_
          - Whether the authorizer commits to the allocation until either  * the executors settle allocation, * the executors cancel the allocation, * the settlement deadline passed, or * the admin expires the allocation\.  If set to ``True``, then the authorizer cannot withdraw the allocation until the settlement deadline\. Use committed allocations for cases where the executors need a guarantee that the allocation will be available until settlement\.
        * - meta
          - Metadata
          - Additional metadata for the allocation specification, which can be used to store information about an allocation used in iterated settlement\.
+
+  **instance** Serializable `AllocationSpecification <type-splice-api-token-allocationv2-allocationspecification-21899_>`_
 
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `AllocationSpecification <type-splice-api-token-allocationv2-allocationspecification-21899_>`_
 
@@ -574,6 +577,8 @@ Data Types
          - Metadata
          - Additional metadata specific to the allocation, used for extensibility\.
 
+  **instance** Serializable `AllocationView <type-splice-api-token-allocationv2-allocationview-63318_>`_
+
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `AllocationView <type-splice-api-token-allocationv2-allocationview-63318_>`_
 
   **instance** `Show <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-show-show-65360>`_ `AllocationView <type-splice-api-token-allocationv2-allocationview-63318_>`_
@@ -640,10 +645,12 @@ Data Types
          - The allocation to settle\.
        * - extraTransferLegSides
          - \[`TransferLegSide <type-splice-api-token-allocationv2-transferlegside-31020_>`_\]
-         - The extra transfer leg sides to authorize as part of this allocation in this settlement iteration\.  They MUST be empty unless iterated settlement was enabled by the allocation's authorizer\.
+         - The extra transfer leg sides to authorize as part of this allocation in this settlement iteration\.  They MUST be empty unless iterated settlement was enabled by the allocation's authorizer\. Their instruments MUST be keys of the allocation's ``nextIterationFunding``\.
        * - nextIterationFunding
          - `Optional <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-prelude-optional-37153>`_ (`TextMap <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-lf-textmap-11691>`_ `Decimal <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-decimal-18135>`_)
-         - The funding to reserve for the next settlement iteration\.  This MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer\.
+         - The funding to reserve for the next settlement iteration\.  This MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer\. Its keys MUST be keys of the allocation's ``nextIterationFunding``\.
+
+  **instance** Serializable `FinalizedAllocation <type-splice-api-token-allocationv2-finalizedallocation-95818_>`_
 
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `FinalizedAllocation <type-splice-api-token-allocationv2-finalizedallocation-95818_>`_
 
@@ -688,6 +695,8 @@ Data Types
        * - meta
          - Metadata
          - Additional metadata specific to the settlement factory, used for extensibility\.
+
+  **instance** Serializable `SettlementFactoryView <type-splice-api-token-allocationv2-settlementfactoryview-93858_>`_
 
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `SettlementFactoryView <type-splice-api-token-allocationv2-settlementfactoryview-93858_>`_
 
@@ -739,6 +748,8 @@ Data Types
          - Metadata
          - Additional metadata specific to the batch settlement, used for extensibility\.
 
+  **instance** Serializable `SettlementFactory_SettleBatchResult <type-splice-api-token-allocationv2-settlementfactorysettlebatchresult-32414_>`_
+
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `SettlementFactory_SettleBatchResult <type-splice-api-token-allocationv2-settlementfactorysettlebatchresult-32414_>`_
 
   **instance** `Show <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-show-show-65360>`_ `SettlementFactory_SettleBatchResult <type-splice-api-token-allocationv2-settlementfactorysettlebatchresult-32414_>`_
@@ -771,6 +782,10 @@ Data Types
   The ``executors`` MUST ensure that the triple of ``(id, cid, meta)`` is unique
   across settlements\.
 
+  Wallets MUST copy the ``SettlementInfo`` verbatim from the settlement request
+  when creating an allocation, including the order of the ``executors`` and all
+  ``meta`` entries\. Registries MAY require an exact match to settle the allocation\.
+
   .. _constr-splice-api-token-allocationv2-settlementinfo-44883:
 
   `SettlementInfo <constr-splice-api-token-allocationv2-settlementinfo-44883_>`_
@@ -794,6 +809,8 @@ Data Types
        * - meta
          - Metadata
          - Additional metadata to identify the settlement, used for extensibility\.
+
+  **instance** Serializable `SettlementInfo <type-splice-api-token-allocationv2-settlementinfo-44234_>`_
 
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `SettlementInfo <type-splice-api-token-allocationv2-settlementinfo-44234_>`_
 
@@ -859,6 +876,8 @@ Data Types
        * - meta
          - Metadata
          - Additional metadata about the transfer leg, used for extensibility\.
+
+  **instance** Serializable `TransferLeg <type-splice-api-token-allocationv2-transferleg-34001_>`_
 
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `TransferLeg <type-splice-api-token-allocationv2-transferleg-34001_>`_
 
@@ -930,6 +949,8 @@ Data Types
          - Metadata
          - Additional metadata about the transfer leg, used for extensibility\.
 
+  **instance** Serializable `TransferLegSide <type-splice-api-token-allocationv2-transferlegside-31020_>`_
+
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `TransferLegSide <type-splice-api-token-allocationv2-transferlegside-31020_>`_
 
   **instance** `Ord <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-ord-6395>`_ `TransferLegSide <type-splice-api-token-allocationv2-transferlegside-31020_>`_
@@ -989,6 +1010,8 @@ Data Types
   `ReceiverSide <constr-splice-api-token-allocationv2-receiverside-26774_>`_
 
     The inbound direction, i\.e\., the receipt of assets\.
+
+  **instance** Serializable `TransferSide <type-splice-api-token-allocationv2-transferside-67513_>`_
 
   **instance** `Eq <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#class-ghc-classes-eq-22713>`_ `TransferSide <type-splice-api-token-allocationv2-transferside-67513_>`_
 

@@ -39,12 +39,25 @@ amulet_test_locked_funds = mkAmuletTestCase >>= test_locked_funds
 amulet_test_refresh_and_withdrawal : Script ()
 amulet_test_refresh_and_withdrawal = mkAmuletTestCase >>= test_refresh_and_withdrawal
 
+-- | Amulet treats an empty `nextIterationFunding` map as allowing Amulet, which
+-- keeps allocations working that were created before `{"Amulet": 0.0}` could be settled.
+amulet_test_empty_map_allows_amulet : Script ()
+amulet_test_empty_map_allows_amulet = do
+  testCase@TestCase{instrIds = [amulet]} <- mkAmuletTestCase
+  (allocCid, allocView) <- createIteratedAllocation testCase (Some TextMap.empty)
+  allocView.allocation.nextIterationFunding === allowOnly [amulet]
+  _ <- settleSelfTransfer testCase allocCid amulet (Some TextMap.empty)
+  pure ()
+
 
 testTokenV2_test_locked_funds : Script ()
 testTokenV2_test_locked_funds = mkTestTokenV2TestCase >>= test_locked_funds
 
 testTokenV2_test_refresh_and_withdrawal : Script ()
 testTokenV2_test_refresh_and_withdrawal = mkTestTokenV2TestCase >>= test_refresh_and_withdrawal
+
+testTokenV2_test_allowed_instruments : Script ()
+testTokenV2_test_allowed_instruments = mkTestTokenV2TestCase >>= test_allowed_instruments
 
 mkAmuletTestCase : Script TestCase
 mkAmuletTestCase = do
@@ -139,7 +152,7 @@ test_locked_funds TestCase {..} = do
   Some aliceAllocView <- queryInterfaceContractId alice aliceAllocationCid
   aliceAllocView.allocation.meta === reasonToMeta "fund regular billing" emptyMetadata
 
-  -- provider creates allocation to accept license fee payment
+  -- provider creates an unfunded iterated allocation to accept license fee payments
   let billingLegs = do
         (i, instrId) <- zip [0 .. length instrIds] instrIds
         pure V2.TransferLeg with
@@ -154,9 +167,9 @@ test_locked_funds TestCase {..} = do
     allocation = V2.AllocationSpecification with
       authorizer = basicAccount provider
       admin
-      transferLegSides = map receiverSide billingLegs
+      transferLegSides = []
       settlementDeadline = None
-      nextIterationFunding = None
+      nextIterationFunding = allowOnly instrIds
       committed = False
       meta = emptyMetadata
     requestedAt = now
@@ -174,7 +187,10 @@ test_locked_funds TestCase {..} = do
     settlement
     transferLegs = billingLegs
     allocations =
-      [ nonIteratedAllocation providerAllocationCid
+      [ V2.FinalizedAllocation with
+          allocationCid = providerAllocationCid
+          extraTransferLegSides = map receiverSide billingLegs
+          nextIterationFunding = allowOnly instrIds
       , V2.FinalizedAllocation with
           allocationCid = aliceAllocationCid
           extraTransferLegSides = map senderSide billingLegs
@@ -184,8 +200,14 @@ test_locked_funds TestCase {..} = do
 
   result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-  let [_, settleResult] = result.allocationSettleResults
+  let [providerSettleResult, settleResult] = result.allocationSettleResults
   let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
+
+  -- the provider's allocation stays unfunded and keeps allowing the same instruments
+  let Some providerAllocationCid = WalletClientV2.extractNextIterationAllocationCid providerSettleResult
+  Some providerAllocView <- queryInterfaceContractId provider providerAllocationCid
+  providerAllocView.allocation.nextIterationFunding === allowOnly instrIds
+  providerAllocView.holdingCids === []
 
   -- payout of 0.5 Amulet to alice, and 0.5 Amulet to the provider
   forA_ instrIds $ \instrId -> do
@@ -256,6 +278,100 @@ test_locked_funds TestCase {..} = do
     WalletClientV2.checkBalance provider instrId 0.5
 
   pure ()
+
+
+-- | Test that the executors can only use the instruments listed in an allocation's
+-- `nextIterationFunding`, and that they can narrow, but not widen, that set.
+--
+-- Requires a registry with two instruments.
+test_allowed_instruments : TestCase -> Script ()
+test_allowed_instruments testCase@TestCase {..} = do
+  let [x, y] = instrIds
+  -- alice allows X and Y without reserving funds for them
+  (allocCid, _) <- createIteratedAllocation testCase (allowOnly [x, y])
+  -- the executors settle in Y and narrow the allowed instruments to X
+  (allocCid, allocView) <- settleSelfTransfer testCase allocCid y (allowOnly [x])
+  allocView.allocation.nextIterationFunding === allowOnly [x]
+  -- they can no longer settle in Y, nor widen the allowed instruments again
+  settleSelfTransferMustFail testCase allocCid y (allowOnly [x])
+    "'finalizedAllocation.extraTransferLegSides.instrumentId' is not a member of 'allowed instrument ids'"
+  settleSelfTransferMustFail testCase allocCid x (allowOnly [x, y])
+    "'finalizedAllocation.nextIterationFunding.instrumentId' is not a member of 'allowed instrument ids'"
+  -- they can still settle in X
+  _ <- settleSelfTransfer testCase allocCid x (allowOnly [x])
+  pure ()
+
+-- | Funding that allows the given instruments without reserving funds for them.
+allowOnly : [V2.InstrumentId] -> Optional (TextMap.TextMap Decimal)
+allowOnly instrIds = Some (TextMap.fromList [(instrId.id, 0.0) | instrId <- instrIds])
+
+iteratedSettlement : TestCase -> V2.SettlementInfo
+iteratedSettlement TestCase {..} = V2.SettlementInfo with
+  executors = [provider]
+  id = "iterated/<uuid>"
+  cid = None
+  meta = emptyMetadata
+
+-- | Create an unfunded iterated allocation for alice.
+createIteratedAllocation : TestCase -> Optional (TextMap.TextMap Decimal) -> Script (ContractId V2.Allocation, V2.AllocationView)
+createIteratedAllocation testCase@TestCase {..} nextIterationFunding = do
+  now <- getTime
+  enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
+    settlement = iteratedSettlement testCase
+    allocation = V2.AllocationSpecification with
+      authorizer = basicAccount alice
+      admin
+      transferLegSides = []
+      settlementDeadline = None
+      nextIterationFunding
+      committed = False
+      meta = emptyMetadata
+    requestedAt = now
+    inputHoldingCids = []
+    actors = [alice]
+    extraArgs = emptyExtraArgs
+  result <- WalletClientV2.submitAndCheckTxHistory admins (actAs alice <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  let V2.AllocationInstructionResult_Completed allocCid = result.output
+  Some allocView <- queryInterfaceContractId alice allocCid
+  pure (allocCid, allocView)
+
+-- | Prepare the settlement of a self-transfer of alice in the given instrument,
+-- which nets to zero and thus requires no funding.
+prepareSelfTransfer : TestCase -> ContractId V2.Allocation -> V2.InstrumentId -> Optional (TextMap.TextMap Decimal)
+  -> Script (EnrichedFactoryChoice V2.SettlementFactory V2.SettlementFactory_SettleBatch)
+prepareSelfTransfer testCase@TestCase {..} allocCid instrId nextIterationFunding = do
+  let leg = V2.TransferLeg with
+        transferLegId = "self-transfer"
+        sender = basicAccount alice
+        receiver = basicAccount alice
+        amount = 1.0
+        instrumentId = instrId.id
+        meta = emptyMetadata
+  V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
+    actors = [provider]
+    settlement = iteratedSettlement testCase
+    transferLegs = [leg]
+    allocations = [V2.FinalizedAllocation allocCid [senderSide leg, receiverSide leg] nextIterationFunding]
+    extraArgs = emptyExtraArgs
+
+-- | Settle a self-transfer and return alice's allocation for the next iteration.
+settleSelfTransfer : TestCase -> ContractId V2.Allocation -> V2.InstrumentId -> Optional (TextMap.TextMap Decimal)
+  -> Script (ContractId V2.Allocation, V2.AllocationView)
+settleSelfTransfer testCase@TestCase {..} allocCid instrId nextIterationFunding = do
+  enrichedChoice <- prepareSelfTransfer testCase allocCid instrId nextIterationFunding
+  result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  let [settleResult] = result.allocationSettleResults
+  let Some nextAllocCid = WalletClientV2.extractNextIterationAllocationCid settleResult
+  Some nextAllocView <- queryInterfaceContractId alice nextAllocCid
+  pure (nextAllocCid, nextAllocView)
+
+settleSelfTransferMustFail : TestCase -> ContractId V2.Allocation -> V2.InstrumentId -> Optional (TextMap.TextMap Decimal) -> Text -> Script ()
+settleSelfTransferMustFail testCase@TestCase {..} allocCid instrId nextIterationFunding expectedMessage = do
+  enrichedChoice <- prepareSelfTransfer testCase allocCid instrId nextIterationFunding
+  submitMustFail'' (expectMessageContains expectedMessage) (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
 
 
 -- | Test that refresh on settlement and withdrawal of iterated allocations works as expected.

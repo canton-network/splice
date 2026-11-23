@@ -6,6 +6,7 @@ module Splice.AmuletAllocationV2 (
   AmuletAllocationV2(..),
   netAmuletCreditAmount,
   validateAmuletNextIterationFunding,
+  amuletAllowedNextIterationFunding,
   validateAmuletTransferLegSides,
   computeAllocationExpiry,
   computeAllocationExpiryInternal,
@@ -63,7 +64,8 @@ template AmuletAllocationV2
         numIterations
         expiresAt = Some expiresAt
         settlement
-        allocation
+        allocation = allocation with
+          nextIterationFunding = amuletAllowedNextIterationFunding allocation.nextIterationFunding
         holdingCids = case lockedAmulet of
           None -> mempty
           Some cid -> [toInterfaceContractId cid]
@@ -100,9 +102,8 @@ template AmuletAllocationV2
         let actualTransferLegSides = allocation.transferLegSides ++ arg.extraTransferLegSides
         -- note: we allow allocations with no transfer legs, as they can be used to bump the expiry,
         -- and the traffic cost of that bump is what protects the SV node's storage space
-        unless (isSome allocation.nextIterationFunding) $ do
-          require "no extra transfer legs allowed when iterated settlement is disabled" (null arg.extraTransferLegSides)
-          require "no next iteration funding allowed when iterated settlement is disabled" (isNone arg.nextIterationFunding)
+        validateNextIterationArgs "arg" (amuletAllowedNextIterationFunding allocation.nextIterationFunding)
+          arg.extraTransferLegSides arg.nextIterationFunding
         validateAmuletTransferLegSides actualTransferLegSides
         outputFundingAmount <- validateAmuletNextIterationFunding arg.nextIterationFunding
 
@@ -194,6 +195,18 @@ netAmuletCreditAmount authorizer transferLegs =
     fromOptional 0.0 $ TextMap.lookup amuletInstrumentIdName creditAmounts
   where
     creditAmounts = netAllocationCreditAmounts authorizer transferLegs
+
+-- | The instruments allowed in iterated settlement of an Amulet allocation.
+--
+-- An empty `nextIterationFunding` map is treated as allowing Amulet without
+-- reserving funds for it. As Amulet is the only instrument of its admin, this
+-- does not allow any transfers that the authorizer did not authorize. It keeps
+-- allocations working that were created with an empty map before
+-- `{"Amulet": 0.0}` could be settled.
+amuletAllowedNextIterationFunding : Optional (TextMap.TextMap Decimal) -> Optional (TextMap.TextMap Decimal)
+amuletAllowedNextIterationFunding (Some funding)
+  | TextMap.null funding = Some (TextMap.fromList [(amuletInstrumentIdName, 0.0)])
+amuletAllowedNextIterationFunding funding = funding
 
 validateAmuletNextIterationFunding : Optional (TextMap.TextMap Decimal) -> Update Decimal
 validateAmuletNextIterationFunding None = pure 0.0

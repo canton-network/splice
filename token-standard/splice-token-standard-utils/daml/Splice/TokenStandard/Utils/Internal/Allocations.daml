@@ -398,19 +398,37 @@ settlementFactoryV2_settleBatchDefaultImpl getFilteredExtraArgs admin self arg =
     allocationSettleResults
     meta = emptyMetadata
 
--- | Validate the arguments for a next iteration of allocation settlement.
+-- | Validate the arguments for the next iteration of settling an allocation.
+--
+-- The instrument ids in the allocation's `nextIterationFunding` are the
+-- instruments that the authorizer allows the executors to use in iterated
+-- settlement. This function checks that the executors use only these
+-- instruments, both for the extra transfer leg sides and for the funding of the
+-- next iteration. The executors can thus narrow, but not widen, the set of
+-- allowed instruments for later iterations.
 validateNextIterationArgs
   : Text -- ^ The name of the action for error reporting
-  -> Bool  -- ^ Whether iterated settlement is allowed.
-  -> [AllocationV2.TransferLegSide] -- ^ The extra transfer leg sides for the next iteration.
-  -> Optional (TextMap.TextMap Decimal) -- ^ The next iteration funding for the next iteration.
+  -> Optional (TextMap.TextMap Decimal)
+     -- ^ The `nextIterationFunding` of the allocation being settled.
+     -- `None` if iterated settlement is disabled.
+  -> [AllocationV2.TransferLegSide] -- ^ The extra transfer leg sides for this iteration.
+  -> Optional (TextMap.TextMap Decimal) -- ^ The funding for the next iteration.
   -> Update ()
-validateNextIterationArgs name iteratedSettlementAllowed extraTransferLegSides nextIterationFunding = do
-  unless iteratedSettlementAllowed $ do
-    requireMatchExpected (name <> ".extraTransferLegSides", extraTransferLegSides) []
-    requireMatchExpected (name <> ".nextIterationFunding", nextIterationFunding) None
+validateNextIterationArgs name allowedFunding extraTransferLegSides nextIterationFunding = do
+  case allowedFunding of
+    None -> do
+      requireMatchExpected (name <> ".extraTransferLegSides", extraTransferLegSides) []
+      requireMatchExpected (name <> ".nextIterationFunding", nextIterationFunding) None
+    Some allowed -> do
+      let allowedInstrumentIds = map fst (TextMap.toList allowed)
+      forA_ extraTransferLegSides $ \leg ->
+        require' (name <> ".extraTransferLegSides.instrumentId", leg.instrumentId)
+          isMemberR ("allowed instrument ids", allowedInstrumentIds)
+      forA_ (optional [] (map fst . TextMap.toList) nextIterationFunding) $ \instrumentId ->
+        require' (name <> ".nextIterationFunding.instrumentId", instrumentId)
+          isMemberR ("allowed instrument ids", allowedInstrumentIds)
   forA_ nextIterationFunding $ \fundings -> forA_ fundings $ \amount -> do
-    require' (name <> ".nextIterationFunding.amount", amount) isGreaterR ("zero", 0.0)
+    require' (name <> ".nextIterationFunding.amount", amount) isGreaterOrEqualR ("zero", 0.0)
   forA_ extraTransferLegSides $ \leg -> do
     require' (name <> ".extraTransferLegSides.amount", leg.amount) isGreaterR ("zero", 0.0)
 
@@ -434,8 +452,8 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
     requireMatchExpected ("allocation.settlement", allocationView.settlement) settlement
     requireMatchExpected ("allocation.admin", allocation.admin) admin
     -- validate finalized allocation and record extra legs
-    validateNextIterationArgs "finalizedAllocation" (isSome allocation.nextIterationFunding)
-      finalizedAlloc.extraTransferLegSides allocation.nextIterationFunding
+    validateNextIterationArgs "finalizedAllocation" allocation.nextIterationFunding
+      finalizedAlloc.extraTransferLegSides finalizedAlloc.nextIterationFunding
     let adjustedAllocView = allocationView with
           allocation = allocation with
             transferLegSides = allocation.transferLegSides ++ finalizedAlloc.extraTransferLegSides

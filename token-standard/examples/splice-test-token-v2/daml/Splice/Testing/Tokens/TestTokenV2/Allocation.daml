@@ -347,8 +347,7 @@ settleTokenAllocationV2 accountMap this self arg = do
     [(account, _)] -> require' ("allocation.authorizer", allocation.authorizer) isEqualR ("accountMap key", account)
     _ -> fail $ "Expected at most one account in accountMap for allocation settlement, but got: " <> show accountMap
   -- validate next iteration arguments
-  let allowNextIterationFunding = isSome allocation.nextIterationFunding
-  validateNextIterationArgs "Allocation_Settle" allowNextIterationFunding
+  validateNextIterationArgs "Allocation_Settle" allocation.nextIterationFunding
     arg.extraTransferLegSides arg.nextIterationFunding
 
   -- compute required funding and settle
