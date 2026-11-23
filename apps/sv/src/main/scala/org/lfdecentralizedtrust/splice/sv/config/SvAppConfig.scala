@@ -645,7 +645,7 @@ final case class SvSequencerConfig(
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
     // TODO (#8263): remove once DA BFT is the only supported sequencer
-    isCantonBftSequencer: Boolean = false,
+    isCantonBftSequencer: Boolean = true,
     cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,
