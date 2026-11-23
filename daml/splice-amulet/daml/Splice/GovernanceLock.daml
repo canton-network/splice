@@ -100,6 +100,7 @@ import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.Expiry hiding (maxTime)
 import Splice.Fees (relTimeToDays, relTimeToSeconds)
 import Splice.ExternalPartyConfigState
+import Splice.TextLimits (maxIdentifierLength)
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 import Splice.TokenStandard.Utils.Internal.Conversions (encodeRelTime, encodeTime)
 import Splice.Types
@@ -829,6 +830,8 @@ governanceLockKindFromTagAndSubject tag subject =
       Some p -> pure p
       None -> assertFail $ "Invalid provider for " <> tagText <> ": " <> subject
     parseSvName
+      | Text.length subject > maxIdentifierLength =
+          assertFail $ "SV name for " <> tagText <> " is longer than " <> show maxIdentifierLength <> " characters"
       | Text.isPred (\c -> c == "-" || Text.isAlphaNum c) subject = pure subject
       | otherwise = assertFail $ "Invalid SV name for " <> tagText <> ": " <> subject
 

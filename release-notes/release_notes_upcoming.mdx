@@ -42,6 +42,21 @@
       to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
       Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
 
+  - Daml
+
+    - Bound the length of `Text` values that the Splice apps index and that parties other than the DSO party choose,
+      using the limits in the new `Splice.TextLimits` module of `splice-amulet`:
+      ANS entry names (255), URLs and descriptions (1024) in `AnsRules_RequestEntry`;
+      SV names (255) in `DsoRules_StartSvOnboarding`, `DsoRules_ConfirmSvOnboarding`, `DsoRules_AddSv` and SV governance locks;
+      SV onboarding tokens (1900) in `DsoRules_StartSvOnboarding`;
+      and the tracking ids of buy-traffic requests (279, matching the existing limit for transfer offers).
+      The limits are far above the values that the Splice apps produce.
+
+  - Wallet, Validator and SV Apps
+
+    - The HTTP APIs reject over-long tracking ids, ANS entry fields, SV onboarding tokens and validator onboarding
+      secrets and party hints with `400 Bad Request` before submitting a command.
+
   - Scan App
 
     - Add the `ledger_api_json` option to the `DamlValueEncoding` enum, used by the `daml_value_encoding`

@@ -4,6 +4,7 @@
 module Splice.Scripts.TestAns where
 
 import DA.Assert
+import DA.Text qualified as Text
 import DA.Time
 import Daml.Script
 
@@ -12,6 +13,7 @@ import Splice.AmuletRules
 import Splice.Scripts.Util
 import Splice.Ans
 import Splice.Scripts.AnsRulesParameters
+import Splice.TextLimits
 import Splice.Wallet.Subscriptions
 import Splice.TokenStandard.Utils qualified as TSU
 
@@ -216,4 +218,31 @@ terminatedSubscriptionCanBeCleanedUp = script do
 
   terminatedSubscriptions <- query @TerminatedSubscription app.dso
   terminatedSubscriptions === []
+  pure ()
+
+testRequestEntryTextLimits : Script ()
+testRequestEntryTextLimits = script do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+
+  ansRulesCid <- submit (actAs app.dso) $ createCmd AnsRules with
+    dso = app.dso
+    config = defaultAnsRulesConfig
+
+  let requestEntry name url description =
+        exerciseCmd ansRulesCid AnsRules_RequestEntry with
+          name
+          url
+          description
+          user = alice.primaryParty
+      maxName = Text.implode (replicate maxIdentifierLength "n")
+      maxUrl = Text.implode (replicate maxDescriptionLength "u")
+      maxDescription = Text.implode (replicate maxDescriptionLength "d")
+
+  -- values at the limit are accepted
+  _ <- submit (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName maxUrl maxDescription
+
+  -- values one over the limit are rejected
+  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry (maxName <> "n") maxUrl maxDescription
+  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName (maxUrl <> "u") maxDescription
+  submitMustFail (actAs alice.primaryParty <> readAs app.dso) $ requestEntry maxName maxUrl (maxDescription <> "d")
   pure ()

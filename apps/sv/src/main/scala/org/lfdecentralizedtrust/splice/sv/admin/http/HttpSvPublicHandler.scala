@@ -57,7 +57,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapsho
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{Secrets, SvOnboardingToken}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TextLimits}
 
 import java.nio.file.{Files, NoSuchFileException, Path}
 import java.time.ZoneOffset
@@ -107,7 +107,9 @@ class HttpSvPublicHandler(
   )(extracted: TraceContext): Future[r0.OnboardValidatorResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.onboardValidator") { _ => _ =>
-      Codec.decode(Codec.Party)(body.partyId) match {
+      TextLimits
+        .checkMaxLength("secret", TextLimits.maxValidatorOnboardingSecretLength, body.secret)
+        .flatMap(_ => Codec.decode(Codec.Party)(body.partyId)) match {
         case Right(partyId) =>
           val providedSecret = Secrets.decodeValidatorOnboardingSecret(body.secret, svParty)
           if (providedSecret.sponsoringSv == svParty) {
@@ -189,7 +191,9 @@ class HttpSvPublicHandler(
   )(extracted: TraceContext): Future[r0.StartSvOnboardingResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.startSvOnboarding") { _ => _ =>
-      SvOnboardingToken.verifyAndDecode(body.token) match {
+      TextLimits
+        .checkMaxLength("token", TextLimits.maxSvOnboardingTokenLength, body.token)
+        .flatMap(_ => SvOnboardingToken.verifyAndDecode(body.token)) match {
         case Left(error) =>
           Future.failed(
             HttpErrorHandler.badRequest(s"Could not verify and decode token: $error")

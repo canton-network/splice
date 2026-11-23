@@ -6,7 +6,7 @@ package org.lfdecentralizedtrust.splice.wallet.automation
 import org.lfdecentralizedtrust.splice.automation.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.buytrafficrequest as trafficRequestCodegen
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.{AssignedContract, TextLimits}
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
@@ -28,7 +28,7 @@ class ExpireBuyTrafficRequestsTrigger(
       trafficRequestCodegen.BuyTrafficRequest,
     ](
       store.multiDomainAcsStore,
-      store.listExpiredBuyTrafficRequests,
+      ExpireBuyTrafficRequestsTrigger.listExpiredWithBoundedTrackingId(store),
       trafficRequestCodegen.BuyTrafficRequest.COMPANION,
     ) {
 
@@ -67,4 +67,28 @@ class ExpireBuyTrafficRequestsTrigger(
       }
     } yield TaskSuccess("expired buy traffic request")
   }
+}
+
+object ExpireBuyTrafficRequestsTrigger {
+
+  /** Requests with a tracking id that is longer than the Daml code allows cannot be expired,
+    * so we do not attempt it, to avoid retrying forever.
+    */
+  private def listExpiredWithBoundedTrackingId(store: UserWalletStore)(implicit
+      ec: ExecutionContext
+  ): MultiDomainExpiredContractTrigger.ListExpiredContracts[
+    trafficRequestCodegen.BuyTrafficRequest.ContractId,
+    trafficRequestCodegen.BuyTrafficRequest,
+  ] = (now, limit) =>
+    implicit tc =>
+      store
+        .listExpiredBuyTrafficRequests(now, limit)(tc)
+        .map(
+          _.filter(request =>
+            TextLimits.isWithinMaxLength(
+              TextLimits.maxTrackingIdLength,
+              request.contract.payload.trackingId,
+            )
+          )
+        )
 }

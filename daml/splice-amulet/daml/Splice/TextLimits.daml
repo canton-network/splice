@@ -1,0 +1,45 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Upper bounds on the length of `Text` values that parties other than the DSO party
+-- can choose, and that the Splice apps store and index.
+--
+-- All limits are well below the 2066 characters that the Splice app stores can index.
+-- They are chosen with ample headroom over the longest values that the Splice apps produce.
+module Splice.TextLimits
+(
+  maxIdentifierLength,
+  maxTrackingIdLength,
+  maxDescriptionLength,
+  maxSvOnboardingTokenLength,
+
+  requireMaxLength,
+) where
+
+import DA.Text qualified as Text
+
+import Splice.Util
+
+-- | Maximum length of names and identifiers, e.g., ANS entry names, SV names, and user names.
+maxIdentifierLength : Int
+maxIdentifierLength = 255
+
+-- | Maximum length of the tracking ids that clients choose to deduplicate requests,
+-- which matches the existing limit of `TransferOffer.trackingId`.
+maxTrackingIdLength : Int
+maxTrackingIdLength = 279
+
+-- | Maximum length of free-form descriptions and URLs.
+maxDescriptionLength : Int
+maxDescriptionLength = 1024
+
+-- | Maximum length of the signed token with which an SV candidate requests to be onboarded.
+maxSvOnboardingTokenLength : Int
+maxSvOnboardingTokenLength = 1900
+
+-- | Require that the `Text` value named `name` is at most `maxLength` characters long.
+requireMaxLength : CanAssert m => Text -> Int -> Text -> m ()
+requireMaxLength name maxLength value =
+  require
+    (name <> " is at most " <> show maxLength <> " characters long, but has length " <> show (Text.length value))
+    (Text.length value <= maxLength)

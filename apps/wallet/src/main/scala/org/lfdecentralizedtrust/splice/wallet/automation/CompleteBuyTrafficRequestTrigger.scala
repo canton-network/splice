@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
   install as installCodegen,
 }
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.{AssignedContract, TextLimits}
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import com.digitalasset.canton.tracing.TraceContext
@@ -55,6 +55,17 @@ class CompleteBuyTrafficRequestTrigger(
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     if (trafficRequest.contract.payload.expiresAt.isBefore(context.clock.now.toInstant)) {
       Future.successful(TaskSuccess("Traffic request is expired. Skipping."))
+    } else if (
+      !TextLimits.isWithinMaxLength(
+        TextLimits.maxTrackingIdLength,
+        trafficRequest.contract.payload.trackingId,
+      )
+    ) {
+      Future.successful(
+        TaskSuccess(
+          s"Traffic request has a tracking id longer than ${TextLimits.maxTrackingIdLength} characters. Skipping."
+        )
+      )
     } else {
       val operation = new CO_CompleteBuyTrafficRequest(trafficRequest.contractId)
       treasury

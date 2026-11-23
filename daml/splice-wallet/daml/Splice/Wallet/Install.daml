@@ -22,6 +22,7 @@ import qualified Splice.TokenStandard.Utils as TokenStandard.Utils
 
 import Splice.Amulet
 import Splice.Amulet.TokenApiUtils
+import Splice.TextLimits
 import Splice.Types
 import Splice.AmuletRules
 import Splice.DecentralizedSynchronizer
@@ -582,6 +583,7 @@ template WalletAppInstall
         trackingId : Text
       controller validatorParty
       do
+        requireMaxLength "trackingId" maxTrackingIdLength trackingId
         buyTrafficRequest <- create BuyTrafficRequest with
           dso = dsoParty
           ..

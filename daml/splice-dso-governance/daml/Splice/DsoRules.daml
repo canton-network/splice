@@ -28,6 +28,7 @@ import Splice.TokenStandard.Utils qualified as TSU
 
 import Splice.ExternalPartyConfigState
 import Splice.Round
+import Splice.TextLimits qualified as TextLimits
 import Splice.Types
 import Splice.ValidatorLicense
 import Splice.Wallet.Subscriptions
@@ -637,7 +638,8 @@ template DsoRules with
         newSvParticipantId : Text
         joinedAsOfRound : Round
       controller dso
-      do newDsoRules <- dsoRules_addSv this arg
+      do TextLimits.requireMaxLength "newSvName" TextLimits.maxIdentifierLength newSvName
+         newDsoRules <- dsoRules_addSv this arg
          return DsoRules_AddSvResult with ..
 
     choice DsoRules_OffboardSv : DsoRules_OffboardSvResult
@@ -1255,6 +1257,8 @@ template DsoRules with
       controller sponsor
       do
         require "Sponsor is an SV" (sponsor `Map.member` svs)
+        TextLimits.requireMaxLength "candidateName" TextLimits.maxIdentifierLength arg.candidateName
+        TextLimits.requireMaxLength "token" TextLimits.maxSvOnboardingTokenLength arg.token
         now <- getTime
         let expiresAt = now `addRelTime` config.svOnboardingRequestTimeout
         onboardingRequest <- create SvOnboardingRequest with ..
@@ -1293,6 +1297,7 @@ template DsoRules with
         reason : Text
       controller dso
       do
+        TextLimits.requireMaxLength "newSvName" TextLimits.maxIdentifierLength newSvName
         ensureNeverOperatedNode newSvParty this
         if (not isDevNet)
           then

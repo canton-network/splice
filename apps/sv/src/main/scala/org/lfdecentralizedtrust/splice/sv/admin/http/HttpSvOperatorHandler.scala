@@ -44,7 +44,13 @@ import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract, DsoInfo, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  Codec,
+  Contract,
+  DsoInfo,
+  TemplateJsonDecoder,
+  TextLimits,
+}
 
 import java.util.Optional
 import scala.concurrent.{blocking, ExecutionContextExecutor, Future}
@@ -295,6 +301,9 @@ class HttpSvOperatorHandler(
   ): Future[r0.PrepareValidatorOnboardingResponse] = {
     implicit val ActAsKnownUserRequest(traceContext) = extracted
     withSpan(s"$workflowId.prepareValidatorOnboarding") { _ => _ =>
+      body.partyHint.foreach(
+        TextLimits.requireMaxLength("party_hint", TextLimits.maxIdentifierLength, _)
+      )
       val secret = generateRandomOnboardingSecret(svStore.key.svParty, body.partyHint)
       val expiresIn = NonNegativeFiniteDuration.ofSeconds(body.expiresIn.toLong)
       dsoStore

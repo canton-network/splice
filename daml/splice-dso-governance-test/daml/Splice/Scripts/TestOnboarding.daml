@@ -10,6 +10,7 @@ import qualified DA.Map as Map
 import Daml.Script
 import DA.Time
 import DA.List
+import DA.Text qualified as Text
 
 import Splice.ValidatorLicense
 
@@ -21,6 +22,7 @@ import Splice.SvOnboarding
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)
 import Splice.AmuletRules (AmuletRules)
+import Splice.TextLimits qualified as TextLimits
 import Splice.Types
 
 
@@ -395,6 +397,49 @@ testConfirmSvOnboardingRejectsExistingParticipant = do
 
   -- a fresh participant can be used
   _ <- submit dso $ confirm "svX-participant-id"
+  pure ()
+
+
+testSvOnboardingTextLimits : Script ()
+testSvOnboardingTextLimits = do
+  (_, dso, (_, sv2, _, _)) <- initMainNet
+
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  svX <- allocateParty "svX"
+  svY <- allocateParty "svY"
+  let maxName = Text.implode (replicate TextLimits.maxIdentifierLength "n")
+      maxToken = Text.implode (replicate TextLimits.maxSvOnboardingTokenLength "t")
+      startOnboarding candidateName token = exerciseCmd dsoRulesCid DsoRules_StartSvOnboarding with
+        candidateName
+        candidateParty = svX
+        candidateParticipantId = "svX-participant-id"
+        token
+        sponsor = sv2
+      confirm newSvName = exerciseCmd dsoRulesCid DsoRules_ConfirmSvOnboarding with
+        newSvParty = svX
+        newSvName
+        newParticipantId = "svX-participant-id"
+        newSvRewardWeight = 19
+        reason = "because"
+      addSv newSvName = exerciseCmd dsoRulesCid DsoRules_AddSv with
+        newSvParty = svY
+        newSvName
+        newSvRewardWeight = 19
+        newSvParticipantId = "svY-participant-id"
+        joinedAsOfRound = Round 3
+
+  -- the candidate name and token are bounded
+  _ <- submit (actAs sv2 <> readAs dso) $ startOnboarding maxName maxToken
+  submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding (maxName <> "n") maxToken
+  submitMustFail (actAs sv2 <> readAs dso) $ startOnboarding maxName (maxToken <> "t")
+
+  -- the name of a confirmed SV is bounded
+  _ <- submit dso $ confirm maxName
+  submitMustFail dso $ confirm (maxName <> "n")
+
+  -- the name of an added SV is bounded
+  submitMustFail dso $ addSv (Text.implode (replicate (TextLimits.maxIdentifierLength + 1) "m"))
+  _ <- submit dso $ addSv (Text.implode (replicate TextLimits.maxIdentifierLength "m"))
   pure ()
 
 

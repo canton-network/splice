@@ -8,6 +8,7 @@ import DA.Time
 
 import Splice.Amulet
 import Splice.AmuletRules
+import Splice.TextLimits
 import Splice.Types
 import Splice.Wallet.Payment
 import Splice.Wallet.Subscriptions
@@ -85,6 +86,9 @@ template AnsRules
         user : Party
       controller user
       do
+        requireMaxLength "name" maxIdentifierLength name
+        requireMaxLength "url" maxDescriptionLength url
+        requireMaxLength "description" maxDescriptionLength description
         let subscriptionData = SubscriptionData with
               sender = user
               receiver = dso

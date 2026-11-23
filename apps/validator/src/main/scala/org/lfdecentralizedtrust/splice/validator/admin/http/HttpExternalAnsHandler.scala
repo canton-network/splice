@@ -7,6 +7,7 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.http.v0.external.ans.AnsResource as r0
 import org.lfdecentralizedtrust.splice.http.v0.{external, definitions as d0}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.util.TextLimits
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
 import org.lfdecentralizedtrust.splice.wallet.admin.http.HttpWalletHandlerUtil
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -39,6 +40,9 @@ class HttpExternalAnsHandler(
     implicit val WalletUserRequest(_, endUserWallet, traceContext) = tuser
     val partyId = endUserWallet.store.key.endUserParty
     withSpan(s"$workflowId.createAnsEntry") { implicit traceContext => _ =>
+      TextLimits.requireMaxLength("name", TextLimits.maxIdentifierLength, body.name)
+      TextLimits.requireMaxLength("url", TextLimits.maxDescriptionLength, body.url)
+      TextLimits.requireMaxLength("description", TextLimits.maxDescriptionLength, body.description)
       retryProvider.retryForClientCalls(
         "createAnsEntry",
         "create ANS entry",

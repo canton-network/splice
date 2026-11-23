@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupOffset
 import org.lfdecentralizedtrust.splice.http.v0.external.wallet.WalletResource as r0
 import org.lfdecentralizedtrust.splice.http.v0.{external, definitions as d0}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
-import org.lfdecentralizedtrust.splice.util.Codec
+import org.lfdecentralizedtrust.splice.util.{Codec, TextLimits}
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
 import com.digitalasset.canton.config.RequireTypes.PositiveLong
 import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
@@ -49,6 +49,7 @@ class HttpExternalWalletHandler(
   )(tuser: WalletUserRequest): Future[r0.CreateTransferOfferResponse] = {
     implicit val WalletUserRequest(_, userWallet, traceContext) = tuser
     withSpan(s"$workflowId.createTransferOffer") { _ => _ =>
+      TextLimits.requireMaxLength("tracking_id", TextLimits.maxTrackingIdLength, request.trackingId)
       userWallet.store
         .getLatestTransferOfferEventByTrackingId(request.trackingId)
         .flatMap {
@@ -151,6 +152,7 @@ class HttpExternalWalletHandler(
   )(tuser: WalletUserRequest): Future[r0.CreateBuyTrafficRequestResponse] = {
     implicit val WalletUserRequest(_, userWallet, traceContext) = tuser
     withSpan(s"$workflowId.createBuyTrafficRequest") { _ => _ =>
+      TextLimits.requireMaxLength("tracking_id", TextLimits.maxTrackingIdLength, request.trackingId)
       val synchronizerId = Codec.tryDecode(Codec.SynchronizerId)(request.domainId)
       val receivingValidator = Codec.tryDecode(Codec.Party)(request.receivingValidatorPartyId)
       val trafficAmount = PositiveLong

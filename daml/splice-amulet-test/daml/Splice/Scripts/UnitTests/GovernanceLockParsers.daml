@@ -19,6 +19,7 @@ import Splice.Amulet.TokenApiUtils (reasonMetaKey)
 import Splice.Api.Token.MetadataV1
 import Splice.GovernanceLock
 import Splice.GovernanceLock.Request
+import Splice.TextLimits (maxIdentifierLength)
 
 -- Test parties and helpers
 ---------------------------
@@ -131,6 +132,12 @@ test_governanceLockKindParser = do
   -- The subject of an SV lock must only contain alphanumeric characters or hyphens
   expectErrors ["Invalid SV name for sv-lock: " <> invalidSVName] $
     run [kind GLT_SuperValidator, subject invalidSVName]
+
+  -- The subject of an SV lock is bounded in length
+  let maxSvName = Text.implode (replicate maxIdentifierLength "s")
+  expectSuccess (GLK_SuperValidatorRightsOwner maxSvName) $ run [kind GLT_SuperValidator, subject maxSvName]
+  expectErrors ["SV name for sv-lock is longer than " <> show maxIdentifierLength <> " characters"] $
+    run [kind GLT_SuperValidator, subject (maxSvName <> "s")]
 
 -- Metadata parser
 ------------------
