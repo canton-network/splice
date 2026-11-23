@@ -384,6 +384,16 @@ runs:
         setup_sbt_cache_hits: ${{ steps.setup_sbt.outputs.cache_hits }}
         # Caches are saved by the docs job only, see post_sbt.
 
+    # The save_test_reports job of build.yml merges the reports collected by post_sbt into the cache that split_tests reads
+    - name: Upload test reports
+      if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: "test-reports-${{ inputs.test_suite_name }}-${{ inputs.runner_index }}"
+        path: /tmp/test-reports
+        if-no-files-found: ignore
+        retention-days: 1
+
     - name: Upload logs
       # We upload the logs on not success so that we also capture them for cancelled runs
       # Unfortunately when our apps don't init and stop with sys.exit(1) the run is considered cancelled (as it fails with a timeout) but we do need the logs

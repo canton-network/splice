@@ -121,10 +121,19 @@ runs:
           echo "json=${INDEX_JSON}" >> "$GITHUB_OUTPUT"
         fi
 
+    # The test reports of passing suites, saved by the save_test_reports job of build.yml on pushes and schedules.
+    # The newest one is restored, PRs restore it from their base branch.
+    - name: Restore test reports
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: /tmp/test-reports
+        key: test-reports-1-${{ github.run_id }}
+        restore-keys: test-reports-1-
+
     - name: Split tests
       id: split_tests
       uses: ./.github/actions/tests/split_tests
       with:
-        test_reports_dir: '/cache/test-reports'
+        test_reports_dir: /tmp/test-reports
         test_names_file: ${{ inputs.test_names_file }}
         split_total: ${{ inputs.parallelism }}

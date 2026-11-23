@@ -74,19 +74,20 @@ runs:
     # The reports are used to split tests across runners, so only store times of
     # passing suites from non-PR runs: a failing PR run would otherwise overwrite
     # them with near-zero times and skew the split for every later run.
+    # The scala_test action uploads them, and the save_test_reports job of build.yml
+    # merges them into the cache that split_tests reads.
     - name: Collect test reports
       if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
       shell: bash
       env:
         SPLICE_ROOT: ${{ inputs.splice_root }}
       run: |
-        sudo mkdir -p /cache/test-reports
-        sudo chown $(whoami):$(whoami) "/cache/test-reports"
+        mkdir -p /tmp/test-reports
         for report in $(find "$SPLICE_ROOT" -path "*/target/test-reports/TEST-*.xml")
         do
           header=$(grep -m1 -oE '<testsuite [^>]*>' "$report" || true)
           if [[ "$header" == *' failures="0"'* && "$header" == *' errors="0"'* && "$header" != *' tests="0"'* ]]; then
-            cp -v "$report" /cache/test-reports/
+            cp -v "$report" /tmp/test-reports/
           else
             echo "Not caching $report: ${header:-no testsuite header}"
           fi

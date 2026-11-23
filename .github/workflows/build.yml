@@ -344,6 +344,62 @@ jobs:
       protocol_version: ${{ inputs.protocol_version }}
     secrets: inherit
 
+  # split_tests splits the tests across runners by the times in the reports of passing suites. Merge the reports
+  # uploaded by the test jobs of this run into the newest cached reports, and cache them for the next runs.
+  save_test_reports:
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    needs:
+      - scala_test_sim_time
+      - scala_test_resource_intensive
+      - scala_test_key_download
+      - scala_test_record_time_tolerance
+      - scala_test_logical_sync_upgrade
+      - scala_test_roll_forward_lsu
+      - scala_test_signatures
+      - scala_test_wall_clock_time
+      - scala_test_frontend_wall_clock_time
+      - scala_test_frontend_simtime
+      - scala_test_docker_compose
+      - scala_test_with_docker_no_canton
+      - scala_test_with_docker_and_canton_simtime
+      - scala_test_app_upgrade
+      - scala_test_without_canton
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Restore the newest test reports
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/test-reports
+          key: test-reports-1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: test-reports-1-
+
+      - name: Download the test reports of this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: test-reports-*
+          path: /tmp/test-reports-of-run
+          merge-multiple: true
+
+      - name: Merge the test reports of this run
+        id: merge
+        shell: bash
+        run: |
+          mkdir -p /tmp/test-reports /tmp/test-reports-of-run
+          new=$(find /tmp/test-reports-of-run -name '*.xml' | wc -l)
+          echo "Cached test reports: $(find /tmp/test-reports -name '*.xml' | wc -l), test reports of this run: $new"
+          # The reports of this run replace the cached reports of the same suites
+          cp /tmp/test-reports-of-run/*.xml /tmp/test-reports/ 2> /dev/null || true
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+
+      - name: Save the test reports
+        # Nothing to save if no test suite passed in this run, e.g. because the tests were skipped
+        if: ${{ steps.merge.outputs.new != '0' }}
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/test-reports
+          key: test-reports-1-${{ github.run_id }}-${{ github.run_attempt }}
+
   final_result:
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') }}
     needs:

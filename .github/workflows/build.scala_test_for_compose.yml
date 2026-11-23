@@ -43,7 +43,6 @@ on:
 jobs:
 
   split_tests:
-    # required to have access to the /cache directory to read test-reports
     runs-on: canton-network-splice
     env:
       # Nix is preinstalled on canton-network-splice, see .github/actions/nix/setup_nix
