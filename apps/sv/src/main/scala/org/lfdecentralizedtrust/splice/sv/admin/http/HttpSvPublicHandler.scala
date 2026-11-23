@@ -193,69 +193,69 @@ class HttpSvPublicHandler(
         dsoRules <- dsoStore.getDsoRules()
         maxTextLength = dsoRules.payload.config.maxTextLength.longValue
         outcome <- validateStartSvOnboardingBody(body, maxTextLength) match {
-              case Left(error) =>
-                Future.failed(HttpErrorHandler.badRequest(error))
-              case Right(token) =>
-                for {
-                  isCandidatePartyHostedOnParticipant <- participantAdminConnection
-                    .listPartyToParticipant(
-                      TopologyStoreId.Synchronizer(dsoRules.domain).some,
-                      filterParty = token.candidateParty.filterString,
-                      filterParticipant = token.candidateParticipantId.toProtoPrimitive,
+          case Left(error) =>
+            Future.failed(HttpErrorHandler.badRequest(error))
+          case Right(token) =>
+            for {
+              isCandidatePartyHostedOnParticipant <- participantAdminConnection
+                .listPartyToParticipant(
+                  TopologyStoreId.Synchronizer(dsoRules.domain).some,
+                  filterParty = token.candidateParty.filterString,
+                  filterParticipant = token.candidateParticipantId.toProtoPrimitive,
+                )
+                .map(_.nonEmpty)
+              res <-
+                if (!isCandidatePartyHostedOnParticipant)
+                  // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
+                  // and the client can just retry on that.
+                  Future.failed(
+                    HttpErrorHandler.conflict(
+                      s"Candidate party ${token.candidateParty} is not authorized by participant ${token.candidateParticipantId}"
                     )
-                    .map(_.nonEmpty)
-                  res <-
-                    if (!isCandidatePartyHostedOnParticipant)
-                      // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
-                      // and the client can just retry on that.
+                  )
+                else
+                  SvApp
+                    .isApprovedSvIdentity(
+                      token.candidateName,
+                      token.candidateParty,
+                      body.token,
+                      config,
+                      svStore,
+                      logger,
+                    ) match {
+                    case Left(reason) =>
                       Future.failed(
-                        HttpErrorHandler.conflict(
-                          s"Candidate party ${token.candidateParty} is not authorized by participant ${token.candidateParticipantId}"
+                        HttpErrorHandler.unauthorized(
+                          s"Could not approve SV Identity because of reason: $reason"
                         )
                       )
-                    else
-                      SvApp
-                        .isApprovedSvIdentity(
-                          token.candidateName,
-                          token.candidateParty,
-                          body.token,
-                          config,
-                          svStore,
+                    case Right(_) =>
+                      // We retry here because the DsoRules can change while attempting this.
+                      retryProvider
+                        .retryForClientCalls(
+                          "start_sv_onboarding",
+                          s"start SV ${token.candidateName} onboarding via DsoRules",
+                          startSvOnboarding(
+                            token.candidateName,
+                            token.candidateParty,
+                            token.candidateParticipantId,
+                            body.token,
+                          ),
                           logger,
-                        ) match {
-                        case Left(reason) =>
-                          Future.failed(
-                            HttpErrorHandler.unauthorized(
-                              s"Could not approve SV Identity because of reason: $reason"
+                        )
+                        .flatMap {
+                          case Left(reason) =>
+                            Future.failed(
+                              HttpErrorHandler.badRequest(
+                                s"Could not start onboarding request because of reason: : $reason"
+                              )
                             )
-                          )
-                        case Right(_) =>
-                          // We retry here because the DsoRules can change while attempting this.
-                          retryProvider
-                            .retryForClientCalls(
-                              "start_sv_onboarding",
-                              s"start SV ${token.candidateName} onboarding via DsoRules",
-                              startSvOnboarding(
-                                token.candidateName,
-                                token.candidateParty,
-                                token.candidateParticipantId,
-                                body.token,
-                              ),
-                              logger,
-                            )
-                            .flatMap {
-                              case Left(reason) =>
-                                Future.failed(
-                                  HttpErrorHandler.badRequest(
-                                    s"Could not start onboarding request because of reason: : $reason"
-                                  )
-                                )
-                              case Right(_) =>
-                                Future.successful(r0.StartSvOnboardingResponseOK)
-                            }
-                      }
-                } yield res
-            }
+                          case Right(_) =>
+                            Future.successful(r0.StartSvOnboardingResponseOK)
+                        }
+                  }
+            } yield res
+        }
       } yield outcome
     }
   }
