@@ -4,9 +4,6 @@
 -- | Upper bounds on the length of `Text` values that the Splice apps store.
 --
 -- The limits are chosen with ample headroom over the longest values that the Splice apps produce.
--- Limits on values that the Splice apps index are low enough that their UTF-8 encoding,
--- of at most four bytes per character, stays below the size limit of Postgres index entries.
--- Values that need a larger limit are restricted to ASCII characters.
 module Splice.TextLimits
 (
   maxIdentifierLength,
@@ -36,8 +33,6 @@ maxTrackingIdLength = 279
 
 -- | Maximum length of the signed token with which an SV candidate requests to be onboarded.
 -- The token is a JWT, whose characters `requireSvOnboardingTokenCharacters` restricts to ASCII.
--- It contains the candidate's SV name, party, participant id and public key, and the DSO party,
--- which take at most 1822 characters with all of them at their maximum length.
 maxSvOnboardingTokenLength : Int
 maxSvOnboardingTokenLength = 1900
 
