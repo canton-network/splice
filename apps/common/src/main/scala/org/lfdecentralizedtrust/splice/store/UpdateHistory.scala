@@ -503,7 +503,12 @@ class UpdateHistory private (
           logger.info(s"Created update history partitions for ${missing.mkString(", ")}")
           analyzePartitionedTables()
         }
-    } yield missing
+      daysWithPartitions <- listDatesWithAllPartitions()
+    } yield {
+      val runwayEnd = UpdateHistory.partitionRunwayEnd(daysWithPartitions, dayOf(now))
+      metrics.UpdateHistory.partitionRunwayEnd.updateValue(_.max(runwayEnd))
+      missing
+    }
 
   private def missingPartitionDays(
       now: CantonTimestamp,
@@ -2683,6 +2688,17 @@ object UpdateHistory {
 
   private[store] def analyzeCommand(serverVersionNum: Int): String =
     if (serverVersionNum >= 180000) "analyze only" else "analyze"
+
+  private[store] def partitionRunwayEnd(
+      daysWithPartitions: Set[LocalDate],
+      today: LocalDate,
+  ): CantonTimestamp = {
+    val firstDayWithoutPartitions =
+      Iterator.iterate(today)(_.plusDays(1)).dropWhile(daysWithPartitions.contains).next()
+    CantonTimestamp.assertFromInstant(
+      firstDayWithoutPartitions.atStartOfDay(ZoneOffset.UTC).toInstant
+    )
+  }
 
   sealed trait BackfillingRequirement
   object BackfillingRequirement {
