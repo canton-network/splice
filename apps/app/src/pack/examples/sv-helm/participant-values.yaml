@@ -9,6 +9,12 @@ auth:
   jwksUrl: "https://OIDC_AUTHORITY_URL/.well-known/jwks.json"
   # replace OIDC_AUTHORITY_LEDGER_API_AUDIENCE with the audience of your choice.
   targetAudience: "OIDC_AUTHORITY_LEDGER_API_AUDIENCE"
+adminApi:
+  auth:
+    # replace OIDC_AUTHORITY_URL with your provider's OIDC URL
+    jwksUrl: "https://OIDC_AUTHORITY_URL/.well-known/jwks.json"
+    # replace OIDC_AUTHORITY_LEDGER_API_AUDIENCE with the audience of your choice.
+    targetAudience: "OIDC_AUTHORITY_ADMIN_API_AUDIENCE"
 enableHealthProbes: true
 # Required for SVs: Scan serves ACS snapshots for validator recovery through the participant's repair service.
 enableRepairCommands: true

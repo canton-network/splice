@@ -92,6 +92,7 @@ export async function installValidator1(
     validator1Config?.disableAuth,
     decentralizedSynchronizerMigrationConfig.active.version,
     defaultPostgres,
+    [],
     {
       dependsOn: participantDependsOn,
     }
@@ -135,6 +136,9 @@ export async function installValidator1(
     disableAuth: validator1Config?.disableAuth,
     version: activeVersion,
     additionalEnvVars: validator1Config?.validatorApp?.additionalEnvVars,
+    participant: {
+      disableParticipantAdminApiAuth: validator1Config?.participant?.disableParticipantAdminApiAuth,
+    },
   });
   const walletGatewayConfig = validator1Config.walletGateway;
   if (walletGatewayConfig.enabled) {

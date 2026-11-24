@@ -1,6 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import override
 from docutils.parsers.rst import Directive
 from docutils import nodes
 from sphinx.application import Sphinx
@@ -15,6 +16,7 @@ class ReleaseNotesDirective(Directive):
     final_argument_whitespace = True
     has_content = True
 
+    @override
     def run(self) -> list[nodes.Node]:
         version = self.arguments[0].strip()
 

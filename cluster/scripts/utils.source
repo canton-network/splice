@@ -76,6 +76,8 @@ function get_stack_for_namespace_component() {
       stack="sv-canton"
     elif [[ "${component}" == "mediator" ]]; then
       stack="sv-canton"
+    elif [[ "${namespace}" == "sv" ]]; then
+      stack="sv-runbook"
     else
       stack="sv"
     fi
@@ -94,10 +96,12 @@ create_component_instance() {
     local instance_base="$component"
     if [[ "$component" == "cantonBft" ]]; then
         instance_base="sequencer-bft"
+    elif [[ "$component" == "cn-apps" && "$namespace" == "sv" ]]; then
+        instance_base="apps"
     fi
 
     if [[ ("$component" == "sequencer" || "$component" == "cantonBft" || "$component" == "mediator")
-       && ("$namespace" != "splitwell" && "$namespace" != "validator1" && "$namespace" != "sv") ]]; then
+       && ("$namespace" != "splitwell" && "$namespace" != "validator1") ]]; then
         component_instance="${instance_base}-${migration_id}"
     else
         component_instance="${instance_base}"

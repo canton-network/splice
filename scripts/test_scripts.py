@@ -3,6 +3,7 @@
 
 # TODO(#8086): add real unit tests for scripts/*.py; this is only a smoke test
 
+from typing import override
 import importlib.util
 import unittest
 from datetime import timedelta
@@ -38,6 +39,7 @@ class CheckAcsSnapshotsTest(unittest.TestCase):
 
 
 class BumpWalletGatewayVersionTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.module = load_script("bump-wallet-gateway-version.py")
 
@@ -80,6 +82,14 @@ class BumpWalletGatewayVersionTest(unittest.TestCase):
     def test_read_compose_version(self) -> None:
         env = "WALLET_GATEWAY_VERSION=1.13.0\nPORTFOLIO_VERSION=1.14.0\n"
         self.assertEqual(self.module.read_compose_version(env, "PORTFOLIO_VERSION"), "1.14.0")
+
+    def test_find_duplicate_matches_open_pr_for_same_versions(self) -> None:
+        older = {"number": 1, "title": self.module.pr_title("1.13.0", "1.15.0"), "headRefName": "b1", "url": "u1"}
+        same = {"number": 2, "title": self.module.pr_title("1.14.0", "1.16.0"), "headRefName": "b2", "url": "u2"}
+        title = self.module.pr_title("1.14.0", "1.16.0")
+        self.assertEqual(self.module.find_duplicate([older, same], title), same)
+        self.assertIsNone(self.module.find_duplicate([older], title))
+        self.assertIsNone(self.module.find_duplicate([], title))
 
 
 if __name__ == "__main__":

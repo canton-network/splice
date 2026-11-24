@@ -223,17 +223,6 @@ class FeaturedAppActivityMarkerTrigger(
       now = context.clock.now
       openMiningRound <- store.getLatestUsableOpenMiningRound(now)
       stakeholders = task.informees + store.key.dsoParty
-      supportsConvertFeaturedAppActivityMarkerObservers <-
-        if (svConfig.convertFeaturedAppActivityMarkerObservers) {
-          svTaskContext.packageVersionSupport
-            .supportsConvertFeaturedAppActivityMarkerObservers(
-              stakeholders.toSeq,
-              context.clock.now,
-            )
-            .map(_.supported)
-        } else {
-          Future.successful(false)
-        }
       // Note that we don't group by provider or beneficiary. There is no strong need to do so
       // as we want to
       update = dsoRules.exercise(
@@ -243,9 +232,9 @@ class FeaturedAppActivityMarkerTrigger(
             task.markers.map(_.contractId).asJava,
             openMiningRound.contractId,
             Option
-              .when(
-                supportsConvertFeaturedAppActivityMarkerObservers
-              )(stakeholders.toSeq.map(_.toProtoPrimitive).asJava)
+              .when(svConfig.convertFeaturedAppActivityMarkerObservers)(
+                stakeholders.toSeq.map(_.toProtoPrimitive).asJava
+              )
               .toJava,
           ),
           Optional.of(controller),

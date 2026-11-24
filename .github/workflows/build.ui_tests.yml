@@ -64,7 +64,6 @@ jobs:
         if: steps.skip.outputs.skip != 'true'
         uses: ./.github/actions/sbt/post_sbt
         with:
-          cache_version: 10
           setup_sbt_cache_hits: ${{ steps.setup.outputs.sbt_cache_hits }}
 
       - name: Upload logs

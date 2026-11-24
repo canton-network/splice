@@ -8,7 +8,7 @@
 - [ ] If a logical synchronizer upgrade test is required (from canton-3.5), comment `/lsu_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
 
 #### PR Guidelines
-- [ ] Include any change that might be observable by our partners or affect their deployment in the [release notes](https://github.com/canton-network/splice/blob/main/release-notes/release_notes_upcoming.mdx).
+- [ ] Describe user-facing changes in the [release notes](https://github.com/canton-network/splice/blob/main/release-notes/release_notes_upcoming.mdx), i.e. any change visible to anyone deploying, operating, integrating with or using Splice.
 - [ ] Specify fixed issues with `Fixes #n`, and mention issues worked on using `#n`
 - [ ] Include a screenshot for frontend-related PRs - see [README](https://github.com/canton-network/splice/blob/main/TESTING.md#running-and-debugging-integration-tests) or use your favorite screenshot tool
 

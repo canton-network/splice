@@ -28,7 +28,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
 }
 import org.lfdecentralizedtrust.splice.environment.{
   CommandPriority,
-  PackageVersionSupport,
   RetryFor,
   RetryProvider,
   SpliceLedgerConnection,
@@ -110,7 +109,6 @@ class HttpWalletHandler(
     retryProvider: RetryProvider,
     validatorTopupConfig: ValidatorTopupConfig,
     dedupDuration: DedupDuration,
-    packageVersionSupport: PackageVersionSupport,
 )(implicit
     mat: Materializer,
     ec: ExecutionContext,
@@ -860,18 +858,12 @@ class HttpWalletHandler(
           for {
             featuredAppRight <- scanConnection
               .lookupFeaturedAppRight(PartyId.tryFromProtoPrimitive(preapproval.payload.provider))
-            supportsDescription <- packageVersionSupport
-              .supportsDescriptionInTransferPreapprovals(
-                Seq(receiver, sender, userWallet.store.key.dsoParty),
-                walletManager.clock.now,
-              )
-              .map(_.supported)
             result <- exerciseWalletAmuletAction(
               new amuletoperation.CO_TransferPreapprovalSend(
                 preapproval.contractId,
                 featuredAppRight.map(_.contractId).toJava,
                 amount,
-                Option.when(supportsDescription)(body.description).flatten.toJava,
+                body.description.toJava,
               ),
               userWallet,
               (_: amuletoperationoutcome.COO_TransferPreapprovalSend) =>

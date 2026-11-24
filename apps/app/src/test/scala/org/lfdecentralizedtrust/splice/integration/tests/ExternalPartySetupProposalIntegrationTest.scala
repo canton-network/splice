@@ -211,15 +211,6 @@ class ExternalPartySetupProposalIntegrationTest
           tp.contract.contractId
         ) contains onboardingBobExtPartySetupResult.transferPreapprovalCid
 
-      // Lookup transfer command counter before any transfer command
-      aliceValidatorBackend.scanProxy.lookupTransferCommandCounterByParty(aliceParty) shouldBe None
-
-      // Lookup transfer command that does not exist
-      aliceValidatorBackend.scanProxy.lookupTransferCommandStatus(
-        aliceParty,
-        0L,
-      ) shouldBe None
-
       val (_, issuingRound) = actAndCheck(
         s"Advance rounds until there is at least one issuing round", {
           advanceRoundsByOneTickViaAutomation()

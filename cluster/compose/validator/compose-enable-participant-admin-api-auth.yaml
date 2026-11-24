@@ -1,0 +1,21 @@
+# TODO(DACH-NY/canton-network-internal#8256): tie enabling admin API auth to enabling ledger API auth
+services:
+  participant:
+    environment:
+      - SPLICE_PARTICIPANT_ADMIN_API_JWKS_URL=${AUTH_JWKS_URL}
+      - SPLICE_PARTICIPANT_ADMIN_API_TARGET_AUDIENCE=${PARTICIPANT_ADMIN_API_AUTH_AUDIENCE}
+      - SPLICE_PARTICIPANT_ADMIN_API_USER=${VALIDATOR_AUTH_CLIENT_ID}@clients
+      - |
+        ADDITIONAL_CONFIG_ENABLE_ADMIN_API_AUTH=
+          canton.participants.participant.admin-api.auth-services=[$${_admin_api_auth_service}]
+
+  validator:
+    environment:
+      - SPLICE_APP_VALIDATOR_PARTICIPANT_ADMIN_API_AUTH_URL=${AUTH_WELLKNOWN_URL}
+      - SPLICE_APP_VALIDATOR_PARTICIPANT_ADMIN_API_AUTH_CLIENT_ID=${VALIDATOR_AUTH_CLIENT_ID}
+      - SPLICE_APP_VALIDATOR_PARTICIPANT_ADMIN_API_AUTH_CLIENT_SECRET=${VALIDATOR_AUTH_CLIENT_SECRET}
+      - SPLICE_APP_VALIDATOR_PARTICIPANT_ADMIN_API_AUTH_AUDIENCE=${PARTICIPANT_ADMIN_API_AUTH_AUDIENCE}
+      - |
+        ADDITIONAL_CONFIG_ENABLE_ADMIN_API_AUTH=
+          canton.validator-apps.validator_backend.participant-client.admin-api.auth-config = ""
+          canton.validator-apps.validator_backend.participant-client.admin-api.auth-config = $${_participant_client_admin_api_auth_config}

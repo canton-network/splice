@@ -1,16 +1,16 @@
 name: "Post SBT job"
 description: "Post SBT job"
 inputs:
-  cache_version:
-    description: "Version of the cache"
-    required: true
   setup_sbt_cache_hits:
-    description: "Cache hits from the setup SBT job (should be the cache_hits output from the setup SBT job)"
+    description: "Restore results from the setup SBT job (should be the cache_hits output from the setup SBT job)"
     required: true
   save_caches:
-    description: "If set to false, no caches will be saved"
+    description: |
+      Set to true only in the single job that is the designated writer of the sbt/classes/npm/Daml caches
+      (currently the docs job). Having one writer avoids jobs racing to save partial contents under the same key.
+      Even when true, caches are only saved as decided by the "Decide which caches to save" step below.
     required: false
-    default: "true"
+    default: "false"
   splice_root:
     description: "Path to splice repo"
     default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
@@ -18,36 +18,57 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Decide which caches to save
+      id: policy
+      shell: bash
+      env:
+        SAVE_CACHES: ${{ inputs.save_caches }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        # all:  push to main/release-line branches. These caches are shared with all PRs, so only trusted,
+        #       merged code may write them.
+        # none: everything else.
+        #       - pull_request: PR caches are only visible to the PR itself, but each one is ~1.5GB and would
+        #         evict the shared caches from the 10GB repo quota. PRs restore from their base branch instead.
+        #       - pull_request_target (PRs from forks) would write into the base branch scope.
+        #       - scheduled/manual runs may use a non-default build config.
+        mode=none
+        if [[ "$SAVE_CACHES" == "true" && "$EVENT_NAME" == "push" ]]; then
+          mode=all
+        fi
+        echo "Cache save mode: $mode (save_caches=$SAVE_CACHES, event=$EVENT_NAME)"
+        echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
     - name: Store precompiled classes
-      if: ${{ fromJson(inputs.save_caches) }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/precompiled_classes/save
       with:
-        cache_version: ${{ inputs.cache_version }}
-        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).classes }}
+        cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).classes.key }}
+        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).classes.hit }}
         splice_root: ${{ inputs.splice_root }}
 
     - name: Store SBT Cache
-      if: ${{ fromJson(inputs.save_caches) }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/sbt/save
       with:
-        cache_version: ${{ inputs.cache_version }}
-        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).sbt }}
+        cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).sbt.key }}
+        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).sbt.hit }}
         splice_root: ${{ inputs.splice_root }}
 
     - name: Store frontend node_modules
-      if: ${{ fromJson(inputs.save_caches) }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/frontend_node_modules/save
       with:
-        cache_version: ${{ inputs.cache_version }}
-        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).node_modules }}
+        cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).node_modules.key }}
+        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).node_modules.hit }}
         splice_root: ${{ inputs.splice_root }}
 
     - name: Store Daml artifacts
-      if: ${{ fromJson(inputs.save_caches) }}
+      if: ${{ steps.policy.outputs.mode == 'all' }}
       uses: ./.github/actions/cache/daml_artifacts/save
       with:
-        cache_version: ${{ inputs.cache_version }}
-        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).daml }}
+        cache_key: ${{ fromJson(inputs.setup_sbt_cache_hits).daml.key }}
+        load_cache_hit: ${{ fromJson(inputs.setup_sbt_cache_hits).daml.hit }}
         splice_root: ${{ inputs.splice_root }}
 
     # The reports are used to split tests across runners, so only store times of

@@ -10,10 +10,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_act
 import eu.rekawek.toxiproxy.model.ToxicDirection
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.plugins.toxiproxy.UseToxiproxy
-import org.lfdecentralizedtrust.splice.sv.onboarding.joining.{
-  JoiningNodeDsoPartyHosting,
-  SvOnboardingSnapshotDownload,
-}
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 
 import scala.jdk.OptionConverters.*
@@ -24,7 +20,6 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.slf4j.event.Level
 
-import java.nio.file.Files
 import scala.concurrent.duration.*
 
 class SvOnboardingAddlIntegrationTest
@@ -348,12 +343,6 @@ class SvOnboardingAddlIntegrationTest
       ) {
         // we don't start scan and validator here as they are not useful for this test
         // but scan (required by validator) could emit errors that we'd then need to deal with
-        val partialSnapshot = SvOnboardingSnapshotDownload
-          .downloadDirectory(
-            sv2Backend.config.onboardingSnapshots,
-            JoiningNodeDsoPartyHosting.SnapshotDownloadName,
-          )
-          .resolve("snapshot")
         val SnapshotDownload =
           "HTTP GET /api/sv/v0/onboard/sv/download/(\\S+) from .*: Responding with status code: (\\d{3} [^,]+).*".r
         loggerFactory.assertEventuallyLogsSeq(
@@ -370,16 +359,17 @@ class SvOnboardingAddlIntegrationTest
               .limitData("cut-snapshot-download", ToxicDirection.DOWNSTREAM, 2048L)
             try {
               sv2Backend.start()
-              eventually(timeUntilSuccess = 2.minute)(
-                (Files.exists(partialSnapshot) && Files.size(partialSnapshot) > 0L) shouldBe true
-              )
+              eventually(timeUntilSuccess = 2.minutes) {
+                loggerFactory.fetchRecordedLogEntries.exists { entry =>
+                  entry.loggerName.contains("JoiningNodeDsoPartyHosting") &&
+                  entry.loggerName.contains("SV=sv2") &&
+                  entry.message.contains("Download of onboarding snapshot was interrupted")
+                } shouldBe true
+              }
             } finally cut.remove()
             sv2Backend.waitForInitialization()
           },
           entries => {
-            forAtLeast(1, entries)(
-              _.message should include("Download of onboarding snapshot was interrupted")
-            )
             def downloads(status: String) = entries
               .map(_.message)
               .collect { case SnapshotDownload(id, `status`) => id }

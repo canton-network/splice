@@ -22,7 +22,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItemV2,
   UpdateHistoryResponseV2,
 }
-import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
+import org.lfdecentralizedtrust.splice.scan.admin.http.LedgerApiJsonScanHttpEncodings
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSink
 import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 
@@ -227,7 +227,7 @@ abstract class BaseStorePerformanceTest(
     dump.transactions.zipWithIndex.collect {
       // deliberately ignoring reassignments
       case (UpdateHistoryItemV2.members.UpdateHistoryTransactionV2(update), index) =>
-        CompactJsonScanHttpEncodings().httpToLapiTransaction(update, index.toLong)
+        LedgerApiJsonScanHttpEncodings.httpToLapiTransaction(update, index.toLong)
     }
   }
 

@@ -130,6 +130,7 @@ runs:
     - name: Setup
       uses: ./.github/actions/tests/common_test_setup
       with:
+        cache_version: ${{ inputs.cache_version }}
         test_name: ${{ inputs.test_suite_name }}
         with_sbt: false # we setup SBT later while canton is starting up
         target: 'default'
@@ -253,6 +254,9 @@ runs:
     - name: Set up QEMU
       if: ${{ fromJson(inputs.with_docker_images) }}
       uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 #v3.6.0
+      with:
+        # Only save the binfmt image from merged code; PR entries would just evict other caches.
+        cache-image: ${{ github.event_name == 'push' }}
 
     - name: Build Docker images
       if: ${{ fromJson(inputs.with_docker_images) }}
@@ -332,10 +336,8 @@ runs:
       if: ${{ !cancelled() }}
       uses: ./.github/actions/sbt/post_sbt
       with:
-        cache_version: ${{ inputs.cache_version }}
         setup_sbt_cache_hits: ${{ steps.setup_sbt.outputs.cache_hits }}
-        # Save caches only from one runner, to reduce conflicts on the save
-        save_caches: ${{ inputs.runner_index == 0 && inputs.test_suite_name == 'wall-clock-time' }}
+        # Caches are saved by the docs job only, see post_sbt.
 
     - name: Upload logs
       # We upload the logs on not success so that we also capture them for cancelled runs

@@ -1,6 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.amuletconversionratefeed.AmuletConversionRateFeed
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -12,6 +13,7 @@ import org.lfdecentralizedtrust.splice.util.{
   DisclosedContracts,
   SvTestUtil,
   TimeTestUtil,
+  TriggerTestUtil,
   WalletTestUtil,
 }
 import scala.jdk.OptionConverters.*
@@ -21,7 +23,8 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
     with TimeTestUtil
-    with SvTestUtil {
+    with SvTestUtil
+    with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -59,13 +62,15 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
       )
 
   "SV app follows amulet conversion rate feed" in { implicit env =>
-    def runTrigger =
-      sv1Backend.dsoAutomation.trigger[FollowAmuletConversionRateFeedTrigger].runOnce().futureValue
+    def trigger = sv1Backend.dsoAutomation.trigger[FollowAmuletConversionRateFeedTrigger]
+    // The outcome is not asserted: callers check the resulting price vote instead, and some of them
+    // retry the run until the trigger sees the updated feed.
+    def runTrigger(): Unit = trigger.runOnceWithTaskOutcome().futureValue.discard
 
     val publisher = aliceValidatorBackend.getValidatorPartyId()
 
     loggerFactory.assertLogs(
-      runTrigger,
+      runTrigger(),
       _.warningMessage should include(
         "No AmuletConversionRateFeed for publisher alice"
       ),
@@ -95,7 +100,7 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
       "SV updates price to 42.0",
       _ => {
         // deliberately in the eventually as the first run may not yet see the updated feed
-        runTrigger
+        runTrigger()
         BigDecimal(
           sv1Backend.listAmuletPriceVotes().loneElement.payload.amuletPrice.toScala.value
         ) shouldBe BigDecimal(42.0)
@@ -121,7 +126,7 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
               disclosedContracts =
                 DisclosedContracts.forTesting(amuletRules).toLedgerApiDisclosedContracts,
             )
-        runTrigger
+        runExpectingNoTask(trigger)
         feed2
       },
     )(
@@ -143,7 +148,7 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
     )(
       "SV updates price to 23.0",
       _ => {
-        runTrigger
+        runTrigger()
         BigDecimal(
           sv1Backend.listAmuletPriceVotes().loneElement.payload.amuletPrice.toScala.value
         ) shouldBe BigDecimal(23.0)
@@ -171,7 +176,7 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
       "SV rejects as it is out of the range",
       _ => {
         loggerFactory.assertLogs(
-          runTrigger,
+          runTrigger(),
           _.warningMessage should include(
             "200.0000000000 which is outside of the configured accepted range RangeConfig(0.01,100.0), clamping to 100.0"
           ),
@@ -204,7 +209,7 @@ class FollowAmuletConversionRateFeedTimeBasedIntegrationTest
       "SV rejects as it is out of the range",
       _ => {
         loggerFactory.assertLogs(
-          runTrigger,
+          runTrigger(),
           _.warningMessage should include(
             "0.0010000000 which is outside of the configured accepted range RangeConfig(0.01,100.0), clamping to 0.01"
           ),
