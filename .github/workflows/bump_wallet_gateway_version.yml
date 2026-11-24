@@ -15,6 +15,8 @@ on:
 
 jobs:
   bump_wallet_gateway_version:
+    # Only run in the main repo, not in forks
+    if: github.repository == 'canton-network/splice'
     name: Bump Wallet Gateway version
     runs-on: self-hosted-k8s-small
     container:
