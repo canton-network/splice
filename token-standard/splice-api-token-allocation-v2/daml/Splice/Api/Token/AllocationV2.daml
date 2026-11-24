@@ -60,7 +60,7 @@ data SettlementInfo = SettlementInfo
 -- purpose of a settlement, which often requires the atomic execution of multiple legs.
 data TransferLeg = TransferLeg with
     transferLegId : Text
-      -- ^ An identifier for the transfer leg.
+      -- ^ An identifier for the transfer leg, unique among the legs settled together.
     sender : Account
       -- ^ The sender of the transfer.
     receiver : Account
@@ -410,7 +410,8 @@ interface SettlementFactory where
         -- ^ The transfers that are to be executed as part of the settlement.
         --
         -- There MUST be at least one transfer leg. All transfer legs MUST have the
-        -- same instrument admin as the one of the factory.
+        -- same instrument admin as the one of the factory. Their transfer leg ids
+        -- MUST be unique.
       allocations : [FinalizedAllocation]
         -- ^ Allocations to settle.
         --
