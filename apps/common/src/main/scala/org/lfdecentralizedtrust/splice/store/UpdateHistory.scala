@@ -1995,7 +1995,7 @@ class UpdateHistory private (
         and record_time > ${CantonTimestamp.MinValue}
       """
     }
-    val tables = updateTables.flatMap(historyTablesToQuery(_))
+    val tables = updateTables.forgetNE.flatMap(historyTablesToQuery(_))
     NonEmpty.from(tables.map(t => sql"(" ++ rangeForTable(t) ++ sql")")) match {
       case None => Future.successful(None)
       case Some(ranges) =>
@@ -2090,7 +2090,7 @@ class UpdateHistory private (
     }
 
     MonadUtil
-      .sequentialTraverse(updateTables.flatMap(historyTablesToQuery(_)))(previousId)
+      .sequentialTraverse(updateTables.forgetNE.flatMap(historyTablesToQuery(_)))(previousId)
       .map(_.flatten.minOption)
   }
 
@@ -2508,16 +2508,8 @@ class UpdateHistory private (
     // index-only scan of updt_hist_*_hi_mi_rt_di with LIMIT 1: a few
     // pages, also when nothing matches. No table scan.
     storage.query(
-      (sql"""
-        select min(min_record_time)
-        from (
-          (""" ++ minForTable("update_history_transactions") ++ sql""")
-          union all
-          (""" ++ minForTable("update_history_assignments") ++ sql""")
-          union all
-          (""" ++ minForTable("update_history_unassignments") ++ sql""")
-        ) all_mins
-      """).toActionBuilder.as[Option[CantonTimestamp]].head,
+      (sql"select min(min_record_time) from (" ++ unionAllUpdateTables(minForTable) ++
+        sql") all_mins").toActionBuilder.as[Option[CantonTimestamp]].head,
       "getEarliestRecordTimeAfter",
     )
   }
@@ -2550,13 +2542,7 @@ class UpdateHistory private (
       // the rows in the range, which callers keep to one batch.
       storage
         .query(
-          (sql"""
-            (""" ++ storedInTable("update_history_transactions") ++ sql""")
-            union all
-            (""" ++ storedInTable("update_history_assignments") ++ sql""")
-            union all
-            (""" ++ storedInTable("update_history_unassignments") ++ sql""")
-          """).toActionBuilder.as[String],
+          unionAllUpdateTables(storedInTable).as[String],
           "getStoredUpdateIds",
         )
         .map(_.toSet)
@@ -2723,7 +2709,8 @@ object UpdateHistory {
     } yield result
   }
 
-  private val updateTables = Seq(
+  private val updateTables: NonEmpty[Seq[String]] = NonEmpty(
+    Seq,
     "update_history_transactions",
     "update_history_assignments",
     "update_history_unassignments",
@@ -2777,6 +2764,13 @@ object UpdateHistory {
 
   def unionAll(queries: NonEmpty[Seq[SQLActionBuilderChain]]): SQLActionBuilderChain =
     queries.reduceLeft(_ ++ sql" union all " ++ _)
+
+  /** `forTable` of each update table (transactions, assignments,
+    * unassignments), each in parentheses, combined with `union all`. Only the
+    * partitioned tables, not the legacy ones.
+    */
+  private def unionAllUpdateTables(forTable: String => SQLActionBuilder): SQLActionBuilder =
+    unionAll(updateTables.map(table => sql"(" ++ forTable(table) ++ sql")")).toActionBuilder
 
   // `atOrAfter` or `before` are never expanded into boolean
   // subexpressions by consumers of this type that generate SQL; you
