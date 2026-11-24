@@ -72,6 +72,7 @@ import slick.jdbc.canton.SQLActionBuilder
 import java.time.{LocalDate, ZoneOffset}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicReference
+import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -2693,10 +2694,12 @@ object UpdateHistory {
       daysWithPartitions: Set[LocalDate],
       today: LocalDate,
   ): CantonTimestamp = {
-    val firstDayWithoutPartitions =
-      Iterator.iterate(today)(_.plusDays(1)).dropWhile(daysWithPartitions.contains).next()
+    @tailrec
+    def firstDayWithoutPartitions(day: LocalDate): LocalDate =
+      if (daysWithPartitions.contains(day)) firstDayWithoutPartitions(day.plusDays(1)) else day
+
     CantonTimestamp.assertFromInstant(
-      firstDayWithoutPartitions.atStartOfDay(ZoneOffset.UTC).toInstant
+      firstDayWithoutPartitions(today).atStartOfDay(ZoneOffset.UTC).toInstant
     )
   }
 
