@@ -136,24 +136,24 @@ class UpdateHistoryLoadFromBulkStorageTest extends UpdateHistoryTestBase {
       } yield steps.headOption shouldBe Some(SegmentLoaded(segment(2, 3), 0))
     }
 
-    "insert nothing twice when restarted from scratch with another batch size" in {
+    "load everything again when restarted from scratch with another batch size" in {
       for {
         data <- setupTestData()
         _ <- data.service(batchSize = 1).mksrc().runWith(Sink.seq)
         _ <- data.progress.reset
         steps <- data.service(batchSize = 3).mksrc().runWith(Sink.seq)
         _ <- data.assertDestinationHoldsSourceUpdatesAfter(CantonTimestamp.MinValue)
-      } yield steps.collect { case SegmentLoaded(_, inserted) => inserted }.sum shouldBe 0
+      } yield steps.collect { case SegmentLoaded(_, inserted) => inserted }.sum shouldBe 7
     }
 
-    "skip updates the destination already holds from before its history start" in {
-      // The destination also holds the update at 02:59, e.g. from backfilling
-      // from its peers, in the middle of a batch.
+    "replace the updates the destination stored itself before its first ingested update" in {
+      // The destination also holds the update at 02:59, and one of its own at
+      // 03:05, like the import of the ACS when it joined.
       for {
-        data <- setupTestData(destinationHoldsUpdateBeforeHistoryStart = true)
+        data <- setupTestData(destinationHoldsOwnUpdatesBeforeHistoryStart = true)
         steps <- data.service(batchSize = 2).mksrc().runWith(Sink.seq)
         _ <- data.assertDestinationHoldsSourceUpdatesAfter(CantonTimestamp.MinValue)
-      } yield steps should contain(SegmentLoaded(segment(2, 3), 1))
+      } yield steps should contain(SegmentLoaded(segment(2, 3), 2))
     }
 
     "load up to the first ingested update when it is later than the history start" in {
@@ -385,8 +385,8 @@ class UpdateHistoryLoadFromBulkStorageTest extends UpdateHistoryTestBase {
     *
     * @param destinationIngestsFrom the destination ingests the updates from
     *   this record time on
-    * @param destinationHoldsUpdateBeforeHistoryStart the destination also holds
-    *   the update at 02:59
+    * @param destinationHoldsOwnUpdatesBeforeHistoryStart the destination also
+    *   holds the update at 02:59, and an update of its own at 03:05
     */
   private def setupTestData(
       start: Option[HistoryStart] = Some(HistoryStart.From(historyStart)),
@@ -394,7 +394,7 @@ class UpdateHistoryLoadFromBulkStorageTest extends UpdateHistoryTestBase {
       destinationAtw: NonNegativeDuration =
         NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       destinationIngestsFrom: CantonTimestamp = firstIngested,
-      destinationHoldsUpdateBeforeHistoryStart: Boolean = false,
+      destinationHoldsOwnUpdatesBeforeHistoryStart: Boolean = false,
   ): Future[TestData] = {
     val source = mkStore(participantId = participant1)
     val destination =
@@ -442,8 +442,15 @@ class UpdateHistoryLoadFromBulkStorageTest extends UpdateHistoryTestBase {
       )
       _ <- create(domain1, validContractId(3), validOffset(5), party1, source, at(2, 30))
       _ <-
-        if (destinationHoldsUpdateBeforeHistoryStart) createOnDestinationToo(6, at(2, 59))
-        else create(domain1, validContractId(6), validOffset(6), party1, source, at(2, 59))
+        if (destinationHoldsOwnUpdatesBeforeHistoryStart)
+          for {
+            _ <- createOnDestinationToo(6, at(2, 59))
+            _ <- create(domain1, validContractId(10), validOffset(7), party1, destination, at(3, 5))
+          } yield ()
+        else
+          create(domain1, validContractId(6), validOffset(6), party1, source, at(2, 59)).map(_ =>
+            ()
+          )
       _ <- create(domain1, validContractId(7), validOffset(7), party1, source, historyStart)
       _ <- createLive(8, firstIngested)
       _ <- createLive(9, at(4, 10))

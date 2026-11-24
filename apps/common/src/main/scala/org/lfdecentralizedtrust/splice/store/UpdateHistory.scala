@@ -958,12 +958,33 @@ class UpdateHistory private (
     logger.info(
       s"Deleting updates before $recordTime on domain $synchronizerId from store $storeName with id $historyId"
     )
-    val filterCondition = sql"""
+    deleteUpdatesWhere(sql"""
       domain_id = $synchronizerId and
       migration_id = $migrationId and
       history_id = $historyId and
-      record_time < $recordTime"""
+      record_time < $recordTime""")
+  }
 
+  /** Deletes all updates of all migrations and domains with a record time
+    * before the given time. Like [[deleteUpdatesBefore]], only from the
+    * partitioned tables.
+    */
+  def deleteUpdatesOfAllMigrationsBefore(
+      recordTime: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Unit] = {
+    logger.info(
+      s"Deleting updates of all migrations before $recordTime from store $storeName with id $historyId"
+    )
+    // Each table's (history_id, migration_id, record_time) index with a skip
+    // scan on migration_id, in the partitions before recordTime only.
+    deleteUpdatesWhere(sql"""
+      history_id = $historyId and
+      record_time < $recordTime""")
+  }
+
+  private def deleteUpdatesWhere(
+      filterCondition: SQLActionBuilder
+  )(implicit tc: TraceContext): Future[Unit] = {
     val deleteAction = for {
       numCreates <- (
         sql"delete from update_history_creates where " ++ filterCondition

@@ -38,9 +38,9 @@ import scala.concurrent.duration.*
   * (#6252). This loads the updates of those segments that are older than the
   * earliest update stored after `t`, segment by segment, starting from the
   * segment that contains the start of the analyzable time window (genesis when
-  * the window is unlimited). Updates that are already stored are skipped, so a
-  * segment can be loaded again after a restart, and updates that were stored by
-  * other means are left alone.
+  * the window is unlimited). Before loading the first segment, it deletes the
+  * updates this Scan stored itself before then. Updates that are already
+  * stored are skipped, so a segment can be loaded again after a restart.
   *
   * A segment is loaded once the committed segment progress covers it. After
   * each loaded segment, the last loaded segment is recorded, so a restart
@@ -101,9 +101,18 @@ class UpdateHistoryLoadFromBulkStorage(
                     case None => waitFor("the start of the analyzable time window to be known")
                     case Some(lower) =>
                       logger.info(
-                        s"Loading update history from bulk storage from the segment containing $lower up to $loadBefore (exclusive)"
+                        s"Replacing the update history before $loadBefore with the one in bulk storage, " +
+                          s"loaded from the segment containing $lower"
                       )
-                      continueWith(loadBefore, Next.First(lower))
+                      // What this Scan stored itself before then is not
+                      // its share of the history: it ingested it before
+                      // the DSO party was hosted on its participant, with
+                      // the visibility of the SV party only, and its ACS
+                      // import updates. Nothing is loaded yet, so if this
+                      // is interrupted, it is deleted and loaded again.
+                      updateHistory
+                        .deleteUpdatesOfAllMigrationsBefore(loadBefore)
+                        .flatMap(_ => continueWith(loadBefore, Next.First(lower)))
                   }
               }
           }
