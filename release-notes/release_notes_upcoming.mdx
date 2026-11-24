@@ -93,6 +93,11 @@
 
     - Daml Model Changes:
 
+      - Allocations whose next iteration funding has a zero amount, e.g. `{"Amulet": 0.0}`, can now be settled
+        via the settlement factory. This applies to Amulet and to registries that use `settlementFactoryV2_settleBatchDefaultImpl`
+        from `splice-token-standard-utils`. That function now rejects negative amounts passed by the executors and funding for
+        allocations that do not allow iterated settlement. Previously, only registries that check this themselves, like Amulet, rejected them.
+
       - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
         that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
         SV apps pass the node states once this version is vetted.
