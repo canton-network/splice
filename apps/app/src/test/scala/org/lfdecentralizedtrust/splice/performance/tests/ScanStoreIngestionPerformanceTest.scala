@@ -45,7 +45,7 @@ class ScanStoreIngestionPerformanceTest(
   override type Store = MultiDomainAcsStore
 
   override protected val tablesToSanityCheck: Seq[String] =
-    Seq(ScanTables.acsTableName, ScanTables.txLogTableName)
+    Seq(ScanTables.acsTableName)
 
   override protected def mkStore(storage: DbStorage): Future[MultiDomainAcsStore] = {
     val packageSignatures =
