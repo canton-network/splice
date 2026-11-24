@@ -236,7 +236,7 @@ Interfaces
          - The settlement for which the allocations are settled\.
        * - transferLegs
          - \[`TransferLeg <type-splice-api-token-allocationv2-transferleg-34001_>`_\]
-         - The transfers that are to be executed as part of the settlement\.  There MUST be at least one transfer leg\. All transfer legs MUST have the same instrument admin as the one of the factory\.
+         - The transfers that are to be executed as part of the settlement\.  There MUST be at least one transfer leg\. All transfer legs MUST have the same instrument admin as the one of the factory\. Their transfer leg ids MUST be unique\.
        * - allocations
          - \[`FinalizedAllocation <type-splice-api-token-allocationv2-finalizedallocation-95818_>`_\]
          - Allocations to settle\.  They serve as proof that all transfers executed as part of settlement were authorized by both sender and receiver\.  The implementation of this choice determines the validation performed by the instrument admin when settling an allocation created by an instrument holder\.
@@ -845,7 +845,7 @@ Data Types
          - Description
        * - transferLegId
          - `Text <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-text-51952>`_
-         - An identifier for the transfer leg\.
+         - An identifier for the transfer leg, unique among the legs settled together\.
        * - sender
          - Account
          - The sender of the transfer\.
