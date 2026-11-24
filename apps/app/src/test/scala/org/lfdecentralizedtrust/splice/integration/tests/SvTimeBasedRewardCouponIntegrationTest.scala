@@ -24,6 +24,7 @@ import org.lfdecentralizedtrust.splice.validator.automation.{
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.wallet.store.TransferTxLogEntry
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry.TransferTransactionSubtype
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.config.RequireTypes.NonNegativeLong
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.logging.SuppressionRule
@@ -320,11 +321,12 @@ class SvTimeBasedRewardCouponIntegrationTest
 
     loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
       within = {
-
         eventually() {
           clue("No SvRewardCoupon should be issued to Alice's participant") {
             advanceRoundsToNextRoundOpening
-            sv4RewardCouponTrigger.runOnce().futureValue
+            // The outcome is not asserted: the checks below concern the rounds and coupons,
+            // and a retry advances to the next round and runs the trigger again.
+            sv4RewardCouponTrigger.runOnceWithTaskOutcome().futureValue.discard
             val openRounds = eventually() {
               val openRounds = sv1ScanBackend
                 .getOpenAndIssuingMiningRounds()
