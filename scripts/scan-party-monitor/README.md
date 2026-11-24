@@ -172,12 +172,12 @@ against Scan's OpenAPI spec. They need Python 3 with PyYAML and openapi-schema-v
 the nix dev shell, and take a few seconds. Run them from anywhere in the repository with
 
 ```bash
-scripts/run-python-tests.sh scripts/scan-party-monitor
+scripts/python-checks.py test scripts/scan-party-monitor
 ```
 
 (paths are relative to the current directory; without an argument the script runs the tests
 of all Python code in the repository). The script is also type checked in CI, which you can do
-locally with `scripts/check-python-types.sh scripts/scan-party-monitor`.
+locally with `scripts/python-checks.py check scripts/scan-party-monitor`.
 
 `ScanPartyMonitorScriptIntegrationTest` runs the script against a more realistic local Scan
 instance like other Scala integration tests.

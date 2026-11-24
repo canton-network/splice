@@ -11,6 +11,9 @@ outputs:
   cache_hit:
     description: "Cache hit"
     value: ${{ steps.restore.outputs.cache-hit }}
+  cache_key:
+    description: "Primary key of the cache. Pass it to the matching save action, so that the cache is saved under the key computed before the job modified any files."
+    value: ${{ steps.restore.outputs.cache-primary-key }}
 
 runs:
   using: "composite"
@@ -22,6 +25,6 @@ runs:
         path: |
           ${{ github.repository == 'DACH-NY/canton-network-internal' && '/home/runner/.ivy2/cache' || '/github/home/.ivy2/cache' }}
           ${{ github.repository == 'DACH-NY/canton-network-internal' && '/home/runner/.sbt' || '/github/home/.sbt' }}
-        key: sbt-${{ inputs.cache_version }} job=${{ github.job }} dependencies=${{ hashFiles(format('{0}/project/Dependencies.scala', inputs.splice_root), format('{0}/project/CantonDependencies.scala', inputs.splice_root)) }}-${{ hashFiles(format('{0}/project/BuildCommon.scala', inputs.splice_root), format('{0}/project/build.properties', inputs.splice_root), format('{0}/project/Houserules.scala', inputs.splice_root), format('{0}/project/plugins.sbt', inputs.splice_root), format('{0}/build.sbt', inputs.splice_root)) }}
+        key: sbt-${{ inputs.cache_version }} dependencies=${{ hashFiles(format('{0}/project/Dependencies.scala', inputs.splice_root), format('{0}/project/CantonDependencies.scala', inputs.splice_root)) }}-${{ hashFiles(format('{0}/project/BuildCommon.scala', inputs.splice_root), format('{0}/project/build.properties', inputs.splice_root), format('{0}/project/Houserules.scala', inputs.splice_root), format('{0}/project/plugins.sbt', inputs.splice_root), format('{0}/build.sbt', inputs.splice_root)) }}
         restore-keys: |
-          sbt-${{ inputs.cache_version }} job=${{ github.job }} dependencies=${{ hashFiles(format('{0}/project/Dependencies.scala', inputs.splice_root), format('{0}/project/CantonDependencies.scala', inputs.splice_root)) }}
+          sbt-${{ inputs.cache_version }} dependencies=${{ hashFiles(format('{0}/project/Dependencies.scala', inputs.splice_root), format('{0}/project/CantonDependencies.scala', inputs.splice_root)) }}

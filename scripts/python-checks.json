@@ -1,0 +1,9 @@
+{
+  "exclusions": [
+    "canton/**",
+    "scripts/scan-txlog/**",
+    "ci-triage/**"
+  ],
+  "extra_mypypath": {},
+  "disabled_rules": {}
+}

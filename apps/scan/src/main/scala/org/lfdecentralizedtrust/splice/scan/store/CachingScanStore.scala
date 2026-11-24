@@ -26,11 +26,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
   GovernanceLock,
   GovernanceLockKey,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommand,
-  TransferCommandCounter,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{CacheConfig, ScanCacheConfig}
@@ -107,15 +103,6 @@ class CachingScanStore(
       cacheConfig.ansRules,
       (_: Unit) => store.lookupAnsRules(),
     ).get(())
-
-  override def getAmuletConfigForRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[OpenMiningRoundTxLogEntry] =
-    getCache(
-      "getAmuletConfigForRound",
-      cacheConfig.amuletConfigForRound,
-      store.getAmuletConfigForRound,
-    ).get(round)
 
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
@@ -194,20 +181,6 @@ class CachingScanStore(
       tc: TraceContext
   ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
     store.listGovernanceLocksByKey(key, limit)
-
-  override def lookupTransferCommandCounterByParty(partyId: PartyId)(implicit
-      tc: TraceContext
-  ): Future[Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]]] =
-    getCache(
-      "lookupTransferCommandCounterByParty",
-      cacheConfig.cachedByParty,
-      store.lookupTransferCommandCounterByParty,
-    ).get(partyId)
-
-  override def lookupLatestTransferCommandEvents(sender: PartyId, nonce: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Map[TransferCommand.ContractId, TransferCommandTxLogEntry]] =
-    store.lookupLatestTransferCommandEvents(sender, nonce, limit)
 
   override def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
       companion: C,

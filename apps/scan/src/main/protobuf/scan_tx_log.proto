@@ -5,23 +5,8 @@ syntax = "proto3";
 
 package org.lfdecentralizedtrust.splice.scan.store;
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "scalapb/scalapb.proto";
-
-message SteppedRate {
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  message Step {
-    option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-    string from = 1 [(scalapb.field).type = "scala.math.BigDecimal"];
-    string rate = 2 [(scalapb.field).type = "scala.math.BigDecimal"];
-  }
-
-  string initial_rate = 1 [(scalapb.field).type = "scala.math.BigDecimal"];
-  repeated Step steps = 2;
-}
 
 message ErrorTxLogEntry {
   option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
@@ -30,67 +15,12 @@ message ErrorTxLogEntry {
   string event_id = 1;
 }
 
-message OpenMiningRoundTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  string amulet_create_fee = 4 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string holding_fee = 5 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string lock_holder_fee = 6 [(scalapb.field).type = "scala.math.BigDecimal"];
-  SteppedRate transfer_fee = 7;
-}
-
-message ClosedMiningRoundTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  google.protobuf.Timestamp effective_at = 4 [(scalapb.field).type = "java.time.Instant"];
-}
-
 message VoteRequestTxLogEntry {
   option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
   option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
 
   string event_id = 1;
   google.protobuf.Struct result = 2 [(scalapb.field).type = "org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_CloseVoteRequestResult"];
-}
-
-message TransferCommandTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-  string event_id = 1;
-  string sender = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];;
-  int64 nonce = 3;
-  string contract_id = 4; // org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand.ContractId
-  oneof status {
-    TransferCommandCreated created = 5;
-    TransferCommandSent sent = 6;
-    TransferCommandFailed failed = 7;
-    TransferCommandExpired expired = 8;
-    TransferCommandWithdrawn withdrawn = 9;
-  };
-}
-
-message TransferCommandCreated {
-}
-
-message TransferCommandSent {
-}
-
-message TransferCommandFailed {
-  string reason = 1;
-}
-
-message TransferCommandExpired {
-}
-
-message TransferCommandWithdrawn {
 }
 
 enum TransferAbortKind {

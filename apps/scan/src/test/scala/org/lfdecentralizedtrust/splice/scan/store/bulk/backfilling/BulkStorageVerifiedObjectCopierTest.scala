@@ -167,7 +167,7 @@ class BulkStorageVerifiedObjectCopierTest
     )
 
   private val content = ByteString(Random.nextBytes(1000))
-  private val objectKey = "2026-01-01T00:00:00Z~2026-01-02T00:00:00Z/updates_compact_json_0.zstd"
+  private val objectKey = "2026-01-01T00:00:00Z~2026-01-02T00:00:00Z/updates_ledger_api_json_0.zstd"
 
   "VerifiedObjectCopier" should {
     "copy an object whose bytes match the agreed checksum into staging, byte for byte" in {
@@ -234,7 +234,7 @@ class BulkStorageVerifiedObjectCopierTest
 
     "abort the upload and stage nothing when a multi-part download does not match" in {
       val big = ByteString(Random.nextBytes(3 * VerifiedObjectCopier.uploadPartSize + 12345))
-      val bigKey = "2026-01-03T00:00:00Z~2026-01-04T00:00:00Z/updates_compact_json_0.zstd"
+      val bigKey = "2026-01-03T00:00:00Z~2026-01-04T00:00:00Z/updates_ledger_api_json_0.zstd"
       for {
         digest <- putOnPeers(bigKey, big)
         result <- loggerFactory.assertLogs(
@@ -388,7 +388,7 @@ class BulkStorageVerifiedObjectCopierTest
 
     "upload objects larger than one part" in {
       val big = ByteString(Random.nextBytes(VerifiedObjectCopier.uploadPartSize + 12345))
-      val bigKey = "2026-01-02T00:00:00Z~2026-01-03T00:00:00Z/updates_compact_json_0.zstd"
+      val bigKey = "2026-01-02T00:00:00Z~2026-01-03T00:00:00Z/updates_ledger_api_json_0.zstd"
       for {
         digest <- putOnPeers(bigKey, big)
         _ <- copier(new BucketPeers(Set.empty)).copy(Seq(ObjectKeyAndChecksum(bigKey, digest)))

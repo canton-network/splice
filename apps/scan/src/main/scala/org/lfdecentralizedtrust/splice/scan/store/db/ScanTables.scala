@@ -13,12 +13,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
   ARC_AnsEntryContext,
   ARC_DsoRules,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.scan.store.{
-  ClosedMiningRoundTxLogEntry,
   ErrorTxLogEntry,
-  OpenMiningRoundTxLogEntry,
-  TransferCommandTxLogEntry,
   TxLogEntry,
   VoteRequestTxLogEntry,
 }
@@ -151,9 +147,6 @@ object ScanTables extends AcsTables {
       voteAccepted: Option[Boolean] = None,
       voteRequesterName: Option[String] = None,
       voteEffectiveAt: Option[String] = None,
-      transferCommandContractId: Option[TransferCommand.ContractId] = None,
-      transferCommandSender: Option[PartyId] = None,
-      transferCommandNonce: Option[Long] = None,
   ) extends TxLogRowData {
 
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
@@ -171,9 +164,6 @@ object ScanTables extends AcsTables {
       "vote_accepted" -> voteAccepted,
       "vote_requester_name" -> voteRequesterName.map(lengthLimited),
       "vote_effective_at" -> voteEffectiveAt.map(lengthLimited),
-      "transfer_command_contract_id" -> transferCommandContractId,
-      "transfer_command_sender" -> transferCommandSender,
-      "transfer_command_nonce" -> transferCommandNonce,
     )
   }
 
@@ -185,17 +175,6 @@ object ScanTables extends AcsTables {
           case err: ErrorTxLogEntry =>
             ScanTxLogRowData(
               entry = err
-            )
-          case omr: OpenMiningRoundTxLogEntry =>
-            ScanTxLogRowData(
-              entry = omr,
-              round = Some(omr.round),
-            )
-          case cmr: ClosedMiningRoundTxLogEntry =>
-            ScanTxLogRowData(
-              entry = cmr,
-              round = Some(cmr.round),
-              closedRoundEffectiveAt = cmr.effectiveAt.map(CantonTimestamp.assertFromInstant),
             )
           case vr: VoteRequestTxLogEntry =>
             val result = vr.result.getOrElse(throw txMissingField())
@@ -212,21 +191,6 @@ object ScanTables extends AcsTables {
                 case Some(effectiveAt) => Some(effectiveAt.toString)
                 case None => None
               },
-            )
-          case entry: TransferCommandTxLogEntry =>
-            ScanTxLogRowData(
-              entry = entry,
-              transferCommandContractId = Some(
-                new TransferCommand.ContractId(
-                  entry.contractId
-                )
-              ),
-              transferCommandSender = Some(
-                entry.sender
-              ),
-              transferCommandNonce = Some(
-                entry.nonce
-              ),
             )
           case _ =>
             throw txEncodingFailed()

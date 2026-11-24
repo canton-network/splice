@@ -201,10 +201,16 @@ class JoiningNodeInitializer(
       )
       decentralizedSynchronizerId = psid.logical
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
-      dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
-        decentralizedSynchronizerId,
-        registeredGlobalSync,
-        participantId,
+      dsoPartyIsAuthorized <- retryProvider.retry(
+        RetryFor.WaitingOnInitDependency,
+        "isDsoPartyAuthorizedOn",
+        "Check whether the DSO party is authorized on our participant in joinDsoAndOnboardNodes",
+        dsoPartyHosting.isDsoPartyAuthorizedOn(
+          decentralizedSynchronizerId,
+          registeredGlobalSync,
+          participantId,
+        ),
+        logger,
       )
       _ <-
         // do not reconnect if we host the party, as we can be in some LSU stage and the participant cannot reconnect if the new sync is not functional

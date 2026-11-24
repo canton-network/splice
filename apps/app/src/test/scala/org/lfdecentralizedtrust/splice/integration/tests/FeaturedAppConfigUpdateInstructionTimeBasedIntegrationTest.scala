@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExecuteFeaturedAppConfigUpdateInstructionTrigger,
   ExpireFeaturedAppConfigUpdateInstructionTrigger,
 }
-import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
 
 import scala.jdk.OptionConverters.*
 
@@ -33,7 +33,8 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
     with WalletTestUtil
-    with TimeTestUtil {
+    with TimeTestUtil
+    with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -67,10 +68,10 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
 
       actAndCheck(
         "the execute trigger runs",
-        sv1Backend.dsoDelegateBasedAutomation
-          .trigger[ExecuteFeaturedAppConfigUpdateInstructionTrigger]
-          .runOnce()
-          .futureValue,
+        runUntilTaskSucceeds(
+          sv1Backend.dsoDelegateBasedAutomation
+            .trigger[ExecuteFeaturedAppConfigUpdateInstructionTrigger]
+        ),
       )(
         "scan lists the featured app right with the updated weight and the instruction is archived",
         _ => {
@@ -108,10 +109,10 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
 
       actAndCheck(
         "the expire trigger runs",
-        sv1Backend.dsoDelegateBasedAutomation
-          .trigger[ExpireFeaturedAppConfigUpdateInstructionTrigger]
-          .runOnce()
-          .futureValue,
+        runUntilTaskSucceeds(
+          sv1Backend.dsoDelegateBasedAutomation
+            .trigger[ExpireFeaturedAppConfigUpdateInstructionTrigger]
+        ),
       )(
         "the instruction is archived and the featured app right is unchanged",
         _ => {

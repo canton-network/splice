@@ -14,10 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   TransferPreapproval,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommandCounter,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   IssuingMiningRound,
   OpenMiningRound,
@@ -42,7 +39,6 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
-  LookupTransferCommandStatusResponse,
   MigrationSchedule,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
@@ -97,6 +93,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationi
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BftSequencer
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.{
+  EncodedPeerVoteResult,
+  VotesBackfillCursor,
+}
 
 import scala.util.{Failure, Success}
 
@@ -513,24 +513,6 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.LookupTransferPreapprovalByParty(receiver),
     )
 
-  override def lookupTransferCommandCounterByParty(receiver: PartyId)(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]]] =
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.LookupTransferCommandCounterByParty(receiver),
-    )
-
-  override def lookupTransferCommandStatus(sender: PartyId, nonce: Long)(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[Option[LookupTransferCommandStatusResponse]] =
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.LookupTransferCommandStatus(sender, nonce),
-    )
-
   override def getMigrationInfo(migrationId: Long)(implicit
       tc: TraceContext
   ): Future[Option[SourceMigrationInfo]] =
@@ -571,6 +553,20 @@ class SingleScanConnection private[client] (
         afterUpdateId,
         count,
       ),
+    )
+
+  def getVotesAvailability(before: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[definitions.VotesAvailability] =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetVotesBackfillingStatus(before))
+
+  override def getVotesBefore(
+      before: VotesBackfillCursor,
+      count: Int,
+  )(implicit tc: TraceContext): Future[Seq[EncodedPeerVoteResult]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetVotesBefore(before, count),
     )
 
   override def listVoteRequestResults(

@@ -25,7 +25,8 @@ class UpdateHistoryIntegrationTest
     with TimeTestUtil
     with HasActorSystem
     with HasExecutionContext
-    with UpdateHistoryTestUtil {
+    with UpdateHistoryTestUtil
+    with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -95,10 +96,8 @@ class UpdateHistoryIntegrationTest
     actAndCheck(
       "Advance one round, to commit transactions related to the round infrastructure", {
         val previousRound = currentRoundInScan()
-        // Note: runOnce() does nothing if there is no work to be done.
-        eventually() {
-          advanceRoundsTrigger.runOnce().futureValue should be(true)
-        }
+        // Note: running the trigger does nothing if there is no work to be done.
+        runUntilTaskSucceeds(advanceRoundsTrigger)
         previousRound
       },
     )(

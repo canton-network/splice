@@ -12,7 +12,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
@@ -33,7 +33,12 @@ import org.lfdecentralizedtrust.splice.store.{
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
-import org.lfdecentralizedtrust.splice.util.{EventId, UpdateHistoryTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{
+  EventId,
+  TriggerTestUtil,
+  UpdateHistoryTestUtil,
+  WalletTestUtil,
+}
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 
@@ -47,6 +52,7 @@ import org.scalactic.source.Position
 
 import java.util.Optional
 import scala.annotation.nowarn
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -55,7 +61,8 @@ class ScanHistoryBackfillingIntegrationTest
     with UpdateHistoryTestUtil
     with WalletTestUtil
     with HasActorSystem
-    with HasExecutionContext {
+    with HasExecutionContext
+    with TriggerTestUtil {
 
   override protected def runEventHistorySanityCheck: Boolean = false
 
@@ -85,6 +92,7 @@ class ScanHistoryBackfillingIntegrationTest
             // Small batch size to force multiple backfilling rounds
             updateHistoryBackfillBatchSize = 2,
             txLogBackfillBatchSize = 2,
+            votesStoreBackfillingPollingInterval = NonNegativeFiniteDuration.ofSeconds(1),
           )
         )(config)
       )
@@ -180,10 +188,8 @@ class ScanHistoryBackfillingIntegrationTest
     actAndCheck(
       "Advance one round, to commit transactions related to the round infrastructure", {
         val previousRound = currentRoundInScan(sv1ScanBackend)
-        // Note: runOnce() does nothing if there is no work to be done.
-        eventually() {
-          advanceRoundsTrigger.runOnce().futureValue should be(true)
-        }
+        // Note: running the trigger does nothing if there is no work to be done.
+        runUntilTaskSucceeds(advanceRoundsTrigger)
         previousRound
       },
     )(
@@ -290,6 +296,28 @@ class ScanHistoryBackfillingIntegrationTest
       }
     }
 
+    clue(
+      "SV1 (the founding SV) completes from its own update history, and SV2 backfills the vote from SV1 " +
+        "without waiting for its update history and txlog backfilling"
+    ) {
+      // The vote results of the two scans are compared once they are complete: when exactly SV2 fetches the
+      // vote from SV1 is up to timing, the cases in between are covered by VotesStoreBackfillingTest.
+      // SV2 waits for its own ingestion, then for SV1 to finish its local walk, and retries every polling interval.
+      eventually(timeUntilSuccess = 1.minute) {
+        sv1ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
+        sv2ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
+      }
+      listVotesStoreResults(sv1ScanBackend) should have size (1)
+      sv2ScanBackend.appState.automation.updateHistory
+        .getBackfillingState()
+        .futureValue should be(BackfillingState.NotInitialized)
+      sv2ScanBackend.appState.store.multiDomainAcsStore
+        .getTxLogBackfillingState()
+        .futureValue should be(TxLogBackfillingState.NotInitialized)
+      listVotesStoreResults(sv2ScanBackend) should have size (1)
+      listVotesStoreResults(sv2ScanBackend) shouldBe listVotesStoreResults(sv1ScanBackend)
+    }
+
     clue(s"First few items in SV1s history do not exist in SV2s history") {
       // SV2 missed a few updates. Because some of these updates came from triggers that
       // have nothing to do with the test flow, this number is likely flaky.
@@ -352,18 +380,18 @@ class ScanHistoryBackfillingIntegrationTest
       sv2ScanTxLogBackfillTrigger.retrieveTasks().futureValue should be(empty)
     }
 
-    actAndCheck(
-      "Run trigger that checks for corrupt snapshots once on all scans", {
-        sv1DeleteSnapshotsTrigger.runOnce().futureValue
-        sv2DeleteSnapshotsTrigger.runOnce().futureValue
-      },
-    )(
-      "History marked as free of corrupt snapshots",
-      _ => {
+    clue(
+      "Run the trigger that deletes corrupt snapshots until the history is marked as free of them"
+    ) {
+      // Without corrupt snapshots, the trigger marks the history when retrieving its tasks and
+      // returns no task, so there is no task outcome to wait for.
+      runTasksUntil(sv1DeleteSnapshotsTrigger) {
         sv1ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
+      }
+      runTasksUntil(sv2DeleteSnapshotsTrigger) {
         sv2ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
-      },
-    )
+      }
+    }
 
     clue(
       "Backfilling triggers state. SV1+SV2: update is about to initialize, txlog is not doing anything yet"
@@ -382,8 +410,8 @@ class ScanHistoryBackfillingIntegrationTest
 
     actAndCheck(
       "Run backfilling once on all scans", {
-        sv1BackfillTrigger.runOnce().futureValue
-        sv2BackfillTrigger.runOnce().futureValue
+        runUntilTaskSucceeds(sv1BackfillTrigger)
+        runUntilTaskSucceeds(sv2BackfillTrigger)
       },
     )(
       "Backfilling is complete only on the founding SV",
@@ -502,11 +530,11 @@ class ScanHistoryBackfillingIntegrationTest
       // The v1 endpoint is deprecated, but we still have users using it
       @nowarn("cat=deprecation")
       val sv1HttpUpdates =
-        sv1ScanBackend.getUpdateHistoryV1(1000, None, encoding = CompactJson)
+        sv1ScanBackend.getUpdateHistoryV1(1000, None, encoding = LedgerApiJson)
 
       @nowarn("cat=deprecation")
       val sv2HttpUpdates =
-        sv2ScanBackend.getUpdateHistoryV1(1000, None, encoding = CompactJson)
+        sv2ScanBackend.getUpdateHistoryV1(1000, None, encoding = LedgerApiJson)
 
       // Compare common prefix, as there might be concurrent activity
       val commonLength = sv1HttpUpdates.length min sv2HttpUpdates.length
@@ -560,8 +588,8 @@ class ScanHistoryBackfillingIntegrationTest
 
     actAndCheck(
       "Run txlog backfilling once on all scans", {
-        sv1ScanTxLogBackfillTrigger.runOnce().futureValue
-        sv2ScanTxLogBackfillTrigger.runOnce().futureValue
+        runUntilTaskSucceeds(sv1ScanTxLogBackfillTrigger)
+        runUntilTaskSucceeds(sv2ScanTxLogBackfillTrigger)
       },
     )(
       "TxLog backfilling is in progress",
@@ -613,9 +641,15 @@ class ScanHistoryBackfillingIntegrationTest
 
   }
 
+  private def listVotesStoreResults(backend: ScanAppBackendReference) =
+    backend.appState.votesStore
+      .listVoteRequestResults(VoteResultsFilters(), PageLimit.tryCreate(100), None)
+      .futureValue
+      .resultsInPage
+
   private def readUpdateHistoryFromScan(backend: ScanAppBackendReference) = {
     backend
-      .getUpdateHistory(1000, None, encoding = CompactJson)
+      .getUpdateHistory(1000, None, encoding = LedgerApiJson)
   }
 
   private def sv1BackfillTrigger(implicit env: SpliceTestConsoleEnvironment) =

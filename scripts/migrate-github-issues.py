@@ -3,6 +3,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import override
 import argparse
 import os
 import re
@@ -66,6 +67,7 @@ class DryRunTargetRepo(TargetRepo):
     def __init__(self, name: str):
         self.name = name
 
+    @override
     def new_milestone(self, title: str, description: str | None) -> int:
 
         # print("===")
@@ -76,6 +78,7 @@ class DryRunTargetRepo(TargetRepo):
         self.milestones.append(new_milestone)
         return new_milestone.number
 
+    @override
     def new_issue(self, title: str, body: str, milestone_number: int | None, labels: list[str] | None, assignees: list[str] | None) -> int:
         milestone = self.milestones[milestone_number] if milestone_number is not None else None
         # print("===")
@@ -105,6 +108,7 @@ class DryRunTargetRepo(TargetRepo):
         self.issues.append(new_issue)
         return new_issue.number
 
+    @override
     def new_comment(self, issue_number: int, comment: str) -> None:
         # print("===")
         # print(f"Dry run ({self.name}): Would add comment to issue #{issue_number}: {comment}")
@@ -124,6 +128,7 @@ class LiveTargetRepo(TargetRepo):
         self.github = Github(auth=auth)
         self.repo = self.github.get_repo(repo_name)
 
+    @override
     def new_milestone(self, title: str, description: str | None) -> int:
         print("Creating milestone:", title)
         # print(".", end="", flush=True)
@@ -151,6 +156,7 @@ class LiveTargetRepo(TargetRepo):
         return self.issues[issue_number]
 
 
+    @override
     def new_issue(self, title: str, body: str, milestone_number: int | None, labels: list[str] | None, assignees: list[str] | None) -> int:
         print("Creating issue:", title)
         # print(".", end="", flush=True)
@@ -180,14 +186,12 @@ class LiveTargetRepo(TargetRepo):
         self.issues[issue.number] = issue
         return issue.number
 
+    @override
     def new_comment(self, issue_number: int, comment: str) -> None:
         print(f"Adding comment to issue #{issue_number}")
         # print(".", end="", flush=True)
         issue = self._get_issue(issue_number)
-        if issue is not None:
-            issue.create_comment(comment)
-        else:
-            raise ValueError(f"Issue #{issue_number} not found in the target repository.")
+        issue.create_comment(comment)
 
 
 class State(BaseModel):

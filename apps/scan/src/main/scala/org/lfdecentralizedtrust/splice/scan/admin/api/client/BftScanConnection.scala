@@ -13,10 +13,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   AmuletRules,
   TransferPreapproval,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommandCounter,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   IssuingMiningRound,
   OpenMiningRound,
@@ -39,8 +36,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
-  LookupTransferCommandStatusResponse,
   MigrationSchedule,
+  VotesAvailability,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
@@ -54,6 +51,10 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkObjectKind
 import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.{
+  EncodedPeerVoteResult,
+  VotesBackfillCursor,
+}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
@@ -373,18 +374,6 @@ class BftScanConnection(
       migrationId,
     )
 
-  override def lookupTransferCommandCounterByParty(receiver: PartyId)(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]]] =
-    bftCall(_.lookupTransferCommandCounterByParty(receiver), "lookupTransferCommandCounterByParty")
-
-  override def lookupTransferCommandStatus(sender: PartyId, nonce: Long)(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[Option[LookupTransferCommandStatusResponse]] =
-    bftCall(_.lookupTransferCommandStatus(sender, nonce), "lookupTransferCommandStatus")
-
   override def lookupTransferPreapprovalByParty(receiver: PartyId)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -502,6 +491,29 @@ class BftScanConnection(
       result
     }
   }
+
+  /** A two-phase call: first asks every peer whether it holds all vote results
+    * before the cursor, then fetches the page only from peers that do.
+    */
+  override def getVotesBefore(
+      before: VotesBackfillCursor,
+      count: Int,
+  )(implicit tc: TraceContext): Future[Seq[EncodedPeerVoteResult]] =
+    BftCallExecutor
+      .bftCallForEventualConsistencyEndpoints(
+        scanList.scanConnections,
+        connectionMetrics,
+        retryProvider,
+        logger,
+        hasData =
+          _.getVotesAvailability(before.recordTime).map(BftScanConnection.votesAvailability),
+        getData = _.getVotesBefore(before, count),
+        endpoint = "getVotesBefore",
+        callConfig = BftCallConfig.default(scanList.scanConnections),
+        notEnoughScansLogLevel = Level.DEBUG,
+      )
+      .flatMap(_.toFuture)
+      .map(_._1)
 
   def getTransferFactory(choiceArgs: transferinstructionv1.TransferFactory_Transfer)(implicit
       tc: TraceContext
@@ -1141,6 +1153,16 @@ class BftScanConnection(
 }
 
 object BftScanConnection {
+
+  /** A peer whose own vote results are still being backfilled counts as "never": it has no
+    * finer-grained progress to report, so there is nothing to usefully wait on with this peer.
+    */
+  def votesAvailability(availability: VotesAvailability): DataAvailabilityResponse =
+    availability match {
+      case VotesAvailability.members.Available => DataAvailabilityResponse.Available
+      case VotesAvailability.members.Ingesting => DataAvailabilityResponse.NotYet
+      case VotesAvailability.members.Backfilling => DataAvailabilityResponse.Never
+    }
 
   def dataAvailability(response: GetBulkObjectsProgressResponse): DataAvailabilityResponse =
     response.availability match {
