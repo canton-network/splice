@@ -571,14 +571,14 @@ testSelfGrantFeaturedAppRight = script do
     appKind = Some FAK_AssetMoving
     opsParties = Some [bob.primaryParty]
 
-  -- opsParties is limited to 10 entries
-  opsParties <- forA [1..11] $ \i -> allocateParty ("ops" <> show i)
+  -- opsParties is limited to 20 entries
+  opsParties <- forA [1..21] $ \i -> allocateParty ("ops" <> show i)
   submit (actAs aliceValidator.primaryParty <> readAs app.dso) $
     exerciseCmd install WalletAppInstall_FeaturedAppRights_SelfGrant with
       amuletRulesCid
       activityWeight = None
       appKind = None
-      opsParties = Some (take 10 opsParties)
+      opsParties = Some (take 20 opsParties)
   submitMustFail (actAs aliceValidator.primaryParty <> readAs app.dso) $
     exerciseCmd install WalletAppInstall_FeaturedAppRights_SelfGrant with
       amuletRulesCid
