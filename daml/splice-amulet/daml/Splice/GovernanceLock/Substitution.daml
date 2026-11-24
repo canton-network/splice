@@ -29,7 +29,7 @@ import Splice.GovernanceLock
 import Splice.ExternalPartyConfigState
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 import Splice.Types
-import Splice.Util (HasCheckedFetch(..))
+import Splice.Util (HasCheckedFetch(..), assertInPast24Hours)
 
 -- | A proposal for a substitution of a governance lock.
 template GovernanceLockSubstitution with
