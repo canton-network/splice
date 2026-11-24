@@ -797,7 +797,7 @@ def make_schedule(version: str, canton_version: str, month: str) -> list[Schedul
         events.append(
             ScheduledEvent(
                 title=(
-                    f"Cut Canton {canton_version}.{patch} & WG releases for Splice {version}.{patch}"
+                    f"Cut Canton {canton_version}.x & WG releases for Splice {version}.{patch}"
                 ),
                 date=splice_cut_date - datetime.timedelta(days=1),
                 network="",
