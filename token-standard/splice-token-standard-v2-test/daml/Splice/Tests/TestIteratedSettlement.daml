@@ -233,94 +233,48 @@ test_locked_funds TestCase {..} = do
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   let V2.AllocationInstructionResult_Completed topupAllocationCid = result.output
 
-  -- execute the top-up of alice's two allocations using batch settlement
+  -- execute the top-up of alice's two allocations using batch settlement, combined with another
+  -- billing payout to the provider's unfunded allocation
+  let billingLegs2 = [leg with transferLegId = "billing2-" <> leg.transferLegId | leg <- billingLegs]
   enrichedChoice <- V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
     actors = [provider]
     settlement
-    transferLegs = topupLegs
+    transferLegs = topupLegs ++ billingLegs2
     allocations =
       [ nonIteratedAllocation topupAllocationCid
-      , V2.FinalizedAllocation with
-          allocationCid = aliceAllocationCid
-          extraTransferLegSides = map receiverSide topupLegs
-          nextIterationFunding = Some (TextMap.fromList [(instrId.id, 299.0) | instrId <- instrIds])
-      ]
-    extraArgs = emptyExtraArgs
-  result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
-    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-  let [_, settleResult] = result.allocationSettleResults
-  let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
-
-  -- there is exactly one allocation for alice
-  [(cid, Some aliceAllocView)] <- queryInterface @V2.Allocation alice
-  cid === aliceAllocationCid
-  aliceAllocView.allocation.nextIterationFunding === Some (TextMap.fromList [(instrId.id, 299.0) | instrId <- instrIds])
-  aliceAllocView.allocation.transferLegSides === []
-
-  forA_ instrIds $ \instrId -> do
-    -- there is one locked holding for alice
-    [(_, holding)] <- WalletClientV2.listLockedHoldings alice instrId
-    holding.amount === 299.0
-
-    -- the balances are as expected
-    WalletClientV2.checkBalance alice instrId 999.5
-    WalletClientV2.checkBalance provider instrId 0.5
-
-  -- a second billing round that combines a payout to the provider's unfunded allocation
-  -- with extra funding for alice's allocation in the same settlement
-  let billingLegs2 = [leg with transferLegId = "billing2-" <> leg.transferLegId | leg <- billingLegs]
-  let topupLegs2 = [leg with transferLegId = "topup2-" <> leg.transferLegId, amount = 50.0 | leg <- topupLegs]
-  inputHoldingCids <- fmap concat $ forA instrIds $ \instrId ->
-    WalletClientV2.listUnlockedHoldingCidsFor (basicAccount alice) alice instrId
-  enrichedChoice <- V2.getAllocationFactory registry V2.AllocationFactory_Allocate with
-    settlement
-    allocation = V2.AllocationSpecification with
-      authorizer = basicAccount alice
-      admin
-      transferLegSides = map senderSide topupLegs2
-      settlementDeadline = None
-      nextIterationFunding = None
-      committed = False
-      meta = emptyMetadata
-    requestedAt = now
-    inputHoldingCids = inputHoldingCids
-    actors = [alice]
-    extraArgs = emptyExtraArgs
-  result <- WalletClientV2.submitAndCheckTxHistory admins (actAs alice <> discloseMany' enrichedChoice.disclosures) $
-    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-  let V2.AllocationInstructionResult_Completed topupAllocationCid2 = result.output
-
-  enrichedChoice <- V2.getSettlementFactory registry V2.SettlementFactory_SettleBatch with
-    actors = [provider]
-    settlement
-    transferLegs = billingLegs2 ++ topupLegs2
-    allocations =
-      [ nonIteratedAllocation topupAllocationCid2
       , V2.FinalizedAllocation with
           allocationCid = providerAllocationCid
           extraTransferLegSides = map receiverSide billingLegs2
           nextIterationFunding = zeroFunding
       , V2.FinalizedAllocation with
           allocationCid = aliceAllocationCid
-          extraTransferLegSides = map senderSide billingLegs2 ++ map receiverSide topupLegs2
-          nextIterationFunding = Some (TextMap.fromList [(instrId.id, 348.5) | instrId <- instrIds])
+          extraTransferLegSides = map receiverSide topupLegs ++ map senderSide billingLegs2
+          nextIterationFunding = Some (TextMap.fromList [(instrId.id, 298.5) | instrId <- instrIds])
       ]
     extraArgs = emptyExtraArgs
   result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-  let [_, providerSettleResult, aliceSettleResult] = result.allocationSettleResults
+  let [_, providerSettleResult, settleResult] = result.allocationSettleResults
+  let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
 
-  -- the provider's allocation is still unfunded, alice's allocation has the extra funding locked
+  -- the provider's allocation is still unfunded
   let Some providerAllocationCid = WalletClientV2.extractNextIterationAllocationCid providerSettleResult
   Some providerAllocView <- queryInterfaceContractId provider providerAllocationCid
   providerAllocView.allocation.nextIterationFunding === zeroFunding
   providerAllocView.holdingCids === []
-  let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid aliceSettleResult
-  Some aliceAllocView <- queryInterfaceContractId alice aliceAllocationCid
-  aliceAllocView.allocation.nextIterationFunding === Some (TextMap.fromList [(instrId.id, 348.5) | instrId <- instrIds])
+
+  -- there is exactly one allocation for alice
+  [(cid, Some aliceAllocView)] <- queryInterface @V2.Allocation alice
+  cid === aliceAllocationCid
+  aliceAllocView.allocation.nextIterationFunding === Some (TextMap.fromList [(instrId.id, 298.5) | instrId <- instrIds])
+  aliceAllocView.allocation.transferLegSides === []
+
   forA_ instrIds $ \instrId -> do
+    -- there is one locked holding for alice
     [(_, holding)] <- WalletClientV2.listLockedHoldings alice instrId
-    holding.amount === 348.5
+    holding.amount === 298.5
+
+    -- the balances are as expected
     WalletClientV2.checkBalance alice instrId 999.0
     WalletClientV2.checkBalance provider instrId 1.0
 

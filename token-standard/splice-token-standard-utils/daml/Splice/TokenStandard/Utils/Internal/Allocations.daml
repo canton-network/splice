@@ -410,8 +410,9 @@ validateNextIterationArgs name iteratedSettlementAllowed extraTransferLegSides n
     requireMatchExpected (name <> ".extraTransferLegSides", extraTransferLegSides) []
     requireMatchExpected (name <> ".nextIterationFunding", nextIterationFunding) None
   forA_ nextIterationFunding $ \fundings -> forA_ fundings $ \amount -> do
-    -- Zero amounts are accepted because `isValidAllocationSpecificationV2`, which allocations check in their
-    -- `ensure` clause, accepts them, and changing it to reject them is not backwards-compatible.
+    -- Zero amounts are accepted as that might be used in a future iteration
+    -- to signal that net incoming transfers of the instrument with a zero amount
+    -- are allowed (see https://github.com/canton-network/splice/issues/8631).
     require' (name <> ".nextIterationFunding.amount", amount) isGreaterOrEqualR ("zero", 0.0)
   forA_ extraTransferLegSides $ \leg -> do
     require' (name <> ".extraTransferLegSides.amount", leg.amount) isGreaterR ("zero", 0.0)
