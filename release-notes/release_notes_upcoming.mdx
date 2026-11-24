@@ -79,6 +79,12 @@
           i.e., that have `nextIterationFunding = None`. Canton Coin already rejected both in its `Allocation_Settle`
           choice. Other registries relying on the default implementation now reject them as well.
 
+        **Registries** that call `settlementFactoryV2_settleBatchDefaultImpl` or `fetchAndValidateAllocations`
+        from `splice-token-standard-utils`: we recommend that you upgrade to version 2.0.2 or later,
+        and make sure that your allocation implementation itself rejects negative next iteration funding amounts.
+        Without the upgrade, your registry cannot settle zero-funded allocations, and it does not validate the
+        funding passed by the executors.
+
         The documentation of `AllocationSpecification.nextIterationFunding` now states that amounts MUST be
         non-negative, and the documentation of the token standard V2 allocation API now states that wallets MUST
         copy `SettlementInfo` and the transfer leg sides verbatim from the settlement request.
