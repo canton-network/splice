@@ -87,6 +87,33 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
       }
     }
 
+    "partitionRunwayEnd" should {
+
+      val today = LocalDate.of(2026, 11, 24)
+      def startOf(day: LocalDate) =
+        CantonTimestamp.assertFromInstant(day.atStartOfDay(ZoneOffset.UTC).toInstant)
+
+      "be the end of the consecutive days with partitions from today on" in {
+        val days = (0L to 7L).map(today.plusDays).toSet
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today.plusDays(8))
+      }
+
+      "stop at the first day without partitions" in {
+        val days = Set(today, today.plusDays(1), today.plusDays(3))
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today.plusDays(2))
+      }
+
+      "ignore the days before today" in {
+        val days = Set(today.minusDays(2), today.minusDays(1), today)
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today.plusDays(1))
+      }
+
+      "be the start of today if today has no partitions" in {
+        val days = Set(today.minusDays(1), today.plusDays(1))
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today)
+      }
+    }
+
     "initialize with a connection" should {
 
       def daysAfter(days: Long) = CantonTimestamp.Epoch.plus(java.time.Duration.ofDays(days))
