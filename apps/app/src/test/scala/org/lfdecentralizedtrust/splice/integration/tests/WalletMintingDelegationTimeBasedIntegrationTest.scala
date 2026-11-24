@@ -923,7 +923,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
           )("Both coupons visible and unassigned", _ => unassignedCount() shouldBe 2)
 
           clue("Gate is false while above threshold: one explicit poll does no work") {
-            trigger.runOnce().futureValue shouldBe false
+            trigger.runOnePollingIteration().futureValue shouldBe false
           }
 
           clue("Above threshold: coupons stay unassigned and nothing is minted yet") {
@@ -936,7 +936,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
           advanceTime(advanceIntoGate)
 
           clue("Gate is true once within minTtl: poll assigns + mints") {
-            eventually() { trigger.runOnce().futureValue shouldBe true }
+            eventually() { trigger.runOnePollingIteration().futureValue shouldBe true }
           }
         }
 

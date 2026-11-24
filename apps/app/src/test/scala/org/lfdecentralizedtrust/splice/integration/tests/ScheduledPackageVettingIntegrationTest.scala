@@ -113,8 +113,10 @@ class ScheduledPackageVettingIntegrationTest
       clue("alice's validator restarts and its vetting trigger runs once") {
         aliceValidatorBackend.stop()
         aliceValidatorBackend.startSync()
+        // The vetting trigger is not task-based, so there is no stale task that could count as done,
+        // and the outcome is checked through the vetting state below.
         aliceVettingTrigger
-          .runOnce()
+          .runOnePollingIteration()
           .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(60, "seconds")))
       }
 

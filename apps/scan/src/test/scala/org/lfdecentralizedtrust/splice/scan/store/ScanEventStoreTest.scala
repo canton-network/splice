@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.store.{
   StoreTestBase,
   TimestampWithMigrationId,
   UpdateHistory,
+  UpdateHistoryTestBase,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{EnvelopeT, TrafficSummaryT}
@@ -154,6 +155,32 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
 
         // Fetching by id should be filtered as well
         updateEventOpt.isEmpty shouldBe true
+      }
+    }
+
+    "Cap the verdicts till the latest legacy update right after the cutover" in {
+      for {
+        ctx <- newEventStore()
+        recordTs1 = CantonTimestamp.now()
+        _ <- insertUpdate(ctx.updateHistory, recordTs1, "update1")
+        _ <- UpdateHistoryTestBase.moveToLegacyTables(
+          storage.underlying,
+          ctx.updateHistory.historyId,
+          recordTs1.plusSeconds(1),
+        )
+        _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+          storage.underlying,
+          ctx.updateHistory.historyId,
+        )
+        cutCtx <- newEventStore()
+        capRightAfterCutover <- cutCtx.verdictStore.maxUpdateRecordTime(domainMigrationId)
+        recordTs2 = recordTs1.plusSeconds(2)
+        _ <- insertUpdate(cutCtx.updateHistory, recordTs2, "update2")
+        capAfterNextUpdate <- cutCtx.verdictStore.maxUpdateRecordTime(domainMigrationId)
+      } yield {
+        cutCtx.updateHistory.lastLegacyRecordTime should not be empty
+        capRightAfterCutover shouldBe Some(recordTs1)
+        capAfterNextUpdate shouldBe Some(recordTs2)
       }
     }
 
@@ -1055,10 +1082,13 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
     } yield verdict.value.rowId
 
   private def newUpdateHistory(
-      migrationId: Long
+      migrationId: Long,
+      timeStart: CantonTimestamp,
+      partitionRunwayDays: Int,
   ): Future[UpdateHistory] = {
     val participantId = mkParticipantId("ScanEventStoreTest")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage.underlying, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage.underlying,
         migrationId,
@@ -1067,12 +1097,19 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
+      _ <- UpdateHistoryTestBase.createUpdateHistoryPartitions(
+        updateHistory,
+        timeStart,
+        partitionRunwayDays,
+      )
     } yield updateHistory
   }
 
@@ -1254,9 +1291,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       eventStore: ScanEventStore,
   )
 
-  private def newEventStore(migrationId: Long = domainMigrationId): Future[EventStoreCtx] =
+  private def newEventStore(
+      migrationId: Long = domainMigrationId,
+      // Tests use CantonTimestamp.now() as record time
+      timeStart: CantonTimestamp = CantonTimestamp.now(),
+      partitionRunwayDays: Int = 7,
+  ): Future[EventStoreCtx] =
     for {
-      uh <- newUpdateHistory(migrationId)
+      uh <- newUpdateHistory(migrationId, timeStart, partitionRunwayDays)
       vs = newVerdictStore(uh)
       es = new ScanEventStore(vs, uh, loggerFactory)
     } yield EventStoreCtx(vs, uh, es)

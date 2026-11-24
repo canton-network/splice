@@ -1,4 +1,5 @@
 org.lfdecentralizedtrust.splice.admin.api.HttpRequestLoggerTest
+org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectivesTest
 org.lfdecentralizedtrust.splice.admin.api.client.ApiClientRequestLoggerTest
 org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandlerBftCallFailedTest
 org.lfdecentralizedtrust.splice.auth.AuthTokenManagerTest
@@ -6,6 +7,7 @@ org.lfdecentralizedtrust.splice.auth.SignatureVerifierTest
 org.lfdecentralizedtrust.splice.automation.AutomationMetricsTest
 org.lfdecentralizedtrust.splice.automation.RoundBasedRewardTriggerTest
 org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTriggerStoreTest
+org.lfdecentralizedtrust.splice.automation.UpdateHistoryPartitionMaintenanceTriggerTest
 org.lfdecentralizedtrust.splice.build_tools.DarLockCheckerTest
 org.lfdecentralizedtrust.splice.config.SpliceConfigTest
 org.lfdecentralizedtrust.splice.config.SpliceDbConfigTest
@@ -46,6 +48,7 @@ org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStoreTest
 org.lfdecentralizedtrust.splice.scan.store.db.FreezeGovernanceLockJsonTest
 org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryReadinessTest
 org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStartTest
+org.lfdecentralizedtrust.splice.scan.store.votesbackfilling.VotesStoreBackfillingTest
 org.lfdecentralizedtrust.splice.store.DbUnavailablePartiesStoreTest
 org.lfdecentralizedtrust.splice.store.DomainTimeStoreTest
 org.lfdecentralizedtrust.splice.store.InMemorySynchronizerStoreTest
@@ -65,7 +68,6 @@ org.lfdecentralizedtrust.splice.store.db.DbSvSvStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbTcsStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
 org.lfdecentralizedtrust.splice.store.db.InternedStringStoreTest
-org.lfdecentralizedtrust.splice.store.db.LegacyAcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
 org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClientTest
 org.lfdecentralizedtrust.splice.sv.admin.http.OnboardSvSnapshotHandlerTest

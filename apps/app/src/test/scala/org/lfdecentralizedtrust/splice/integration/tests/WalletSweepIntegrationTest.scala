@@ -97,13 +97,13 @@ abstract class WalletSweepIntegrationTest
     onboarded
   }
 
-  private def runTokenStandardSweep()(implicit env: SpliceTestConsoleEnvironment): Boolean =
+  private def tokenStandardSweepTrigger()(implicit
+      env: SpliceTestConsoleEnvironment
+  ): WalletTokenStandardSweepTrigger =
     bobValidatorBackend
       .userWalletAutomation(bobWalletClient.config.ledgerApiUser)
       .futureValue
       .trigger[WalletTokenStandardSweepTrigger]
-      .runOnce()
-      .futureValue
 
   override def walletAmuletPrice = SpliceUtil.damlDecimal(amuletPrice.bigDecimal)
 
@@ -269,7 +269,7 @@ abstract class WalletSweepIntegrationTest
     onboard(walletClient, user, aliceValidatorBackend)
 
     clue("Nothing to sweep below the max balance") {
-      runTokenStandardSweep() shouldBe false
+      runExpectingNoTask(tokenStandardSweepTrigger())
     }
     actAndCheck("Bob's sweeper taps above the max balance", bobWalletClient.tap(20))(
       "balance is updated",
@@ -277,13 +277,14 @@ abstract class WalletSweepIntegrationTest
     )
     val previousBalance = walletClient.balance().unlockedQty
 
-    val (_, instruction) = actAndCheck("Sweep kicks in", runTokenStandardSweep() shouldBe true)(
-      "sender is drained and receiver sees a pending transfer instruction (no preapproval yet)",
-      _ => {
-        bobWalletClient.balance().unlockedQty should beAround(minBalanceUsd)
-        inside(walletClient.listTokenStandardTransfers()) { case Seq(t) => t }
-      },
-    )
+    val (_, instruction) =
+      actAndCheck("Sweep kicks in", runUntilTaskSucceeds(tokenStandardSweepTrigger()))(
+        "sender is drained and receiver sees a pending transfer instruction (no preapproval yet)",
+        _ => {
+          bobWalletClient.balance().unlockedQty should beAround(minBalanceUsd)
+          inside(walletClient.listTokenStandardTransfers()) { case Seq(t) => t }
+        },
+      )
     actAndCheck(
       "Receiver accepts the transfer instruction",
       walletClient.acceptTokenStandardTransfer(
@@ -297,7 +298,7 @@ abstract class WalletSweepIntegrationTest
       },
     )
     clue("No further sweep needed") {
-      runTokenStandardSweep() shouldBe false
+      runExpectingNoTask(tokenStandardSweepTrigger())
     }
   }
 
@@ -310,7 +311,8 @@ abstract class WalletSweepIntegrationTest
         .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
         .futureValue
         .trigger[WalletPreapprovalSweepTrigger]
-        .runOnce()
+        // Not a TriggerTestUtil helper, as retrieving the tasks fails, so there is no task outcome.
+        .runOnceWithTaskOutcome()
         .failed
         .futureValue
     ) { case ex: StatusRuntimeException =>
@@ -331,12 +333,12 @@ abstract class WalletSweepIntegrationTest
       _ => sv1ScanBackend.lookupTransferPreapprovalByParty(alicePartyId) shouldBe a[Some[?]],
     )
     clue("Sweep no longer errors now that preapproval is created") {
-      bobValidatorBackend
-        .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
-        .futureValue
-        .trigger[WalletPreapprovalSweepTrigger]
-        .runOnce()
-        .futureValue shouldBe false
+      runExpectingNoTask(
+        bobValidatorBackend
+          .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
+          .futureValue
+          .trigger[WalletPreapprovalSweepTrigger]
+      )
     }
     actAndCheck(
       "Bob taps to have enough CC for sweep to kick in",
@@ -350,12 +352,12 @@ abstract class WalletSweepIntegrationTest
     val previousBalance = walletClient.balance().unlockedQty.longValue
     actAndCheck(
       "Sweep kicks in",
-      bobValidatorBackend
-        .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
-        .futureValue
-        .trigger[WalletPreapprovalSweepTrigger]
-        .runOnce()
-        .futureValue shouldBe true,
+      runUntilTaskSucceeds(
+        bobValidatorBackend
+          .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
+          .futureValue
+          .trigger[WalletPreapprovalSweepTrigger]
+      ),
     )(
       "balances are updated",
       _ => {
@@ -363,12 +365,12 @@ abstract class WalletSweepIntegrationTest
         walletClient.balance().unlockedQty should beAround(previousBalance + 18)
       },
     )
-    bobValidatorBackend
-      .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
-      .futureValue
-      .trigger[WalletPreapprovalSweepTrigger]
-      .runOnce()
-      .futureValue shouldBe false
+    runExpectingNoTask(
+      bobValidatorBackend
+        .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
+        .futureValue
+        .trigger[WalletPreapprovalSweepTrigger]
+    )
   }
 
   private def sv1Balance()(implicit env: SpliceTestConsoleEnvironment) = BigDecimal(

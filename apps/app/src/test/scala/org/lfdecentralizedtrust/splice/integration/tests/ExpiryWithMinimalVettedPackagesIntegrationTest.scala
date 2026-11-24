@@ -541,10 +541,10 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
     )
 
     clue("UnhideRewardCouponV2Trigger has no task for alice and her reward coupon stays hidden") {
-      sv1Backend.dsoDelegateBasedAutomation
-        .trigger[UnhideRewardCouponV2Trigger]
-        .runOnce()
-        .futureValue shouldBe false
+      runExpectingNoTask(
+        sv1Backend.dsoDelegateBasedAutomation
+          .trigger[UnhideRewardCouponV2Trigger]
+      )
       dsoAcs.filterJava(RewardCouponV2.COMPANION)(
         dsoParty,
         c => c.data.provider == aliceId && !c.data.providerIsObserver,

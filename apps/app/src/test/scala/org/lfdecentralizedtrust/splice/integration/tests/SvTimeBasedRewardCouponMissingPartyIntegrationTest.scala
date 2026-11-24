@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
@@ -71,7 +72,9 @@ class SvTimeBasedRewardCouponMissingPartyIntegrationTest
             eventually() {
               clue("No SvRewardCoupon should be issued") {
                 advanceRoundsToNextRoundOpening
-                sv1RewardCouponTrigger.runOnce().futureValue
+                // The outcome is not asserted: the test only checks the logged warnings, and the
+                // run is retried together with the round advancement.
+                sv1RewardCouponTrigger.runOnceWithTaskOutcome().futureValue.discard
                 eventually() {
                   val openRounds = sv1ScanBackend
                     .getOpenAndIssuingMiningRounds()

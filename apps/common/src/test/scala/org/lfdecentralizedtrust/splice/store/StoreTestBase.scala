@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.store
 
+import com.digitalasset.canton.time.SimClock
 import cats.data.NonEmptyList
 import com.daml.ledger.api.v2.TraceContextOuterClass
 import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord as CodegenDamlRecord}
@@ -1105,6 +1106,12 @@ abstract class StoreTestBase
 
   protected lazy val dummyDomain = StoreTestBase.dummyDomain
 
+  protected lazy val clock: SimClock = new SimClock(loggerFactory = loggerFactory)
+
+  protected def mockLedgerConnection(
+      firstRecordTime: CantonTimestamp = CantonTimestamp.Epoch
+  ): BaseLedgerConnection = StoreTestBase.mockLedgerConnection(firstRecordTime)
+
   protected val dummy2Domain = SynchronizerId.tryFromString("dummy2::domain")
 
   protected val domainMigrationId = 0L
@@ -1324,7 +1331,7 @@ abstract class StoreTestBase
       incompleteIn: Seq[StoreTestBase.AcsImportIncompleteEntry] = Seq.empty,
       acsOffset: Long = nextOffset(),
   )(implicit store: MultiDomainAcsStore): Future[Unit] = for {
-    _ <- store.testIngestionSink.initialize()
+    _ <- store.testIngestionSink.initialize(mockLedgerConnection())
     _ <- acs(activeContracts, incompleteOut, incompleteIn, acsOffset)
   } yield ()
 
@@ -1366,8 +1373,11 @@ abstract class StoreTestBase
 
     override def ingestionFilter: MultiDomainAcsStore.IngestionFilter =
       underlying.ingestionFilter
-    override def initialize()(implicit traceContext: TraceContext) =
-      underlying.initialize()
+    override def initialize(connection: BaseLedgerConnection)(implicit
+        traceContext: TraceContext,
+        mat: Materializer,
+    ) =
+      underlying.initialize(connection)
 
     override def ingestAcsStreamInBatches(
         source: Source[Seq[BaseLedgerConnection.ActiveContractsItem], NotUsed],
@@ -1746,6 +1756,52 @@ object StoreTestBase {
   }
 
   val dummyDomain = SynchronizerId.tryFromString("dummy::domain")
+
+  def mockLedgerConnection(
+      firstRecordTime: CantonTimestamp = CantonTimestamp.Epoch
+  ): BaseLedgerConnection =
+    mockLedgerConnectionWithUpdates(
+      Seq(
+        LedgerClient.GetTreeUpdatesResponse(
+          TreeUpdateOrOffsetCheckpoint.Update(
+            TransactionTreeUpdate(
+              new Transaction(
+                "first-update",
+                "",
+                "",
+                firstRecordTime.toInstant,
+                java.util.Collections.emptyList(),
+                1L,
+                dummyDomain.toProtoPrimitive,
+                TraceContextOuterClass.TraceContext.getDefaultInstance,
+                firstRecordTime.toInstant,
+                ByteString.EMPTY,
+                0L,
+              )
+            ),
+            dummyDomain,
+          )
+        )
+      )
+    )
+
+  def mockLedgerConnectionWithUpdates(
+      updates: Seq[LedgerClient.GetTreeUpdatesResponse]
+  ): BaseLedgerConnection = {
+    val connection = org.mockito.Mockito.mock(classOf[BaseLedgerConnection])
+    org.mockito.Mockito
+      .when(connection.latestPrunedOffset()(org.mockito.ArgumentMatchers.any[TraceContext]()))
+      .thenReturn(Future.successful(0L))
+    org.mockito.Mockito
+      .when(
+        connection.updates(
+          org.mockito.ArgumentMatchers.anyLong(),
+          org.mockito.ArgumentMatchers.any[MultiDomainAcsStore.IngestionFilter](),
+        )(org.mockito.ArgumentMatchers.any[TraceContext]())
+      )
+      .thenReturn(Source(updates))
+    connection
+  }
 
   object TxLogEntry extends StoreErrors {
 

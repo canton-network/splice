@@ -76,7 +76,14 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanRewardsReferenceStore,
   ScanStore,
 }
+import org.lfdecentralizedtrust.splice.PekkoRetryingService
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
+import org.lfdecentralizedtrust.splice.scan.store.votesbackfilling.{
+  BftPeerVotesSource,
+  UpdateHistoryVotesSource,
+  VotesStoreBackfilling,
+}
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{
   KvHistoryStartStore,
   ParticipantHistoryStartSources,
@@ -90,6 +97,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbVotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
+import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
   PageLimit,
@@ -251,10 +259,62 @@ class ScanApp(
         store.acsContractFilter.ingestionFilter.primaryParty,
         BackfillingRequirement.NeedsBackfilling,
         internedStringStore,
+        kvStore,
         config.analyzableTimeWindow.duration,
         loggerFactory,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
+        clock,
+        partitionRunwayDays = config.updateHistoryPartitionRunwayDays,
+      )
+      automationConfig = ScanApp.withoutHistoryBackfillingAfterCutover(config, updateHistory)
+      _ = updateHistory.lastLegacyRecordTime.foreach(_ =>
+        logger.info(
+          "Update history backfilling is off: this SV has update history from before the cutover to partitioned tables"
+        )
+      )
+      historicalVotesStore = DbVotesStore(
+        TxLogStoreId.unwrap(store.txLogStoreId),
+        storage,
+        kvStore,
+        loggerFactory,
+      )
+      votesPeerSource = Option.when(config.votesStoreBackfillingEnabled) {
+        new BftPeerVotesSource(
+          new PeerBftScanConnection(
+            store,
+            svName,
+            ledgerClient,
+            config.automation,
+            amuletAppParameters.upgradesConfig,
+            new WallClock(retryProvider.timeouts, loggerFactory),
+            retryProvider,
+            loggerFactory,
+          )
+        )
+      }
+      votesStoreBackfilling = votesPeerSource.map { peers =>
+        new VotesStoreBackfilling(
+          config.votesStoreBackfillingPollingInterval,
+          config.votesStoreBackfillingPageSize,
+          config.votesStoreBackfillingMaxLocalHistory,
+          new UpdateHistoryVotesSource(
+            updateHistory,
+            store.key.dsoParty,
+            domainMigrationId,
+            loggerFactory,
+          ),
+          peers,
+          historicalVotesStore,
+          loggerFactory,
+        )
+      }
+      votesStoreBackfillingService = votesStoreBackfilling.map(
+        _.asPekkoRetryingService(
+          config.automation,
+          new WallClock(retryProvider.timeouts, loggerFactory),
+          retryProvider,
+        )
       )
       // The config as this Scan applies it. Its update history backfilling
       // flags can depend on the update history (#7770), so everything from here
@@ -352,7 +412,7 @@ class ScanApp(
         loggerFactory,
       )
       automation = new ScanAutomationService(
-        effectiveConfig,
+        automationConfig,
         clock,
         ledgerClient,
         retryProvider,
@@ -448,6 +508,7 @@ class ScanApp(
         acsSnapshotStore,
         scanEventStore,
         store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
+        historicalVotesStore,
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,
@@ -591,6 +652,9 @@ class ScanApp(
         store,
         automation,
         bulkStorage,
+        historicalVotesStore,
+        votesStoreBackfillingService,
+        votesPeerSource,
         historyStart,
         verdictAutomation,
         scanEventStore,
@@ -659,6 +723,19 @@ class ScanApp(
 
 object ScanApp {
 
+  def withoutHistoryBackfillingAfterCutover(
+      config: ScanAppBackendConfig,
+      updateHistory: UpdateHistory,
+  ): ScanAppBackendConfig =
+    updateHistory.lastLegacyRecordTime
+      .map(_ =>
+        config.copy(
+          updateHistoryBackfillEnabled = false,
+          updateHistoryBackfillImportUpdatesEnabled = false,
+        )
+      )
+      .getOrElse(config)
+
   case class State(
       participantAdminConnection: ParticipantAdminConnection,
       synchronizerNodes: LocalSynchronizerNodes[ScanSynchronizerNode],
@@ -666,6 +743,9 @@ object ScanApp {
       store: ScanStore,
       automation: ScanAutomationService,
       bulkStorage: Option[BulkStorage],
+      votesStore: DbVotesStore,
+      votesStoreBackfillingService: Option[PekkoRetryingService[VotesStoreBackfilling.Step]],
+      votesPeerSource: Option[BftPeerVotesSource],
       historyStart: ScanHistoryStart,
       verdictAutomation: ScanVerdictAutomationService,
       eventStore: ScanEventStore,
@@ -686,6 +766,8 @@ object ScanApp {
         bftSequencersAdminConnections ++
           cleanups ++
           bulkStorage.toList ++
+          votesStoreBackfillingService.toList ++
+          votesPeerSource.toList ++
           Seq(
             automation,
             verdictAutomation,

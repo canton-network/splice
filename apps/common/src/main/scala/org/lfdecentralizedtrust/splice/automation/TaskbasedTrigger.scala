@@ -74,8 +74,16 @@ abstract class TaskbasedTrigger[T: Pretty](
     */
   protected def isStaleTask(task: T)(implicit tc: TraceContext): Future[Boolean]
 
-  /** Processes the task with a retry and returns whether that was successful. */
-  final protected def processTaskWithRetry(task: T): Future[Boolean] = {
+  /** Processes the task with a retry and returns whether that was successful,
+    * where a task that became stale also counts as successful.
+    */
+  final protected def processTaskWithRetry(task: T): Future[Boolean] =
+    processTaskWithRetryOutcome(task).map(TaskbasedTrigger.isWorkDone)
+
+  /** Processes the task with a retry and returns its outcome. Unexpected failures are logged and
+    * reported as [[TaskFailed]].
+    */
+  final protected def processTaskWithRetryOutcome(task: T): Future[TaskOutcome] = {
     // Creating a new trace here, as multiple requests can be processed in parallel.
     withNewTrace(this.getClass.getSimpleName) { implicit traceContext => _ =>
       def processTaskWithStalenessCheck(): Future[TaskOutcome] =
@@ -188,7 +196,7 @@ abstract class TaskbasedTrigger[T: Pretty](
                 MetricsContext.withExtraMetricLabels(("outcome", "success")) { m =>
                   metrics.completed.mark()(m)
                 }
-                Success(true)
+                Success(taskOutcomeE)
               case TaskFailed(description) =>
                 if (quiet)
                   logger.warn(show"Failed processing $task with outcome: $description")
@@ -197,20 +205,20 @@ abstract class TaskbasedTrigger[T: Pretty](
                 MetricsContext.withExtraMetricLabels(("outcome", "fail")) { m =>
                   metrics.completed.mark()(m)
                 }
-                Success(false)
+                Success(taskOutcomeE)
               case TaskNoop =>
                 if (!quiet) logger.info(show"$TaskNoop")
                 MetricsContext.withExtraMetricLabels(("outcome", "noop")) { m =>
                   metrics.completed.mark()(m)
                 }
                 // Signal to polling triggers that no work was done, and it's not worth retrying immediately.
-                Success(false)
+                Success(taskOutcomeE)
               case TaskStale =>
                 if (!quiet) logger.info(show"$TaskStale")
                 MetricsContext.withExtraMetricLabels(("outcome", "stale")) { m =>
                   metrics.completed.mark()(m)
                 }
-                Success(true)
+                Success(taskOutcomeE)
             }
 
           case Failure(ex: QuietNonRetryableException) =>
@@ -228,7 +236,7 @@ abstract class TaskbasedTrigger[T: Pretty](
                 ex,
               )
             }
-            Success(false)
+            Success(TaskFailed(s"expected non-retryable failure: ${ex.getMessage}"))
 
           case Failure(ex) =>
             if (context.retryProvider.isClosing) {
@@ -249,11 +257,22 @@ abstract class TaskbasedTrigger[T: Pretty](
             // Here we recover from the failure so that processing can continue for other tasks.
             // We signal though that we failed, so that the trigger polling loop doesn't loop tightly when
             // all its tasks fail processing.
-            Success(false)
+            Success(TaskFailed(s"unexpected failure: ${ex.getMessage}"))
         }
     }
   }
 
   private[automation] def additionalRetryableConditions: RetryableConditions = Map.empty
 
+}
+
+object TaskbasedTrigger {
+
+  /** Whether an outcome counts as work done for the polling loop: a task that became stale
+    * does, as it is worth looking for further tasks right away.
+    */
+  def isWorkDone(outcome: TaskOutcome): Boolean = outcome match {
+    case _: TaskSuccess | TaskStale => true
+    case _: TaskFailed | TaskNoop => false
+  }
 }

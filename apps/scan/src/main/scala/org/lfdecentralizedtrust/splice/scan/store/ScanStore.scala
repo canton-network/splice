@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import com.digitalasset.canton.tracing.TraceContext
 
-import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -21,7 +20,6 @@ import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProv
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.ScanAcsStoreRowData
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
-import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.{AcsInterfaceViewRowData, AcsJdbcTypes}
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
@@ -36,7 +34,6 @@ import org.lfdecentralizedtrust.splice.store.{
   MiningRoundsStore,
   MultiDomainAcsStore,
   TxLogAppStore,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
@@ -224,14 +221,6 @@ trait ScanStore
     splice.governancelock.GovernanceLock,
   ]]]
 
-  def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
-      companion: C,
-      updateHistory: UpdateHistory,
-      recordTime: CantonTimestamp = CantonTimestamp.MinValue,
-  )(implicit
-      companionClass: ContractCompanion[C, TCId, T],
-      tc: TraceContext,
-  ): Future[Option[Contract[TCId, T]]]
 }
 
 object ScanStore {

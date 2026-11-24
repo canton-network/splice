@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 
 import { useOpenMiningRounds } from '../../hooks/useOpenMiningRounds';
-import { useSvConfig } from '../../utils';
+import { useOperatorConfig, useSvConfig } from '../../utils';
 
 const OpenMiningRounds: React.FC = () => {
   const config = useSvConfig();
@@ -102,7 +102,7 @@ const OpenMiningRoundRow: React.FC<OpenMiningRoundRowProps> = ({
 };
 
 const OpenMiningRoundsWithContexts: React.FC = () => {
-  const config = useSvConfig();
+  const config = useOperatorConfig();
   return (
     <SvClientProvider url={config.services.sv.url}>
       <OpenMiningRounds />

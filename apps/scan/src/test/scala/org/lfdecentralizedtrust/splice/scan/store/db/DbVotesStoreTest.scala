@@ -74,6 +74,7 @@ import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJs
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import org.slf4j.event.Level
 import slick.dbio.DBIO
+import slick.jdbc.GetResult
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.time.Instant
@@ -498,6 +499,402 @@ class DbVotesStoreTest
         }
       }
     }
+
+    "backfilling cursor and completion" should {
+      "be empty initially" in {
+        for {
+          stores <- mkStores()
+          initial <- stores.votesStore.getBackfillingCursor()
+        } yield initial shouldBe empty
+      }
+
+      "default to incomplete, until marked complete" in {
+        for {
+          stores <- mkStores()
+          before <- stores.votesStore.isBackfillingComplete()
+          _ <- stores.votesStore.markBackfillingComplete()
+          after <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          before shouldBe false
+          after shouldBe true
+        }
+      }
+
+      "not be shared between stores with different update histories" in {
+        val cursor = DbVotesStore.VotesBackfillCursor(CantonTimestamp.now(), 0)
+        for {
+          kvStore <- ScanKeyValueStore(
+            dsoParty,
+            mkParticipantId("DbVotesStoreTest"),
+            storage,
+            loggerFactory,
+          )
+          stores <- mkStoresWith(kvStore)
+          otherVotesStore <- mkStoresWith(kvStore, "update_history_votes_store_test_other")
+            .map(_.votesStore)
+          _ <- stores.votesStore.insertPeerVoteResults(Seq.empty, cursor)
+          _ <- stores.votesStore.markBackfillingComplete()
+          otherCursor <- otherVotesStore.getBackfillingCursor()
+          otherComplete <- otherVotesStore.isBackfillingComplete()
+        } yield {
+          otherVotesStore.storeId should not be stores.votesStore.storeId
+          otherCursor shouldBe empty
+          otherComplete shouldBe false
+        }
+      }
+    }
+
+    "the migration from the txlog" should {
+      "copy the vote results exactly as the ingestion inserted them" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          expected <- listAllRows(stores.votesStore)
+          expectedFirstIngested <- stores.votesStore.getFirstIngestedRecordTime()
+          _ <- clearVotesStore(stores)
+          _ <- markHistoriesComplete(stores)
+          _ <- runTxLogMigration()
+          actual <- listAllRows(stores.votesStore)
+          firstIngested <- stores.votesStore.getFirstIngestedRecordTime()
+          cursor <- stores.votesStore.getBackfillingCursor()
+          complete <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          // Make sure the comparison is not trivially satisfied by two empty stores
+          expected should have size txLogVoteFixtures.flatMap(_.votes).size.toLong
+          // The contract ids, which are not in the txlog, are found in the update history
+          all(expected.map(_.contractId)) shouldBe Some(dsoRulesCid)
+          actual shouldBe expected
+          expectedFirstIngested should not be empty
+          // Where live ingestion started is not up to the migration
+          firstIngested shouldBe expectedFirstIngested
+          // The txlog has every vote, so there is nothing to backfill
+          cursor shouldBe empty
+          complete shouldBe true
+        }
+      }
+
+      "fill the contract ids that V081 could not find for votes that were ingested before" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          expected <- listAllRows(stores.votesStore)
+          // As if the update history had not ingested these votes yet when V081 ran
+          _ <- clearContractIds()
+          _ <- markHistoriesComplete(stores)
+          _ <- runTxLogMigration()
+          actual <- listAllRows(stores.votesStore)
+          complete <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          expected should not be empty
+          all(expected.map(_.contractId)) shouldBe Some(dsoRulesCid)
+          actual shouldBe expected
+          complete shouldBe true
+        }
+      }
+
+      "not copy anything if the update history does not have the contract id of a vote" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          _ <- clearVotesStore(stores)
+          _ <- markHistoriesComplete(stores)
+          // The update history misses the exercise of one vote
+          removed <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              sqlu"""delete from update_history_exercises_legacy
+                     where row_id = (select min(row_id) from update_history_exercises_legacy
+                                     where choice = 'DsoRules_CloseVoteRequest')""",
+              "test.removeExercise",
+            )
+          )
+          _ <- runTxLogMigration()
+          rows <- listAllRows(stores.votesStore)
+          cursor <- stores.votesStore.getBackfillingCursor()
+          complete <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          removed shouldBe 1
+          txLogVoteFixtures.size should be > 1
+          // All or nothing: the votes that have a contract id are not copied either
+          rows shouldBe empty
+          cursor shouldBe empty
+          complete shouldBe false
+        }
+      }
+
+      // Each of these breaks one of the conditions under which the migration copies the votes
+      Seq[(String, (Stores, CantonTimestamp) => Future[Unit])](
+        "the txlog backfilling is in progress" -> ((stores, _) =>
+          setTxLogBackfillingComplete(stores, complete = false)
+        ),
+        "the txlog backfilling was never initialized" -> ((stores, _) =>
+          futureUnlessShutdownToFuture(
+            storage.update(
+              sqlu"delete from txlog_backfilling_status where store_id = ${stores.votesStore.storeId}",
+              "test.clearTxLogBackfillingStatus",
+            )
+          ).map(_ => ())
+        ),
+        "the update history backfilling is in progress" -> ((_, _) =>
+          setUpdateHistoryState(participantName, complete = false)
+        ),
+        "the update history has not ingested up to where the votes store started" -> (
+          (_, firstIngested) =>
+            for {
+              _ <- setUpdateHistoryState(
+                participantName,
+                complete = true,
+                ingestedUpTo = firstIngested.minusSeconds(1),
+              )
+              // Also remove the updates of the votes from that point on
+              _ <- futureUnlessShutdownToFuture(
+                storage.underlying.queryAndUpdate(
+                  DBIO
+                    .seq(
+                      sqlu"""delete from update_history_exercises_legacy
+                             where record_time >= ${firstIngested.toMicros}""",
+                      sqlu"""delete from update_history_transactions_legacy
+                             where record_time >= ${firstIngested.toMicros}""",
+                    )
+                    .map(_ => ()),
+                  "test.truncateUpdateHistory",
+                )
+              )
+            } yield ()
+        ),
+        "the votes store has not started ingesting" -> ((_, _) =>
+          futureUnlessShutdownToFuture(
+            storage.update(
+              sqlu"delete from key_value_store where key like 'votes_store_first_ingested_%'",
+              "test.clearFirstIngested",
+            )
+          ).map(_ => ())
+        ),
+      ).foreach { case (condition, prepare) =>
+        s"not copy anything if $condition" in {
+          for {
+            stores <- mkStores()
+            _ <- ingestAll(stores, txLogVoteFixtures)
+            firstIngested <- stores.votesStore
+              .getFirstIngestedRecordTime()
+              .map(_.getOrElse(fail("not ingested")))
+            _ <- clearVotesStore(stores)
+            _ <- markHistoriesComplete(stores)
+            _ <- prepare(stores, firstIngested)
+            _ <- runTxLogMigration()
+            complete <- stores.votesStore.isBackfillingComplete()
+            cursor <- stores.votesStore.getBackfillingCursor()
+            rows <- listAllRows(stores.votesStore)
+          } yield {
+            complete shouldBe false
+            cursor shouldBe empty
+            rows shouldBe empty
+          }
+        }
+      }
+
+      "leave the first ingested record time of the live ingestion alone" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          txLogFirstIngested <- stores.votesStore
+            .getFirstIngestedRecordTime()
+            .map(_.getOrElse(fail("not ingested")))
+          // Live ingestion started after the txlog did
+          _ <- setFirstIngestedRecordTime(stores, txLogFirstIngested.plusSeconds(100))
+          _ <- markHistoriesComplete(stores)
+          _ <- runTxLogMigration()
+          firstIngested <- stores.votesStore.getFirstIngestedRecordTime()
+        } yield firstIngested shouldBe Some(txLogFirstIngested.plusSeconds(100))
+      }
+
+      "migrate every txlog store on its own, and pair it with the key value store of its participant" in {
+        val keyPattern = "votes_store_backfill_complete_%"
+        for {
+          kv <- ScanKeyValueStore(
+            dsoParty,
+            mkParticipantId("DbVotesStoreTest"),
+            storage,
+            loggerFactory,
+          )
+          otherKv <- ScanKeyValueStore(
+            dsoParty,
+            mkParticipantId("DbVotesStoreTestOther"),
+            storage,
+            loggerFactory,
+          )
+          stores <- mkStoresWith(kv)
+          // Resetting the ACS store gives a new ACS store id, and keeps the txlog store
+          _ <- mkStoresWith(kv, acsStoreDescriptorUserVersion = Some(1L))
+          // Resetting the txlog store gives a new txlog store id, for the same party and participant
+          resetTxLog <- mkStoresWith(kv, txLogStoreDescriptorUserVersion = Some(1L))
+          // Another participant has its own key value store
+          other <- mkStoresWith(otherKv, "DbVotesStoreTestOther")
+          _ <- ingestAll(stores, txLogVoteFixtures.take(2))
+          _ <- ingestAll(resetTxLog, txLogVoteFixtures.drop(2))
+          _ <- ingestAll(other, txLogVoteFixtures.take(1))
+          all = Seq(stores, resetTxLog, other)
+          expectedRows <- MonadUtil.sequentialTraverse(all)(s => listAllRows(s.votesStore))
+          _ <- MonadUtil.sequentialTraverse(all)(clearVotesStore)
+          _ <- markHistoriesComplete(stores)
+          _ <- markHistoriesComplete(resetTxLog)
+          _ <- markHistoriesComplete(other, "DbVotesStoreTestOther")
+          _ <- runTxLogMigration()
+          actualRows <- MonadUtil.sequentialTraverse(all)(s => listAllRows(s.votesStore))
+          completes <- MonadUtil.sequentialTraverse(all)(s => s.votesStore.isBackfillingComplete())
+          completeKeys <- futureUnlessShutdownToFuture(
+            storage.query(
+              sql"select store_id, key from key_value_store where key like $keyPattern".as[
+                (Int, String)
+              ],
+              "test.completeKeys",
+            )
+          )
+        } yield {
+          all.map(_.votesStore.storeId).distinct should have size 3
+          expectedRows.map(_.size) shouldBe Seq(2, txLogVoteFixtures.size - 2, 1)
+          // Each store gets exactly its own votes, and the txlog of the reset ACS store is not affected
+          actualRows shouldBe expectedRows
+          completes shouldBe Seq(true, true, true)
+          // The keys are in the key value store of the participant of the txlog store, once per txlog store
+          completeKeys.toSet shouldBe Set(
+            kv.storeId -> DbVotesStore.backfillCompleteKey(stores.votesStore.storeId),
+            kv.storeId -> DbVotesStore.backfillCompleteKey(resetTxLog.votesStore.storeId),
+            otherKv.storeId -> DbVotesStore.backfillCompleteKey(other.votesStore.storeId),
+          )
+          completeKeys should have size 3
+        }
+      }
+
+      "succeed without copying anything if a vote in the txlog cannot be copied" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          _ <- markHistoriesComplete(stores)
+          _ <- clearVotesStore(stores)
+          // One row without an update id, which violates a not null constraint of votes_store_results
+          _ <- futureUnlessShutdownToFuture(
+            storage.underlying.queryAndUpdate(
+              sqlu"""update scan_txlog_store set event_id = 'malformed'
+                     where entry_number = (select min(entry_number) from scan_txlog_store
+                                           where entry_type = 'vot' and store_id = ${stores.votesStore.storeId})""",
+              "test.corruptTxLog",
+            )
+          )
+          _ <- runTxLogMigration()
+          rows <- listAllRows(stores.votesStore)
+          cursor <- stores.votesStore.getBackfillingCursor()
+          complete <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          txLogVoteFixtures.size should be > 1
+          // All or nothing: the other votes are not copied either, and backfilling starts from scratch
+          rows shouldBe empty
+          cursor shouldBe empty
+          complete shouldBe false
+        }
+      }
+
+      "do nothing on a database without scan stores" in {
+        for {
+          _ <- runTxLogMigration()
+          rows <- futureUnlessShutdownToFuture(
+            storage.query(
+              sql"select count(*) from votes_store_results".as[Long].head,
+              "test.countVoteRows",
+            )
+          )
+        } yield rows shouldBe 0L
+      }
+
+    }
+
+    "backfilling from peers" should {
+      "page backwards by (record_time, event_number) and insert the same results" in {
+        val cursor = DbVotesStore.VotesBackfillCursor(CantonTimestamp.MinValue, 0)
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          fresh <- mkFreshVotesStore()
+          peerRows <- listAllPeerPages(stores.votesStore, pageSize = 2)
+          _ <- fresh.insertPeerVoteResults(peerRows, cursor)
+          stored <- fresh.getBackfillingCursor()
+          count <- fresh.countVoteRequestResults(VoteResultsFilters())
+          results <- listAllPages(fresh, VoteResultsFilters(), pageSize = 1000)
+          sourceRows <- listAllRows(stores.votesStore)
+          copiedRows <- listAllRows(fresh)
+        } yield {
+          stored shouldBe Some(cursor)
+          count shouldBe voteFixtures.flatMap(_.votes).size.toLong
+          results.flatten should contain theSameElementsAs voteFixtures.flatMap(_.votes)
+          // The columns that are derived from the result are the same as when ingesting it
+          sourceRows should have size voteFixtures.flatMap(_.votes).size.toLong
+          copiedRows shouldBe sourceRows
+        }
+      }
+
+      "serve the identifying data and the stored result, nothing else" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          served <- stores.votesStore.listBackfillPage(
+            DbVotesStore.VotesBackfillCursor(CantonTimestamp.MaxValue, 0),
+            PageLimit.Max,
+          )
+          rows <- listAllRows(stores.votesStore)
+        } yield {
+          served should have size txLogVoteFixtures.size.toLong
+          // Newest first
+          served.map(_.recordTime) shouldBe served.map(_.recordTime).sorted.reverse
+          served.map(s => (s.recordTime, s.synchronizerId, s.updateId, s.eventNumber)) shouldBe
+            rows.reverse.map(r =>
+              (
+                CantonTimestamp.ofEpochMicro(r.recordTime),
+                r.synchronizerId,
+                r.updateId,
+                r.eventNumber,
+              )
+            )
+          served.map(_.contractId) shouldBe rows.reverse.map(_.contractId)
+          all(served.map(_.contractId)) shouldBe Some(dsoRulesCid)
+          served.map(_.choiceResult) shouldBe rows.reverse.map(_.choiceResult)
+        }
+      }
+
+      "extract the same rows from a transaction of the update history as the ingestion does" in {
+        val storeId = 42
+        forAll(voteFixtures) { fixture =>
+          val tx = mkFixtureTx(fixture)(1L)
+          val backfilled = DbVotesStore.backfilledVoteResults(tx).map(_.toInsert(storeId))
+          backfilled should have size fixture.votes.size.toLong
+          backfilled shouldBe DbVotesStore.parseTransaction(tx, storeId)
+        }
+      }
+
+      "refuse to decode a result that cannot be decoded, instead of storing a placeholder" in {
+        val thrown = the[DbVotesStore.UndecodablePeerVoteResult] thrownBy DbVotesStore
+          .EncodedPeerVoteResult(
+            CantonTimestamp.Epoch.plusSeconds(7),
+            "synchronizer",
+            "the-update",
+            0,
+            "the-contract",
+            """{"not": "a vote result"}""",
+          )
+          .decode
+        thrown.getMessage should include("the-update")
+        thrown.getCause should not be null
+      }
+
+      "return an empty page once genesis is reached" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          page <- stores.votesStore.listBackfillPage(
+            DbVotesStore.VotesBackfillCursor(CantonTimestamp.MinValue, 0),
+            PageLimit.Max,
+          )
+        } yield page shouldBe empty
+      }
+    }
   }
 
   private val base = Instant.parse("2024-03-01T10:00:00Z")
@@ -643,6 +1040,203 @@ class DbVotesStoreTest
     )
   }
 
+  /** The subset of [[voteFixtures]] that can occur in the txlog: there, a vote is always the
+    * root of its transaction, so a transaction closes exactly one vote request.
+    */
+  private def txLogVoteFixtures: Seq[VoteFixture] =
+    voteFixtures.filter(f => f.votes.size == 1 && !f.nested)
+
+  /** A row of `votes_store_results`, without the local `store_id` and `row_id`. */
+  private case class VoteRow(
+      recordTime: Long,
+      synchronizerId: String,
+      updateId: String,
+      eventNumber: Int,
+      contractId: Option[String],
+      voteActionName: String,
+      voteRequesterName: String,
+      voteAccepted: Boolean,
+      voteTrackingCid: String,
+      voteCompletedAt: Option[Long],
+      voteEffectiveAt: Option[Long],
+      choiceResult: String,
+      error: Option[String],
+  )
+
+  implicit private val getResultVoteRow: GetResult[VoteRow] = GetResult { r =>
+    VoteRow(
+      r.<<[Long],
+      r.<<[String],
+      r.<<[String],
+      r.<<[Int],
+      r.<<?[String],
+      r.<<[String],
+      r.<<[String],
+      r.<<[Boolean],
+      r.<<[String],
+      r.<<?[Long],
+      r.<<?[Long],
+      r.<<[String],
+      r.<<?[String],
+    )
+  }
+
+  /** All columns of all rows of the votes store, oldest first. */
+  private def listAllRows(votesStore: DbVotesStore): Future[Seq[VoteRow]] =
+    futureUnlessShutdownToFuture(
+      storage.query(
+        sql"""select record_time, synchronizer_id, update_id, event_number, contract_id, vote_action_name,
+                     vote_requester_name, vote_accepted, vote_tracking_cid, vote_completed_at,
+                     vote_effective_at, choice_result, error
+              from votes_store_results
+              where store_id = ${votesStore.storeId}
+              order by record_time, event_number""".as[VoteRow],
+        "test.listAllRows",
+      )
+    )
+
+  /** Brings the votes store into the state that it had before the migration: live ingestion has started
+    * (the first ingested record time is kept), but there are no rows and no backfilling state.
+    */
+  private def clearVotesStore(stores: Stores): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update(
+        DBIO.seq(
+          sqlu"delete from votes_store_results where store_id = ${stores.votesStore.storeId}",
+          sqlu"delete from key_value_store where key like 'votes_store_backfill_%'",
+        ),
+        "test.clearVotesStore",
+      )
+    )
+
+  private def setTxLogBackfillingComplete(stores: Stores, complete: Boolean): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update(
+        sqlu"""insert into txlog_backfilling_status (store_id, backfilling_complete)
+               values (${stores.votesStore.storeId}, $complete)
+               on conflict (store_id) do update set backfilling_complete = $complete""",
+        "test.setTxLogBackfillingComplete",
+      )
+    ).map(_ => ())
+
+  private val farFuture: CantonTimestamp = CantonTimestamp.ofEpochSecond(4102444800L) // 2100-01-01
+
+  /** Sets the state of the update history of the given participant, as the migration reads it:
+    * whether its backfilling is complete, and up to which record time it has ingested.
+    */
+  private def setUpdateHistoryState(
+      participantName: String,
+      complete: Boolean,
+      ingestedUpTo: CantonTimestamp = farFuture,
+  ): Future[Unit] =
+    for {
+      historyId <- insertHistory(participantName, dsoParty.toProtoPrimitive)
+      _ <- futureUnlessShutdownToFuture(
+        storage.underlying.queryAndUpdate(
+          DBIO
+            .seq(
+              sqlu"""delete from update_history_backfilling where history_id = $historyId""",
+              sqlu"""insert into update_history_last_ingested_offsets (history_id, migration_id)
+                     values ($historyId, $domainMigrationId)
+                     on conflict do nothing""",
+              sqlu"""delete from update_history_transactions_legacy
+                     where history_id = $historyId and update_id = 'last-ingested'""",
+              sqlu"""insert into update_history_transactions_legacy
+                       (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
+                        effective_at, root_event_ids)
+                     values ($historyId, 'last-ingested', ${ingestedUpTo.toMicros}, 'last-ingested',
+                             $dummyDomain, $domainMigrationId, ${ingestedUpTo.toMicros}, array[]::text[])""",
+              sqlu"""insert into update_history_backfilling
+                       (history_id, joining_migration_id, joining_domain_id, joining_update_id, complete,
+                        import_updates_complete)
+                     values ($historyId, $domainMigrationId, $dummyDomain, 'last-ingested', $complete, $complete)""",
+            )
+            .map(_ => ()),
+          "test.setUpdateHistoryState",
+        )
+      )
+    } yield ()
+
+  /** The state of an SV on a long-running network, for which the migration copies the votes:
+    * the txlog and the update history are complete, and the update history has the exercise of every vote.
+    */
+  private def markHistoriesComplete(
+      stores: Stores,
+      participantName: String = participantName,
+  ): Future[Unit] =
+    for {
+      _ <- setTxLogBackfillingComplete(stores, complete = true)
+      _ <- setUpdateHistoryState(participantName, complete = true)
+      historyId <- insertHistory(participantName, dsoParty.toProtoPrimitive)
+      _ <- insertTxLogVoteExercises(stores, historyId)
+    } yield ()
+
+  /** Inserts the transaction and the DsoRules_CloseVoteRequest exercise (on [[dsoRulesCid]]) of every vote
+    * in the txlog of the given store into the update history, like the ingestion of the update history would.
+    */
+  private def insertTxLogVoteExercises(stores: Stores, historyId: Int): Future[Unit] = {
+    val storeId = stores.votesStore.storeId
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(
+        DBIO
+          .seq(
+            sqlu"""insert into update_history_transactions_legacy
+                     (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
+                      effective_at, root_event_ids)
+                   select $historyId, substring(t.event_id from '^#?(.*):[0-9]+$$'), t.record_time,
+                          t.transaction_offset, t.domain_id, t.migration_id, t.record_time, array['#0']
+                   from scan_txlog_store t
+                   where t.store_id = $storeId and t.entry_type = 'vot'
+                   on conflict do nothing""",
+            sqlu"""insert into update_history_exercises_legacy
+                     (history_id, event_id, update_row_id, child_event_ids, choice, package_name,
+                      template_id_package_id, template_id_module_name, template_id_entity_name, contract_id,
+                      consuming, argument, result, acting_parties, record_time, update_id, domain_id, migration_id)
+                   select $historyId, '#' || u.update_id || ':0', u.row_id, array[]::text[],
+                          'DsoRules_CloseVoteRequest', 'splice-dso-governance', 'pkg', 'Splice.DsoRules', 'DsoRules',
+                          $dsoRulesCid, false, '{}'::jsonb, '{}'::jsonb, array[]::text[],
+                          u.record_time, u.update_id, u.domain_id, u.migration_id
+                   from scan_txlog_store t
+                            join update_history_transactions_legacy u
+                                 on u.history_id = $historyId
+                                     and u.migration_id = t.migration_id
+                                     and u.domain_id = t.domain_id
+                                     and u.update_id = substring(t.event_id from '^#?(.*):[0-9]+$$')
+                   where t.store_id = $storeId and t.entry_type = 'vot'
+                   on conflict do nothing""",
+          )
+          .map(_ => ()),
+        "test.insertTxLogVoteExercises",
+      )
+    ).map(_ => ())
+  }
+
+  private def setFirstIngestedRecordTime(
+      stores: Stores,
+      recordTime: CantonTimestamp,
+  ): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update(
+        sqlu"""update key_value_store
+               set value = to_jsonb(${recordTime.toMicros})
+               where key = ${DbVotesStore.firstIngestedRecordTimeKey(stores.votesStore.storeId)}""",
+        "test.setFirstIngestedRecordTime",
+      )
+    ).map(_ => ())
+
+  /** Runs the migration script as is, to check it against the data written by the ingestion.
+    * Flyway runs a script once, so this bypasses [[DbStorageIdempotency]], which runs all writes twice.
+    */
+  private def runTxLogMigration(): Future[Unit] = {
+    val script = scala.io.Source
+      .fromResource("db/migration/canton-network/postgres/stable/V084__votes_store_from_txlog.sql")
+      .mkString
+    val migration = onLegacyUpdateHistory(script)
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(sqlu"#$migration".map(_ => ()), "test.runTxLogMigration")
+    )
+  }
+
   private lazy val filters: Seq[VoteResultsFilters] = Seq(
     VoteResultsFilters(),
     VoteResultsFilters(accepted = Some(true)),
@@ -745,17 +1339,26 @@ class DbVotesStoreTest
       )
     ).map(_ => ())
 
-  private def insertHistory(participantName: String, party: String): Future[Int] =
+  /** Returns the id of the update history of the given participant, creating it if there is none. */
+  private def insertHistory(participantName: String, party: String): Future[Int] = {
+    val participant = mkParticipantId(participantName).toProtoPrimitive
     futureUnlessShutdownToFuture(
-      storage
-        .querySingle(
-          sql"""insert into update_history_descriptors (party, participant_id, store_name)
-              values ($party, ${mkParticipantId(participantName).toProtoPrimitive}, 'DbScanStore')
-              returning id""".as[Int].headOption,
-          "test.insertHistory",
-        )
-        .value
+      storage.underlying.queryAndUpdate(
+        sql"""select id from update_history_descriptors
+              where party = $party and participant_id = $participant and store_name = 'DbScanStore'"""
+          .as[Int]
+          .headOption
+          .flatMap {
+            case Some(id) => DBIO.successful(Some(id))
+            case None =>
+              sql"""insert into update_history_descriptors (party, participant_id, store_name)
+                    values ($party, $participant, 'DbScanStore')
+                    returning id""".as[Int].headOption
+          },
+        "test.insertHistory",
+      )
     ).map(_.getOrElse(fail("No history inserted")))
+  }
 
   /** Inserts an update with a single exercise on a DsoRules contract into the update history.
     * The row of the update is shared by all exercises of the same history.
@@ -772,24 +1375,24 @@ class DbVotesStoreTest
       storage.underlying.queryAndUpdate(
         DBIO
           .seq(
-            sqlu"""insert into update_history_transactions
+            sqlu"""insert into update_history_transactions_legacy
                    (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
                     effective_at, root_event_ids)
                  select $historyId, v.update_id, v.record_time, '0', v.synchronizer_id, $domainMigrationId,
                         v.record_time, array['#0']
                  from votes_store_results v
                  where v.update_id = $updateId
-                   and not exists (select 1 from update_history_transactions t
+                   and not exists (select 1 from update_history_transactions_legacy t
                                    where t.history_id = $historyId and t.update_id = $updateId)
                  limit 1""",
-            sqlu"""insert into update_history_exercises
+            sqlu"""insert into update_history_exercises_legacy
                    (history_id, event_id, update_row_id, child_event_ids, choice, package_name, template_id_package_id,
                     template_id_module_name, template_id_entity_name, contract_id, consuming, argument, result, acting_parties,
                     record_time, update_id, domain_id, migration_id)
                  select $historyId, '#' || $updateId || ':' || $nodeId, t.row_id, array[]::text[], $choice, 'splice-dso-governance', 'pkg',
                         'Splice.DsoRules', 'DsoRules', $contractId, false, '{}'::jsonb, '{}'::jsonb, array[]::text[],
                         t.record_time, t.update_id, t.domain_id, t.migration_id
-                 from update_history_transactions t
+                 from update_history_transactions_legacy t
                  where t.history_id = $historyId and t.update_id = $updateId""",
           )
           .map(_ => ()),
@@ -805,11 +1408,16 @@ class DbVotesStoreTest
     val script = scala.io.Source
       .fromResource("db/migration/canton-network/postgres/stable/V081__votes_store_contract_id.sql")
       .mkString
-    val update = script.substring(script.indexOf("update votes_store_results"))
+    val update = onLegacyUpdateHistory(
+      script.substring(script.indexOf("update votes_store_results"))
+    )
     futureUnlessShutdownToFuture(
       storage.underlying.queryAndUpdate(sqlu"#$update".map(_ => ()), "test.runMigration")
     )
   }
+
+  private def onLegacyUpdateHistory(script: String): String =
+    script.replaceAll("\\b(update_history_(transactions|exercises))\\b", "$1_legacy")
 
   private case class Stores(
       scanStore: ScanStore,
@@ -851,6 +1459,54 @@ class DbVotesStoreTest
     go(None, Seq.empty)
   }
 
+  /** Pages backwards through a (fully backfilled) votes store via [[DbVotesStore.listBackfillPage]],
+    * following the cursor the same way [[VotesStoreBackfilling]] would when reading from a peer.
+    */
+  private def listAllPeerPages(
+      votesStore: DbVotesStore,
+      pageSize: Int,
+  ): Future[Seq[DbVotesStore.PeerVoteResult]] = {
+    def go(
+        before: DbVotesStore.VotesBackfillCursor,
+        acc: Seq[DbVotesStore.ServedVoteResult],
+    ): Future[Seq[DbVotesStore.ServedVoteResult]] =
+      votesStore.listBackfillPage(before, PageLimit.tryCreate(pageSize)).flatMap {
+        case Seq() => Future.successful(acc)
+        case page =>
+          val oldest = page.minBy(row => (row.recordTime, row.eventNumber))
+          go(
+            DbVotesStore.VotesBackfillCursor(
+              oldest.recordTime,
+              oldest.eventNumber,
+            ),
+            acc ++ page,
+          )
+      }
+    go(DbVotesStore.VotesBackfillCursor(CantonTimestamp.MaxValue, 0), Seq.empty)
+      .map(_.map(decodeServed))
+  }
+
+  /** Decodes what a peer served the way the client of the API does. */
+  private def decodeServed(served: DbVotesStore.ServedVoteResult): DbVotesStore.PeerVoteResult =
+    DbVotesStore
+      .EncodedPeerVoteResult(
+        served.recordTime,
+        served.synchronizerId,
+        served.updateId,
+        served.eventNumber,
+        served.contractId.getOrElse(fail(s"No contract id for ${served.updateId}")),
+        served.choiceResult,
+      )
+      .decode
+
+  private def mkFreshVotesStore(): Future[DbVotesStore] = {
+    val participantId = mkParticipantId("DbVotesStoreTestFreshVotesStore")
+    for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
+      fresh <- mkStoresWith(kvStore, "update_history_votes_store_test_fresh")
+    } yield fresh.votesStore
+  }
+
   private def mkStores(): Future[Stores] =
     ScanKeyValueStore(dsoParty, mkParticipantId("DbVotesStoreTest"), storage, loggerFactory)
       .flatMap(mkStoresWith(_))
@@ -859,6 +1515,7 @@ class DbVotesStoreTest
       kvStore: DbKeyValueStore,
       participantName: String = participantName,
       acsStoreDescriptorUserVersion: Option[Long] = None,
+      txLogStoreDescriptorUserVersion: Option[Long] = None,
   ): Future[Stores] = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
@@ -883,7 +1540,7 @@ class DbVotesStoreTest
         new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
         acsStoreDescriptorUserVersion,
-        None,
+        txLogStoreDescriptorUserVersion,
         additionalIngestionSinks = Seq(new DbVotesStore.IngestionSink(kvStore, loggerFactory)),
       )(parallelExecutionContext, implicitly, implicitly, implicitly)
       votesStore = DbVotesStore(
@@ -892,7 +1549,9 @@ class DbVotesStoreTest
         kvStore,
         loggerFactory,
       )
-      initializeResult <- scanStore.multiDomainAcsStore.testIngestionSink.initialize()
+      initializeResult <- scanStore.multiDomainAcsStore.testIngestionSink.initialize(
+        mockLedgerConnection()
+      )
       _ <- initializeResult match {
         case ResumeAtOffset(_) | UpdateHistoryInitAtLatestPrunedOffset => Future.unit
         case InitializeAcsAtLatestOffset | InitializeAcsAtOffset(_) =>

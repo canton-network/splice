@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.admin.api
 
+import org.apache.pekko.http.scaladsl.model.AttributeKey
 import org.apache.pekko.http.scaladsl.server
 import org.apache.pekko.http.scaladsl.server.{Directive, Directive1, RequestContext, RouteResult}
 import org.lfdecentralizedtrust.splice.admin.api.client.TraceContextPropagation.*
@@ -21,22 +22,29 @@ object TraceContextDirectives {
     */
   def withTraceContext: Directive1[TraceContext] = {
     Directive { inner => ctx =>
-      val headersMap =
-        ctx.request.headers.map(h => HeaderName(h.name) -> h.value).toMap
+      ctx.request.attribute(EstablishedTraceContext) match {
+        case Some(traceContext) => inner(Tuple1(traceContext))(ctx)
+        case None =>
+          val headersMap =
+            ctx.request.headers.map(h => HeaderName(h.name) -> h.value).toMap
 
-      W3CTraceContext
-        .fromHeaders(headersMap)
-        .map { w3ctx =>
-          val traceContext = w3ctx.toTraceContext
-          withTraceResponseHeaders(inner, traceContext, ctx)
-        }
-        .getOrElse {
-          TraceContext.withNewTraceContext("no_w3c_trace_context") { traceContext =>
-            withTraceResponseHeaders(inner, traceContext, ctx)
-          }
-        }
+          W3CTraceContext
+            .fromHeaders(headersMap)
+            .map { w3ctx =>
+              val traceContext = w3ctx.toTraceContext
+              withTraceResponseHeaders(inner, traceContext, ctx)
+            }
+            .getOrElse {
+              TraceContext.withNewTraceContext("no_w3c_trace_context") { traceContext =>
+                withTraceResponseHeaders(inner, traceContext, ctx)
+              }
+            }
+      }
     }
   }
+
+  private val EstablishedTraceContext: AttributeKey[TraceContext] =
+    AttributeKey[TraceContext]("established-trace-context")
 
   private def withTraceResponseHeaders(
       inner: Tuple1[TraceContext] => server.Route,
@@ -44,7 +52,9 @@ object TraceContextDirectives {
       ctx: RequestContext,
   ): Future[RouteResult] = {
     // Note: This is similar to the respondWithHeader() directive from the Akka DSL
-    inner(Tuple1(traceContext))(ctx).map {
+    val ctxWithTraceContext =
+      ctx.withRequest(ctx.request.addAttribute(EstablishedTraceContext, traceContext))
+    inner(Tuple1(traceContext))(ctxWithTraceContext).map {
       case RouteResult.Complete(response) =>
         val newResponse = response.withHeaders(traceContext.propagate(response.headers.toList))
         RouteResult.Complete(newResponse)
