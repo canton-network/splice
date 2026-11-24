@@ -34,7 +34,6 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build:
-    # Skipped automatically when get_mainnet_version is skipped
     needs: get_mainnet_version
     uses: ./.github/workflows/build.yml
     with:
