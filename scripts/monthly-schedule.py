@@ -846,7 +846,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
 
     events.append(
         ScheduledEvent(
-            title=(f"Cut Canton & WG release line for Splice {version}.0"),
+            title=(f"Cut Canton release line for Splice {version}.0"),
             date=schedule_date(month, "tuesday", -3),
             network="",
             activity=(ACTIVITY_RELEASE),
