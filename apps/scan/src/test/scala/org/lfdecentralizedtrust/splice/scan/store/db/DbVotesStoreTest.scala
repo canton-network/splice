@@ -601,8 +601,8 @@ class DbVotesStoreTest
           // The update history misses the exercise of one vote
           removed <- futureUnlessShutdownToFuture(
             storage.underlying.queryAndUpdate(
-              sqlu"""delete from update_history_exercises
-                     where row_id = (select min(row_id) from update_history_exercises
+              sqlu"""delete from update_history_exercises_legacy
+                     where row_id = (select min(row_id) from update_history_exercises_legacy
                                      where choice = 'DsoRules_CloseVoteRequest')""",
               "test.removeExercise",
             )
