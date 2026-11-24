@@ -542,16 +542,16 @@ function buildCredentialRegistryConfigChanges(
     {
       fieldName: 'credentialRegistryConfigFreePeriod',
       label: 'Credential registry: free period (microseconds)',
-      currentValue: before?.freePeriod.microseconds || '',
-      newValue: after?.freePeriod.microseconds || '',
-      description: 'Free registry lease added on issuance and extension (recommended: 90 days)',
+      currentValue: before?.freePeriod?.microseconds || '',
+      newValue: after?.freePeriod?.microseconds || '',
+      description: 'Free registry lease added on issuance and extension (default: 90 days)',
     },
     {
       fieldName: 'credentialRegistryConfigExtensionUsdPerYear',
       label: 'Credential registry: extension fee (USD per year)',
       currentValue: before?.extensionUsdPerYear || '',
       newValue: after?.extensionUsdPerYear || '',
-      description: 'USD price of one extra year of registry lease (recommended: 1.0)',
+      description: 'USD price of one extra year of registry lease (default: 1.0)',
     },
   ] as ConfigChange[];
 }

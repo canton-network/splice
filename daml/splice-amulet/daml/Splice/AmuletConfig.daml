@@ -100,12 +100,29 @@ data RewardConfig = RewardConfig with
   deriving (Eq, Show, Serializable)
 
 -- | Configuration for the credential registry.
+--
+-- All fields are optional, so that the registry runs with the CIP defaults without a config vote.
+-- Read them with `credentialRegistryFreePeriod` and `credentialRegistryExtensionUsdPerYear`.
 data CredentialRegistryConfig = CredentialRegistryConfig with
-    freePeriod : RelTime
-      -- ^ Free registry lease added when a credential is issued or extended.
-    extensionUsdPerYear : Decimal
-      -- ^ USD price of one extra year of registry lease.
+    freePeriod : Optional RelTime
+      -- ^ Free registry lease added when a credential is issued or extended. Default: 90 days.
+    extensionUsdPerYear : Optional Decimal
+      -- ^ USD price of one extra year of registry lease. Default: 1.0 USD.
   deriving (Eq, Show, Serializable)
+
+-- | Free registry lease, defaulting to 90 days.
+credentialRegistryFreePeriod : Optional CredentialRegistryConfig -> RelTime
+credentialRegistryFreePeriod config =
+  fromOptional (days 90) $ do
+    registryConfig <- config
+    registryConfig.freePeriod
+
+-- | USD price of one extra year of registry lease, defaulting to 1.0 USD.
+credentialRegistryExtensionUsdPerYear : Optional CredentialRegistryConfig -> Decimal
+credentialRegistryExtensionUsdPerYear config =
+  fromOptional 1.0 $ do
+    registryConfig <- config
+    registryConfig.extensionUsdPerYear
 
 
 -- Full AmuletConfig
@@ -250,8 +267,9 @@ validPackageConfig : PackageConfig -> Bool
 validPackageConfig _ = True
 
 validCredentialRegistryConfig : CredentialRegistryConfig -> Bool
-validCredentialRegistryConfig CredentialRegistryConfig {freePeriod, extensionUsdPerYear} =
-  freePeriod > days 0 && extensionUsdPerYear > 0.0
+validCredentialRegistryConfig config =
+  optional True (> days 0) config.freePeriod &&
+  optional True (> 0.0) config.extensionUsdPerYear
 
 -- | Config record grouping config values for governance locks.
 --

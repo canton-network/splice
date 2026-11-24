@@ -1412,8 +1412,8 @@ testCredentialRegistryConfigChange = do
   initialConfig.credentialRegistryConfig === None
 
   let newRegistry = CredentialRegistryConfig with
-        freePeriod = days 30
-        extensionUsdPerYear = 2.0
+        freePeriod = Some (days 30)
+        extensionUsdPerYear = Some 2.0
       newConfig = initialConfig with credentialRegistryConfig = Some newRegistry
   now <- getTime
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with

@@ -138,11 +138,8 @@ object SvOnboardingConfig {
       ),
       initialProtocolVersion: ProtocolVersion = ProtocolVersion.v37,
       initialGovernanceLockConfig: Option[InitialGovernanceLockConfig] = None,
-      // New networks start with the credential registry enabled at the recommended values.
-      // Networks started before it existed enable it by SV voting.
-      initialCredentialRegistryConfig: Option[InitialCredentialRegistryConfig] = Some(
-        InitialCredentialRegistryConfig()
-      ),
+      // Unset by default: the credential registry runs with the CIP defaults without a config.
+      initialCredentialRegistryConfig: Option[InitialCredentialRegistryConfig] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -335,18 +332,22 @@ final case class InitialGovernanceLockConfig(
 }
 
 /** Free period and yearly extension price of the credential registry.
-  * The defaults are the recommended values.
+  * Unset fields use the CIP defaults: 90 days and 1.0 USD per year.
   */
 final case class InitialCredentialRegistryConfig(
-    freePeriod: PositiveFiniteDuration = PositiveFiniteDuration.ofDays(90),
-    extensionUsdPerYear: PositiveNumeric[BigDecimal] = PositiveNumeric.tryCreate(BigDecimal(1.0)),
+    freePeriod: Option[PositiveFiniteDuration] = None,
+    extensionUsdPerYear: Option[PositiveNumeric[BigDecimal]] = None,
 ) {
   final def toCredentialRegistryConfig: splice.amuletconfig.CredentialRegistryConfig =
     new splice.amuletconfig.CredentialRegistryConfig(
-      new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
-        TimeUnit.NANOSECONDS.toMicros(freePeriod.duration.toNanos)
-      ),
-      extensionUsdPerYear.value.bigDecimal,
+      freePeriod
+        .map(duration =>
+          new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
+            TimeUnit.NANOSECONDS.toMicros(duration.duration.toNanos)
+          )
+        )
+        .toJava,
+      extensionUsdPerYear.map(_.value.bigDecimal).toJava,
     )
 }
 

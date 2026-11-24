@@ -3,10 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { ConfigChange } from '../../utils/types';
-import {
-  buildAmuletRulesConfigFromChanges,
-  credentialRegistryConfigError,
-} from '../../utils/buildAmuletRulesConfigFromChanges';
+import { buildAmuletRulesConfigFromChanges } from '../../utils/buildAmuletRulesConfigFromChanges';
 
 describe('buildAmuletRulesConfigFromChanges', () => {
   test('should build AmuletConfig with provided changes', () => {
@@ -644,16 +641,19 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       expect(result.credentialRegistryConfig).toBeNull();
     });
 
-    test('flags a config with only one field set, without failing the build', () => {
+    test('keeps a single set field and leaves the other one to the default', () => {
       expect(
         buildAmuletRulesConfigFromChanges(changes('7776000000000', '')).credentialRegistryConfig
-      ).toBeNull();
-      expect(credentialRegistryConfigError(changes('7776000000000', ''))).toContain(
-        'Credential registry'
-      );
-      expect(credentialRegistryConfigError(changes('', '1.0'))).toContain('Credential registry');
-      expect(credentialRegistryConfigError(changes('7776000000000', '1.0'))).toBeUndefined();
-      expect(credentialRegistryConfigError(changes('', ''))).toBeUndefined();
+      ).toEqual({
+        freePeriod: { microseconds: '7776000000000' },
+        extensionUsdPerYear: null,
+      });
+      expect(
+        buildAmuletRulesConfigFromChanges(changes('', '2.5')).credentialRegistryConfig
+      ).toEqual({
+        freePeriod: null,
+        extensionUsdPerYear: '2.5',
+      });
     });
   });
 });
