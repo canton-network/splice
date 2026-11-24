@@ -489,32 +489,32 @@ class UpdateHistory private (
   def missingPartitionDays(now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[Seq[LocalDate]] =
-    missingPartitionDays(now, Future.successful(now))
+    partitionDays(now, Future.successful(now)).map(_.missing)
 
   def createMissingPartitions(connection: BaseLedgerConnection, now: CantonTimestamp)(implicit
       tc: TraceContext,
       mat: Materializer,
   ): Future[Seq[LocalDate]] =
     for {
-      missing <- missingPartitionDays(now, firstRecordTimeToIngest(connection))
-      _ <- MonadUtil.sequentialTraverse(missing)(createPartitions)
+      days <- partitionDays(now, firstRecordTimeToIngest(connection))
+      _ <- MonadUtil.sequentialTraverse(days.missing)(createPartitions)
       _ <-
-        if (missing.isEmpty) Future.unit
+        if (days.missing.isEmpty) Future.unit
         else {
-          logger.info(s"Created update history partitions for ${missing.mkString(", ")}")
+          logger.info(s"Created update history partitions for ${days.missing.mkString(", ")}")
           analyzePartitionedTables()
         }
-      daysWithPartitions <- listDatesWithAllPartitions()
     } yield {
-      val runwayEnd = UpdateHistory.partitionRunwayEnd(daysWithPartitions, dayOf(now))
+      val runwayEnd =
+        UpdateHistory.partitionRunwayEnd(days.existing ++ days.missing, dayOf(now))
       metrics.UpdateHistory.partitionRunwayEnd.updateValue(_.max(runwayEnd))
-      missing
+      days.missing
     }
 
-  private def missingPartitionDays(
+  private def partitionDays(
       now: CantonTimestamp,
       firstRecordTimeIfNothingIngested: => Future[CantonTimestamp],
-  )(implicit tc: TraceContext): Future[Seq[LocalDate]] =
+  )(implicit tc: TraceContext): Future[UpdateHistory.PartitionDays] =
     for {
       lastRecordTimeIngested <- readLastIngestedRecordTime()
       existing <- listDatesWithAllPartitions()
@@ -524,11 +524,12 @@ class UpdateHistory private (
       }
     } yield {
       val lastDay = dayOf(now.plus(java.time.Duration.ofDays(partitionRunwayDays.toLong)))
-      Iterator
+      val missing = Iterator
         .iterate(dayOf(firstRecordTime))(_.plusDays(1))
         .takeWhile(!_.isAfter(lastDay))
         .filterNot(existing.contains)
         .toSeq
+      UpdateHistory.PartitionDays(existing, missing)
     }
 
   private def firstRecordTimeToIngest(connection: BaseLedgerConnection)(implicit
@@ -2689,6 +2690,8 @@ object UpdateHistory {
 
   private[store] def analyzeCommand(serverVersionNum: Int): String =
     if (serverVersionNum >= 180000) "analyze only" else "analyze"
+
+  private final case class PartitionDays(existing: Set[LocalDate], missing: Seq[LocalDate])
 
   private[store] def partitionRunwayEnd(
       daysWithPartitions: Set[LocalDate],
