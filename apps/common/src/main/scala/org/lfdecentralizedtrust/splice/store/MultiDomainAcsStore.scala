@@ -59,6 +59,9 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
 
   def synchronizerId: SynchronizerId
 
+  /** The highest record time that this store has ingested since it was started, per synchronizer. */
+  def lastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp]
+
   def defaultLimit: Limit
 
   protected implicit lazy val mc: MetricsContext = MetricsContext(

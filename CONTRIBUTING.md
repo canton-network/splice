@@ -5,6 +5,7 @@
   - [Opening PRs](opening-prs)
   - [Opening new issues](#opening-new-issues)
   - [Testing](#testing)
+    - [Python checks](#python-checks)
   - [Git Hygiene](#git-hygiene)
   - [Branch Naming](#branch-naming)
   - [TODO Comments](#todo-comments)
@@ -69,6 +70,22 @@ Every contribution must be tested in an automated test! For further details see 
 
 Also note that the splice CI [enforces](https://github.com/cncf/dco2) that all commits on a pull request contain a valid `Signed-off-by: Your Name <your@email.com>` line,
 to confirm adherence to the [DCO](https://developercertificate.org/) requirements.
+
+### Python checks
+
+Run these commands from the repository root in direnv:
+
+```bash
+scripts/python-checks.py check
+scripts/python-checks.py test
+```
+
+`check` runs mypy over tracked `.py` files and extensionless scripts starting with
+`#!/usr/bin/env python` or `#!/usr/bin/env python3`; `test` runs `test_*.py` unit
+tests. Stage new files first. Pass a caller-relative file or directory to limit a
+run, for example `scripts/python-checks.py check scripts/scan-party-monitor`.
+Configure coverage exclusions, extra import directories, and rule exceptions in
+`scripts/python-checks.json`.
 
 ## Git Hygiene
 

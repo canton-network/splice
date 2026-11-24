@@ -146,7 +146,8 @@ for _ in range(60):
         break
     time.sleep(5)
 else:
-    fail(f"pods still running after quiesce: {still_running}")
+    # range(60) always assigns still_running.
+    fail(f"pods still running after quiesce: {still_running}")  # type: ignore[possibly-undefined]
 
 print("### 3. Create the databases on the target")
 for db in databases:

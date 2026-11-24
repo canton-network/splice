@@ -44,6 +44,7 @@ import org.scalactic.source.Position
 
 import java.util.Optional
 import scala.annotation.nowarn
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -81,6 +82,7 @@ class ScanHistoryBackfillingIntegrationTest
             // Small batch size to force multiple backfilling rounds
             updateHistoryBackfillBatchSize = 2,
             txLogBackfillBatchSize = 2,
+            votesStoreBackfillingPollingInterval = NonNegativeFiniteDuration.ofSeconds(1),
           )
         )(config)
       )
@@ -284,6 +286,28 @@ class ScanHistoryBackfillingIntegrationTest
         containsCreateEvent(updates, latestAmuletCid) should be(true)
         updates
       }
+    }
+
+    clue(
+      "SV1 (the founding SV) completes from its own update history, and SV2 backfills the vote from SV1 " +
+        "without waiting for its update history and txlog backfilling"
+    ) {
+      // The vote results of the two scans are compared once they are complete: when exactly SV2 fetches the
+      // vote from SV1 is up to timing, the cases in between are covered by VotesStoreBackfillingTest.
+      // SV2 waits for its own ingestion, then for SV1 to finish its local walk, and retries every polling interval.
+      eventually(timeUntilSuccess = 1.minute) {
+        sv1ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
+        sv2ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
+      }
+      listVotesStoreResults(sv1ScanBackend) should have size (1)
+      sv2ScanBackend.appState.automation.updateHistory
+        .getBackfillingState()
+        .futureValue should be(BackfillingState.NotInitialized)
+      sv2ScanBackend.appState.store.multiDomainAcsStore
+        .getTxLogBackfillingState()
+        .futureValue should be(TxLogBackfillingState.NotInitialized)
+      listVotesStoreResults(sv2ScanBackend) should have size (1)
+      listVotesStoreResults(sv2ScanBackend) shouldBe listVotesStoreResults(sv1ScanBackend)
     }
 
     clue(s"First few items in SV1s history do not exist in SV2s history") {
@@ -586,6 +610,12 @@ class ScanHistoryBackfillingIntegrationTest
     }
 
   }
+
+  private def listVotesStoreResults(backend: ScanAppBackendReference) =
+    backend.appState.votesStore
+      .listVoteRequestResults(VoteResultsFilters(), PageLimit.tryCreate(100), None)
+      .futureValue
+      .resultsInPage
 
   private def readUpdateHistoryFromScan(backend: ScanAppBackendReference) = {
     backend

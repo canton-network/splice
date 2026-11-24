@@ -126,6 +126,14 @@ case class ScanAppBackendConfig(
     updateHistoryPartitionRunwayDays: Int = 7,
     txLogBackfillEnabled: Boolean = true,
     txLogBackfillBatchSize: Int = 100,
+    votesStoreBackfillingEnabled: Boolean = true,
+    votesStoreBackfillingPollingInterval: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofSeconds(10),
+    votesStoreBackfillingPageSize: Int = 100,
+    // A scan whose update history starts with the founding transaction of the network copies the votes
+    // from there instead of from its peers, if that is at most this much history to read.
+    votesStoreBackfillingMaxLocalHistory: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofDays(30),
     cache: ScanCacheConfig = ScanCacheConfig(),
     acsStoreDescriptorUserVersion: Option[Long] = None,
     txLogStoreDescriptorUserVersion: Option[Long] = None,

@@ -152,7 +152,7 @@ final class DbMultiDomainAcsStore[TXE] private[db] (
   // The former is slightly more asynchronous due to RetryProvider/FutureUnlessShutdown.
   def hasFinishedAcsIngestion: Boolean = finishedAcsIngestion.isCompleted
 
-  def lastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp] =
+  override def lastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp] =
     state.get().lastIngestedRecordTimes
 
   def waitUntilRecordTimeReached(
