@@ -24,10 +24,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
 }
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  IntegrationTestWithIsolatedEnvironment,
-  SpliceTestConsoleEnvironment,
-}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.CantonBftPeerConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
@@ -37,7 +34,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpireIssuingMiningRoundTrigger,
 }
 import org.lfdecentralizedtrust.splice.util.*
-import org.lfdecentralizedtrust.splice.validator.automation.TopupMemberTrafficTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 
 import java.util.Optional
@@ -478,15 +474,5 @@ class ScanIntegrationTest
       )
       .futureValue
     response.status shouldBe StatusCodes.OK
-  }
-
-  def triggerTopupAliceAndBob()(implicit env: SpliceTestConsoleEnvironment): (Boolean, Boolean) = {
-    val aliceTopupTrigger =
-      aliceValidatorBackend.appState.automation.trigger[TopupMemberTrafficTrigger]
-    val bobTopupTrigger =
-      bobValidatorBackend.appState.automation.trigger[TopupMemberTrafficTrigger]
-    bobTopupTrigger.pause().futureValue
-    aliceTopupTrigger.pause().futureValue
-    (aliceTopupTrigger.runOnce().futureValue, bobTopupTrigger.runOnce().futureValue)
   }
 }

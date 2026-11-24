@@ -45,6 +45,7 @@ Ask before substantial refactoring to adopt a stricter rule, or leave a specific
 * All test cases of a suite extending `IntegrationTest` share one environment (`IntegrationTestWithIsolatedEnvironment` creates one per test case). Use `perTestCaseName(...)` for party and other names to avoid collisions between test cases.
 * Wrap actions that are expected to log warnings or errors in `loggerFactory.assertLogs` (or a related `SuppressingLogger` method); otherwise `checkErrors` fails in CI.
 * Simulated-time tests mix in `TimeTestUtil` and move the clock with `advanceTime` and related helpers.
+* Run paused task-based triggers with the `TriggerTestUtil` helpers, which check the task's outcome: `runUntilTaskSucceeds` if the test relies on the task being done, `runTasksUntil(trigger)(check)` if the check concerns one of several ready tasks, `runExpectingNoTask` if no task should be ready. `runOnePollingIteration()` also counts a task skipped as stale as done. Do not call these helpers within another `eventually`.
 * Integration tests are expensive: cover variants and edge cases in Daml Script tests, test one representative path here, and add related test cases to an existing suite to share its environment.
 
 ## DB Migrations

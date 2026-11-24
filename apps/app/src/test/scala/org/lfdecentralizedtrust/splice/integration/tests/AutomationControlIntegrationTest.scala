@@ -15,7 +15,8 @@ import com.digitalasset.canton.data.CantonTimestamp
 class AutomationControlIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
-    with TimeTestUtil {
+    with TimeTestUtil
+    with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -115,12 +116,10 @@ class AutomationControlIntegrationTest
     val prevRound = currentRoundInScan()
 
     clue("Trigger automation exactly once") {
-      // Note: runOnce() does nothing if there is no work to be done.
+      // Note: running the trigger does nothing if there is no work to be done.
       // If the previous test code runs fast enough, then there are no new rounds due to be created.
       // We could sleep for one tick, or just keep trying until something happens.
-      eventually() {
-        trigger.runOnce().futureValue should be(true)
-      }
+      runUntilTaskSucceeds(trigger)
     }
 
     val roundAfterManualTrigger = clue("Observe that rounds have advanced once") {
@@ -207,13 +206,13 @@ class AutomationControlIntegrationTest
     // Resuming the trigger
     // ------------------------------------------------------------------------
 
-    // Note: aliceMergeAmuletsTrigger.runOnce().futureValue guarantees that the amulets have been merged
+    // Note: runOnePollingIteration() returning true means that the amulets have been merged
     // on the ledger, but this might not immediately be visible in the wallet app.
     actAndCheck(
       "Run merge amulets automation once",
-      // Note: runOnce() does nothing if there is no work to be done, but in this case we know
+      // Note: runOnePollingIteration() does nothing if there is no work to be done, but in this case we know
       // that the user wallet store knows about 2 amulets
-      aliceMergeAmuletsTrigger.runOnce().futureValue,
+      aliceMergeAmuletsTrigger.runOnePollingIteration().futureValue,
     )(
       "Verify that amulets were merged",
       workDone => {
