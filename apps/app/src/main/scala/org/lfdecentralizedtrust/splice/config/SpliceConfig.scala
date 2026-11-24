@@ -15,7 +15,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   AnalyzableTimeWindowConfig,
   BulkStorageBackfillingConfig,
   BulkStorageConfig,
-  UpdateHistoryBackfillingFromBulkStorageConfig,
+  UpdateHistoryLoadConfig,
   CantonBftPeerConfig,
   MediatorVerdictIngestionConfig,
   ScanAppBackendConfig,
@@ -528,9 +528,9 @@ object SpliceConfig {
       deriveReader[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageBackfillingConfigReader: ConfigReader[BulkStorageBackfillingConfig] =
       deriveReader[BulkStorageBackfillingConfig]
-    implicit val updateHistoryBackfillingFromBulkStorageConfigReader
-        : ConfigReader[UpdateHistoryBackfillingFromBulkStorageConfig] =
-      deriveReader[UpdateHistoryBackfillingFromBulkStorageConfig]
+    implicit val updateHistoryLoadConfigReader
+        : ConfigReader[UpdateHistoryLoadConfig] =
+      deriveReader[UpdateHistoryLoadConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig].emap { conf =>
         Either.cond(
@@ -1116,9 +1116,9 @@ object SpliceConfig {
       deriveWriter[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageBackfillingConfigWriter: ConfigWriter[BulkStorageBackfillingConfig] =
       deriveWriter[BulkStorageBackfillingConfig]
-    implicit val updateHistoryBackfillingFromBulkStorageConfigWriter
-        : ConfigWriter[UpdateHistoryBackfillingFromBulkStorageConfig] =
-      deriveWriter[UpdateHistoryBackfillingFromBulkStorageConfig]
+    implicit val updateHistoryLoadConfigWriter
+        : ConfigWriter[UpdateHistoryLoadConfig] =
+      deriveWriter[UpdateHistoryLoadConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]
     implicit val S3ConfigWriter: ConfigWriter[S3Config] =

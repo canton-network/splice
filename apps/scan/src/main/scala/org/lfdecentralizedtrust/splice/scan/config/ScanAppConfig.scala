@@ -50,18 +50,18 @@ final case class BulkStorageBackfillingConfig(
   *
   * @param pollingInterval how long to wait when the next segment is not
   *   committed in bulk storage yet
-  * @param insertBatchSize number of updates inserted per database transaction
+  * @param batchSize number of updates inserted per database transaction
   * @param maxLineBytes the longest encoded update that can be read from bulk
   *   storage
   */
-final case class UpdateHistoryBackfillingFromBulkStorageConfig(
+final case class UpdateHistoryLoadConfig(
     enabled: Boolean = false,
     pollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
-    insertBatchSize: Int = 500,
+    batchSize: Int = 500,
     maxLineBytes: Int = 64 * 1024 * 1024,
 ) {
   require(pollingInterval.underlying.toMillis > 0, "pollingInterval must be positive")
-  require(insertBatchSize > 0, "insertBatchSize must be positive")
+  require(batchSize > 0, "batchSize must be positive")
   require(maxLineBytes > 0, "maxLineBytes must be positive")
 }
 
@@ -104,8 +104,8 @@ final case class BulkStorageConfig(
       */
     debugObjectsToNotCommit: Seq[String] = Seq.empty,
     backfilling: BulkStorageBackfillingConfig = BulkStorageBackfillingConfig(),
-    updateHistoryBackfilling: UpdateHistoryBackfillingFromBulkStorageConfig =
-      UpdateHistoryBackfillingFromBulkStorageConfig(),
+    updateHistoryLoad: UpdateHistoryLoadConfig =
+      UpdateHistoryLoadConfig(),
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!

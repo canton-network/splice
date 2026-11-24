@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{
   ScanStorageConfig,
-  UpdateHistoryBackfillingFromBulkStorageConfig,
+  UpdateHistoryLoadConfig,
 }
 import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{HistoryReadiness, HistoryStart}
@@ -49,21 +49,21 @@ import scala.concurrent.duration.*
   * each loaded segment, the last loaded segment is recorded, so a restart
   * continues with the segment after it.
   */
-class UpdateHistoryBackfillingFromBulkStorage(
-    config: UpdateHistoryBackfillingFromBulkStorageConfig,
+class UpdateHistoryLoadFromBulkStorage(
+    config: UpdateHistoryLoadConfig,
     storageConfig: ScanStorageConfig,
     updateHistory: UpdateHistory,
-    segments: UpdateHistoryBackfillingFromBulkStorage.CommittedSegments,
+    segments: UpdateHistoryLoadFromBulkStorage.CommittedSegments,
     historyReadiness: HistoryReadiness,
-    progress: UpdateHistoryBackfillingFromBulkStorage.Progress,
+    progress: UpdateHistoryLoadFromBulkStorage.Progress,
     loadedUpdates: Counter,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
     with Spanning
-    with PekkoRetryableService[UpdateHistoryBackfillingFromBulkStorage.Step] {
+    with PekkoRetryableService[UpdateHistoryLoadFromBulkStorage.Step] {
 
-  import UpdateHistoryBackfillingFromBulkStorage.*
+  import UpdateHistoryLoadFromBulkStorage.*
 
   private[bulk] def serviceSource()(implicit tc: TraceContext): Source[Step, NotUsed] =
     mksrc().concat(Source.never)
@@ -173,7 +173,7 @@ class UpdateHistoryBackfillingFromBulkStorage(
     segments
       .updates(segment)
       .filter(_.update.update.recordTime < loadBefore)
-      .grouped(config.insertBatchSize)
+      .grouped(config.batchSize)
       .mapConcat(sameMigrationRuns)
       .prefixAndTail(1)
       .flatMapConcat { case (firstBatch, otherBatches) =>
@@ -242,8 +242,8 @@ class UpdateHistoryBackfillingFromBulkStorage(
     }
 }
 
-object UpdateHistoryBackfillingFromBulkStorage {
-  val description = "UpdateHistoryBackfillingFromBulkStorage"
+object UpdateHistoryLoadFromBulkStorage {
+  val description = "UpdateHistoryLoadFromBulkStorage"
 
   val lastLoadedSegmentKvStoreKey = "update_history_from_bulk_storage_cursor"
 
@@ -267,7 +267,7 @@ object UpdateHistoryBackfillingFromBulkStorage {
       */
     case object BackfillingFromPeers
         extends NotStarted(
-          "Not loading update history from bulk storage although bulk-storage.update-history-backfilling.enabled is set, " +
+          "Not loading update history from bulk storage although bulk-storage.update-history-load.enabled is set, " +
             "because update history backfilling from peers is enabled too. To load it from bulk storage, " +
             "set update-history-backfill-enabled = false (Helm: updateHistoryBackfilling.enabled, " +
             "Pulumi: scanApp.updateHistoryBackfillingFromPeers.enabled)"
@@ -308,7 +308,7 @@ object UpdateHistoryBackfillingFromBulkStorage {
   class BucketCommittedSegments(
       reader: BulkStorageReader,
       committedConnection: S3BucketConnection,
-      config: UpdateHistoryBackfillingFromBulkStorageConfig,
+      config: UpdateHistoryLoadConfig,
   )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
       extends CommittedSegments {
 

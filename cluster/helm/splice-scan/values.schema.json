@@ -229,7 +229,7 @@
         "bulkStorage": {
           "type": "object",
           "properties": {
-            "updateHistoryBackfilling": {
+            "updateHistoryLoad": {
               "type": "object",
               "properties": {
                 "enabled": {

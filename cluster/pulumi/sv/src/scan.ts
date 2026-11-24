@@ -117,7 +117,7 @@ export function installScan(
               endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
               secretName: config.bulkStorageBuckets.committed.secret.metadata.name,
             },
-            updateHistoryBackfilling: config.scanApp?.bulkStorage?.updateHistoryBackfilling,
+            updateHistoryLoad: config.scanApp?.bulkStorage?.updateHistoryLoad,
           },
         }
       : {}),

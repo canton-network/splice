@@ -138,13 +138,13 @@ tests:
           region: "mock-region"
           bucketName: "mock-committed-bucket"
           secretName: "mock-secret"
-        updateHistoryBackfilling:
+        updateHistoryLoad:
           enabled: true
     documentIndex: 0
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_BULK_STORAGE')].value
-          pattern: 'update-history-backfilling.enabled = true'
+          pattern: 'update-history-load.enabled = true'
   - it: "leaves loading update history from bulk storage at its default"
     set:
       # Things we need just to pass the schema
@@ -181,7 +181,7 @@ tests:
     asserts:
       - notMatchRegex:
           path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_BULK_STORAGE')].value
-          pattern: 'update-history-backfilling'
+          pattern: 'update-history-load'
   - it: "sets successor synchronizer"
     set:
       # Things we need just to pass the schema

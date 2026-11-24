@@ -79,7 +79,7 @@ const BulkStorageConfigSchema = z.object({
   enabled: z.boolean(),
   // load the update history before the Scan's history start from its bulk
   // storage
-  updateHistoryBackfilling: z
+  updateHistoryLoad: z
     .object({
       enabled: z.boolean(),
     })

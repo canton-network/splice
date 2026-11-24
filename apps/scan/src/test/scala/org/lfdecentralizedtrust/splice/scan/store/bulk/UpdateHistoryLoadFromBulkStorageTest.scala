@@ -18,10 +18,10 @@ import org.lfdecentralizedtrust.splice.scan.admin.http.{
 }
 import org.lfdecentralizedtrust.splice.scan.config.{
   ScanStorageConfig,
-  UpdateHistoryBackfillingFromBulkStorageConfig,
+  UpdateHistoryLoadConfig,
 }
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
-import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBackfillingFromBulkStorage.*
+import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryLoadFromBulkStorage.*
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{FakeHistoryReadiness, HistoryStart}
 import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
@@ -35,7 +35,7 @@ import java.time.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration.*
 
-class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase {
+class UpdateHistoryLoadFromBulkStorageTest extends UpdateHistoryTestBase {
 
   // Hourly segments, so that a few hours of updates span several segments.
   private val storageConfig = ScanStorageConfig(
@@ -60,7 +60,7 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
   private def segment(fromHour: Int, toHour: Int) = UpdatesSegment(at(fromHour, 0), at(toHour, 0))
   private val genesisSegment = UpdatesSegment(CantonTimestamp.MinValue, at(1, 0))
 
-  "UpdateHistoryBackfillingFromBulkStorage" should {
+  "UpdateHistoryLoadFromBulkStorage" should {
 
     "load all updates before the first ingested one when the analyzable time window is unlimited" in {
       for {
@@ -141,9 +141,9 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
     "insert nothing twice when restarted from scratch with another batch size" in {
       for {
         data <- setupTestData()
-        _ <- data.service(insertBatchSize = 1).mksrc().runWith(Sink.seq)
+        _ <- data.service(batchSize = 1).mksrc().runWith(Sink.seq)
         _ <- data.progress.reset
-        steps <- data.service(insertBatchSize = 3).mksrc().runWith(Sink.seq)
+        steps <- data.service(batchSize = 3).mksrc().runWith(Sink.seq)
         _ <- data.assertDestinationHoldsSourceUpdatesAfter(CantonTimestamp.MinValue)
       } yield steps.collect { case SegmentLoaded(_, inserted) => inserted }.sum shouldBe 0
     }
@@ -153,7 +153,7 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
       // from its peers, in the middle of a batch.
       for {
         data <- setupTestData(destinationHoldsUpdateBeforeHistoryStart = true)
-        steps <- data.service(insertBatchSize = 2).mksrc().runWith(Sink.seq)
+        steps <- data.service(batchSize = 2).mksrc().runWith(Sink.seq)
         _ <- data.assertDestinationHoldsSourceUpdatesAfter(CantonTimestamp.MinValue)
       } yield steps should contain(SegmentLoaded(segment(2, 3), 1))
     }
@@ -217,15 +217,15 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
     }
   }
 
-  "UpdateHistoryBackfillingFromBulkStorageConfig" should {
+  "UpdateHistoryLoadConfig" should {
     "reject values that would stop or spin the loading" in {
-      an[IllegalArgumentException] should be thrownBy UpdateHistoryBackfillingFromBulkStorageConfig(
-        insertBatchSize = 0
+      an[IllegalArgumentException] should be thrownBy UpdateHistoryLoadConfig(
+        batchSize = 0
       )
-      an[IllegalArgumentException] should be thrownBy UpdateHistoryBackfillingFromBulkStorageConfig(
+      an[IllegalArgumentException] should be thrownBy UpdateHistoryLoadConfig(
         maxLineBytes = 0
       )
-      an[IllegalArgumentException] should be thrownBy UpdateHistoryBackfillingFromBulkStorageConfig(
+      an[IllegalArgumentException] should be thrownBy UpdateHistoryLoadConfig(
         pollingInterval = NonNegativeFiniteDuration.Zero
       )
     }
@@ -341,12 +341,12 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
       progress: Progress,
       start: Option[HistoryStart],
   ) {
-    def service(insertBatchSize: Int = 500): UpdateHistoryBackfillingFromBulkStorage =
-      new UpdateHistoryBackfillingFromBulkStorage(
-        UpdateHistoryBackfillingFromBulkStorageConfig(
+    def service(batchSize: Int = 500): UpdateHistoryLoadFromBulkStorage =
+      new UpdateHistoryLoadFromBulkStorage(
+        UpdateHistoryLoadConfig(
           enabled = true,
           pollingInterval = NonNegativeFiniteDuration.ofMillis(100),
-          insertBatchSize = insertBatchSize,
+          batchSize = batchSize,
         ),
         storageConfig,
         destination,
