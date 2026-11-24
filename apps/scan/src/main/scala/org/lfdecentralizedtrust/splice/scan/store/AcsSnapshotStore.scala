@@ -857,16 +857,12 @@ class AcsSnapshotStore(
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): DBIO[AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows] = {
-    val createsTableName =
-      s"acs_snapshot_creates_v1_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
+    val createsTableName = AcsSnapshotDDL.createsTableName(historyId, snapshot.targetRecordTime)
     val stakeholdersTableName =
-      s"acs_snapshot_stakeholders_v1_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
+      AcsSnapshotDDL.stakeholdersTableName(historyId, snapshot.targetRecordTime)
 
     for {
-      _ <-
-        sqlu"create table #$createsTableName (like acs_snapshot_creates_v1_template including all)"
-      _ <-
-        sqlu"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_v1_template including all)"
+      _ <- AcsSnapshotDDL.createTablesAction(createsTableName, stakeholdersTableName)
       // `snapshot_id= ?` will match all rows in production, so a direct table scan will be used
       copiedCreateRows <- (sql"""
         insert into #$createsTableName (contract_id, create_arguments, event_id, record_time, template_id_package_id, contract_key, created_at, signatories, observers, unlocked_amulet_balance, locked_amulet_balance)
@@ -1558,7 +1554,25 @@ object AcsSnapshotStore {
       stakeholderRows: Int,
   )
 
+  /** The tables and indexes of v1 ACS snapshots, which are created at runtime for each snapshot.
+    * `DbIndexSnapshotTest` creates an example snapshot with these, so changes to them show up in the index snapshot.
+    */
   object AcsSnapshotDDL {
+    def createsTableName(historyId: Long, snapshotRecordTime: CantonTimestamp): String =
+      s"acs_snapshot_creates_v1_${historyId}_${snapshotRecordTime.toEpochMilli}"
+
+    def stakeholdersTableName(historyId: Long, snapshotRecordTime: CantonTimestamp): String =
+      s"acs_snapshot_stakeholders_v1_${historyId}_${snapshotRecordTime.toEpochMilli}"
+
+    def createTablesAction(
+        createsTableName: String,
+        stakeholdersTableName: String,
+    ): DBIOAction[Unit, NoStream, Effect.All] =
+      DBIO.seq(
+        sql"create table #$createsTableName (like acs_snapshot_creates_v1_template including all)".asUpdate,
+        sql"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_v1_template including all)".asUpdate,
+      )
+
     def stakeholderIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
       s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ca_ci"
 
