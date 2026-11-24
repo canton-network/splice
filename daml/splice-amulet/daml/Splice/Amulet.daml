@@ -110,6 +110,9 @@ data FeaturedAppRight_UpdateResult = FeaturedAppRight_UpdateResult with
 data FeaturedAppRight_CancelResult = FeaturedAppRight_CancelResult
   deriving (Serializable)
 
+data ActivityRecorder_DsoRecordActivityResult = ActivityRecorder_DsoRecordActivityResult
+  deriving (Serializable)
+
 data FeaturedAppRight_UpdateConfigResult = FeaturedAppRight_UpdateConfigResult with
   featuredAppRightCid : ContractId FeaturedAppRight
     deriving (Serializable)
@@ -717,6 +720,27 @@ template UnclaimedActivityRecord
         unclaimedRewardCid <- create UnclaimedReward with dso; amount
         pure UnclaimedActivityRecord_DsoExpireResult with unclaimedRewardCid
 
+data ActivityRecorderKey = ActivityRecorderKey with
+    dso : Party
+  deriving (Eq, Serializable)
+
+-- | Template for recording activities via special governance or
+-- operational processes (e.g., the reporting of app activity on a dSync).
+template ActivityRecorder with
+    dso : Party
+  where
+    signatory dso
+    key (ActivityRecorderKey with dso) : ActivityRecorderKey
+    maintainer key.dso
+
+    nonconsuming choice ActivityRecorder_DsoRecordActivity : ActivityRecorder_DsoRecordActivityResult
+      with
+        appActivity : [(Party, Int)]
+          -- ^ App activities to record for the given featured app parties, denominated in traffic bytes.
+        assetActivity : [(Party, Int)]
+          -- ^ Asset activities to record for the given featured asset parties, denominated in traffic bytes.
+      controller dso
+      do pure ActivityRecorder_DsoRecordActivityResult
 
 -- Support code
 ---------------

@@ -622,8 +622,7 @@ template WalletAppInstall
         appKind : Optional FeaturedAppKind
         opsParties : Optional [Party]
       controller validatorParty
-      do require "opsParties has at most 10 entries" (optional 0 length opsParties <= 10)
-         result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
+      do result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
            provider = endUserParty
            activityWeight
            appKind
