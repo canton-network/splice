@@ -139,7 +139,9 @@ test_locked_funds TestCase {..} = do
   Some aliceAllocView <- queryInterfaceContractId alice aliceAllocationCid
   aliceAllocView.allocation.meta === reasonToMeta "fund regular billing" emptyMetadata
 
-  -- provider creates allocation to accept license fee payment
+  let zeroFunding = Some (TextMap.fromList [(instrId.id, 0.0) | instrId <- instrIds])
+
+  -- provider creates an unfunded iterated allocation to accept license fee payments
   let billingLegs = do
         (i, instrId) <- zip [0 .. length instrIds] instrIds
         pure V2.TransferLeg with
@@ -154,9 +156,9 @@ test_locked_funds TestCase {..} = do
     allocation = V2.AllocationSpecification with
       authorizer = basicAccount provider
       admin
-      transferLegSides = map receiverSide billingLegs
+      transferLegSides = []
       settlementDeadline = None
-      nextIterationFunding = None
+      nextIterationFunding = zeroFunding
       committed = False
       meta = emptyMetadata
     requestedAt = now
@@ -174,7 +176,10 @@ test_locked_funds TestCase {..} = do
     settlement
     transferLegs = billingLegs
     allocations =
-      [ nonIteratedAllocation providerAllocationCid
+      [ V2.FinalizedAllocation with
+          allocationCid = providerAllocationCid
+          extraTransferLegSides = map receiverSide billingLegs
+          nextIterationFunding = zeroFunding
       , V2.FinalizedAllocation with
           allocationCid = aliceAllocationCid
           extraTransferLegSides = map senderSide billingLegs
@@ -184,8 +189,14 @@ test_locked_funds TestCase {..} = do
 
   result <- WalletClientV2.submitAndCheckTxHistory admins (actAs provider <> discloseMany' enrichedChoice.disclosures) $
     exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
-  let [_, settleResult] = result.allocationSettleResults
+  let [providerSettleResult, settleResult] = result.allocationSettleResults
   let Some aliceAllocationCid = WalletClientV2.extractNextIterationAllocationCid settleResult
+
+  -- the provider's allocation stays unfunded and continues into the next iteration with zero funding
+  let Some providerAllocationCid = WalletClientV2.extractNextIterationAllocationCid providerSettleResult
+  Some providerAllocView <- queryInterfaceContractId provider providerAllocationCid
+  providerAllocView.allocation.nextIterationFunding === zeroFunding
+  providerAllocView.holdingCids === []
 
   -- payout of 0.5 Amulet to alice, and 0.5 Amulet to the provider
   forA_ instrIds $ \instrId -> do

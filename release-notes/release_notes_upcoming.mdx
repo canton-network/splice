@@ -65,6 +65,25 @@
 
     - Daml Model Changes:
 
+      - Token standard V2, iterated settlement: fixed `settlementFactoryV2_settleBatchDefaultImpl` in
+        `splice-token-standard-utils` so that it validates the `nextIterationFunding` that the executors
+        pass in `FinalizedAllocation`, instead of the `nextIterationFunding` stored in the allocation.
+        This fixes two bugs and changes the behavior of registries that use this default implementation:
+
+        - Allocations with a zero next iteration funding amount, e.g., `{"X": 0.0}`, could not be settled
+          via the settlement factory, although they can be created. They can be settled now.
+          Zero amounts are valid, e.g., for an authorizer that expects net incoming transfers
+          in the next iteration and thus does not need to reserve any funding.
+        - The executors' next iteration funding was not validated by the factory at all. It now rejects
+          negative amounts, and any next iteration funding for allocations that do not enable iterated settlement,
+          i.e., that have `nextIterationFunding = None`. Canton Coin already rejected both in its `Allocation_Settle`
+          choice. Other registries relying on the default implementation now reject them as well.
+
+        The documentation of `AllocationSpecification.nextIterationFunding` now states that amounts MUST be
+        non-negative, and the documentation of the token standard V2 allocation API now states that wallets MUST
+        copy `SettlementInfo` and the transfer leg sides verbatim from the settlement request.
+        Registries MAY require an exact match.
+
       - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
         that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
         SV apps pass the node states once this version is vetted.
