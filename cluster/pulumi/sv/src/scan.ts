@@ -93,15 +93,6 @@ export function installScan(
       .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
       .concat(scanRateLimitEnvVars()),
     resources: config.scanApp?.resources,
-    ...(config.scanApp?.updateHistoryBackfillingFromPeers
-      ? {
-          updateHistoryBackfilling: {
-            enabled: config.scanApp.updateHistoryBackfillingFromPeers.enabled,
-            importUpdatesEnabled: config.scanApp.updateHistoryBackfillingFromPeers.enabled,
-            batchSize: 100,
-          },
-        }
-      : {}),
     ...(config.bulkStorageBuckets
       ? {
           bulkStorage: {

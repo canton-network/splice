@@ -104,8 +104,7 @@ final case class BulkStorageConfig(
       */
     debugObjectsToNotCommit: Seq[String] = Seq.empty,
     backfilling: BulkStorageBackfillingConfig = BulkStorageBackfillingConfig(),
-    updateHistoryLoad: UpdateHistoryLoadConfig =
-      UpdateHistoryLoadConfig(),
+    updateHistoryLoad: UpdateHistoryLoadConfig = UpdateHistoryLoadConfig(),
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!

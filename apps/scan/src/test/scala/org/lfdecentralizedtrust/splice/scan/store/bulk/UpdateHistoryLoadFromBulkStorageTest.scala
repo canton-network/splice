@@ -11,15 +11,13 @@ import io.circe.syntax.*
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2
+import org.lfdecentralizedtrust.splice.scan.ScanApp
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
   ProtobufJsonScanHttpEncodings,
   ScanHttpEncodings,
   ScanJsonSupport,
 }
-import org.lfdecentralizedtrust.splice.scan.config.{
-  ScanStorageConfig,
-  UpdateHistoryLoadConfig,
-}
+import org.lfdecentralizedtrust.splice.scan.config.{ScanStorageConfig, UpdateHistoryLoadConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryLoadFromBulkStorage.*
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{FakeHistoryReadiness, HistoryStart}
@@ -202,18 +200,25 @@ class UpdateHistoryLoadFromBulkStorageTest extends UpdateHistoryTestBase {
     }
   }
 
-  "notStartedBecause" should {
-    "start only when enabled and backfilling from peers is off" in {
-      notStartedBecause(enabled = false, backfillingFromPeersEnabled = false) shouldBe Some(
-        NotStarted.Disabled
-      )
-      notStartedBecause(enabled = false, backfillingFromPeersEnabled = true) shouldBe Some(
-        NotStarted.Disabled
-      )
-      notStartedBecause(enabled = true, backfillingFromPeersEnabled = true) shouldBe Some(
-        NotStarted.BackfillingFromPeers
-      )
-      notStartedBecause(enabled = true, backfillingFromPeersEnabled = false) shouldBe None
+  "ScanApp.historyBackfillingOffBecause" should {
+    "turn update history backfilling from peers off for legacy data, and for loading on any SV but the founding SV" in {
+      val cases = for {
+        isFoundingSv <- Seq(false, true)
+        updateHistoryLoadEnabled <- Seq(false, true)
+        hasLegacyUpdateHistory <- Seq(false, true)
+      } yield (isFoundingSv, updateHistoryLoadEnabled, hasLegacyUpdateHistory)
+      cases.foreach { case c @ (isFoundingSv, updateHistoryLoadEnabled, hasLegacyUpdateHistory) =>
+        withClue(s"(isFoundingSv, updateHistoryLoadEnabled, hasLegacyUpdateHistory) = $c: ") {
+          ScanApp
+            .historyBackfillingOffBecause(
+              isFoundingSv = isFoundingSv,
+              updateHistoryLoadEnabled = updateHistoryLoadEnabled,
+              hasLegacyUpdateHistory = hasLegacyUpdateHistory,
+            )
+            .isDefined shouldBe (hasLegacyUpdateHistory || (updateHistoryLoadEnabled && !isFoundingSv))
+        }
+      }
+      succeed
     }
   }
 

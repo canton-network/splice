@@ -9,12 +9,19 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
+import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
-import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageBackfillingConfig, BulkStorageConfig}
+import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings
+import org.lfdecentralizedtrust.splice.scan.config.{
+  BulkStorageBackfillingConfig,
+  BulkStorageConfig,
+  ScanStorageConfig,
+  UpdateHistoryLoadConfig,
+}
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryStart
-import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests}
+import org.lfdecentralizedtrust.splice.store.{HasS3Mock, PageLimit, S3BucketConnectionForTests}
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsTrigger,
   SummarizingMiningRoundTrigger,
@@ -67,8 +74,6 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllScanAppConfigs((name, scanConfig) =>
           scanConfig.copy(
-            updateHistoryBackfillEnabled =
-              if (name == "sv2Scan") false else scanConfig.updateHistoryBackfillEnabled,
             bulkStorage = BulkStorageConfig(
               snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
@@ -77,6 +82,12 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
               committed = Some(s3ConfigMock(bucket(name, "committed"))),
               backfilling = BulkStorageBackfillingConfig(
                 enabled = true,
+                pollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+              ),
+              // sv2 joins after genesis, so it turns update history
+              // backfilling from peers off by itself.
+              updateHistoryLoad = UpdateHistoryLoadConfig(
+                enabled = name == "sv2Scan",
                 pollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               ),
             ),
@@ -128,20 +139,20 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
         }
       }
 
-      clue("Start sv2, without update history backfilling") {
+      clue("Start sv2, loading its update history from bulk storage") {
         sv2Backend.startSync()
         sv2ScanBackend.startSync()
       }
 
-      val firstOwnSegmentStart =
+      val sv2HistoryStart =
         clue("sv2 records the DSO party hosting time as its history start") {
           eventually() {
             inside(sv2ScanBackend.appState.historyStart.get.futureValue) {
-              case Some(start @ HistoryStart.From(_)) =>
-                start.firstOwnSegmentStart(scanStorageConfigV1)
+              case Some(start @ HistoryStart.From(_)) => start
             }
           }
         }
+      val firstOwnSegmentStart = sv2HistoryStart.firstOwnSegmentStart(scanStorageConfigV1)
 
       def advanceHourlyTo(target: CantonTimestamp): Unit = {
         val hours = Duration.between(getLedgerTime.toInstant, target.toInstant).toHours + 1
@@ -219,5 +230,35 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
         }
         crossing shouldBe empty
       }
+
+      clue(
+        s"sv2 loads the update history up to its history start ${sv2HistoryStart.recordTime} " +
+          "from bulk storage, equal to sv1's"
+      ) {
+        eventually(timeUntilSuccess = 2.minutes) {
+          val sv1Updates = encodedUpdatesUpTo(sv1ScanBackend, sv2HistoryStart.recordTime)
+          sv1Updates should not be empty
+          encodedUpdatesUpTo(sv2ScanBackend, sv2HistoryStart.recordTime) shouldBe sv1Updates
+        }
+      }
+  }
+
+  /** The updates of a Scan up to and including `recordTime`, encoded as bulk
+    * storage encodes them, which leaves out what differs between participants.
+    * Read from the store, because the update history API of sv2 waits for
+    * #6311.
+    */
+  private def encodedUpdatesUpTo(scan: ScanAppBackendReference, recordTime: CantonTimestamp) = {
+    scan.appState.automation.updateHistory
+      .getAllUpdates(None, PageLimit.tryCreate(1000))
+      .futureValue
+      .filter(_.update.update.recordTime <= recordTime)
+      .map(
+        ScanHttpEncodings.encodeUpdateV2(
+          _,
+          ScanStorageConfig.Encoding.ProtobufJson.damlValueEncoding,
+          ScanHttpEncodings.V1,
+        )
+      )
   }
 }

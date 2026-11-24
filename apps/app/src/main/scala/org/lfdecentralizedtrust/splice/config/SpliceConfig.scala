@@ -528,18 +528,27 @@ object SpliceConfig {
       deriveReader[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageBackfillingConfigReader: ConfigReader[BulkStorageBackfillingConfig] =
       deriveReader[BulkStorageBackfillingConfig]
-    implicit val updateHistoryLoadConfigReader
-        : ConfigReader[UpdateHistoryLoadConfig] =
+    implicit val updateHistoryLoadConfigReader: ConfigReader[UpdateHistoryLoadConfig] =
       deriveReader[UpdateHistoryLoadConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig].emap { conf =>
-        Either.cond(
-          conf.dbReadChunkSize > 0,
-          conf,
-          ConfigValidationFailed(
-            s"dbReadChunkSize must be positive, but was ${conf.dbReadChunkSize}"
-          ),
-        )
+        for {
+          _ <- Either.cond(
+            conf.dbReadChunkSize > 0,
+            (),
+            ConfigValidationFailed(
+              s"dbReadChunkSize must be positive, but was ${conf.dbReadChunkSize}"
+            ),
+          )
+          // Only bulk storage with both buckets loads update history.
+          _ <- Either.cond(
+            !conf.updateHistoryLoad.enabled || (conf.staging.isDefined && conf.committed.isDefined),
+            (),
+            ConfigValidationFailed(
+              "update-history-load.enabled needs both the staging and the committed bucket of bulk storage"
+            ),
+          )
+        } yield conf
       }
     implicit val S3ConfigReader: ConfigReader[S3Config] =
       deriveReader[S3Config]
@@ -1116,8 +1125,7 @@ object SpliceConfig {
       deriveWriter[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageBackfillingConfigWriter: ConfigWriter[BulkStorageBackfillingConfig] =
       deriveWriter[BulkStorageBackfillingConfig]
-    implicit val updateHistoryLoadConfigWriter
-        : ConfigWriter[UpdateHistoryLoadConfig] =
+    implicit val updateHistoryLoadConfigWriter: ConfigWriter[UpdateHistoryLoadConfig] =
       deriveWriter[UpdateHistoryLoadConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]

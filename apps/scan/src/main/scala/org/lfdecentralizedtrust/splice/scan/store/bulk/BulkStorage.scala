@@ -59,7 +59,6 @@ class BulkStorage(
     acsSnapshotStore: AcsSnapshotStore,
     updateHistory: UpdateHistory,
     currentMigrationId: Long,
-    legacyUpdateHistoryBackfillEnabled: Boolean,
     kvProvider: ScanKeyValueProvider,
     historyStart: ScanHistoryStart,
     historyReadiness: HistoryReadiness,
@@ -264,32 +263,22 @@ class BulkStorage(
       loggerFactory,
     )
   val updateHistoryLoad: Option[UpdateHistoryLoadFromBulkStorage] =
-    UpdateHistoryLoadFromBulkStorage.notStartedBecause(
-      appConfig.updateHistoryLoad.enabled,
-      legacyUpdateHistoryBackfillEnabled,
-    ) match {
-      case Some(UpdateHistoryLoadFromBulkStorage.NotStarted.Disabled) => None
-      case Some(reason @ UpdateHistoryLoadFromBulkStorage.NotStarted.BackfillingFromPeers) =>
-        logger.warn(reason.description)
-        None
-      case None =>
-        Some(
-          new UpdateHistoryLoadFromBulkStorage(
-            appConfig.updateHistoryLoad,
-            storageConfig,
-            updateHistory,
-            new UpdateHistoryLoadFromBulkStorage.BucketCommittedSegments(
-              reader,
-              committedConnection,
-              appConfig.updateHistoryLoad,
-            ),
-            historyReadiness,
-            updateHistoryLoadProgress,
-            historyMetrics.BulkStorage.updateHistoryLoadedUpdates,
-            loggerFactory,
-          )
-        )
-    }
+    Option.when(appConfig.updateHistoryLoad.enabled)(
+      new UpdateHistoryLoadFromBulkStorage(
+        appConfig.updateHistoryLoad,
+        storageConfig,
+        updateHistory,
+        new UpdateHistoryLoadFromBulkStorage.BucketCommittedSegments(
+          reader,
+          committedConnection,
+          appConfig.updateHistoryLoad,
+        ),
+        historyReadiness,
+        updateHistoryLoadProgress,
+        historyMetrics.BulkStorage.updateHistoryLoadedUpdates,
+        loggerFactory,
+      )
+    )
 
   // Services are only started once initialization has completed.
   private lazy val services =
@@ -354,7 +343,6 @@ object BulkStorage {
       acsSnapshotStore: AcsSnapshotStore,
       updateHistory: UpdateHistory,
       currentMigrationId: Long,
-      legacyUpdateHistoryBackfillEnabled: Boolean,
       kvProvider: ScanKeyValueProvider,
       historyStart: ScanHistoryStart,
       historyReadiness: HistoryReadiness,
@@ -391,7 +379,6 @@ object BulkStorage {
         acsSnapshotStore,
         updateHistory,
         currentMigrationId,
-        legacyUpdateHistoryBackfillEnabled,
         kvProvider,
         historyStart,
         historyReadiness,

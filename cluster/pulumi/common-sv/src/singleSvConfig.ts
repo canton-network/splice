@@ -119,13 +119,6 @@ const ScanAppConfigSchema = z
   .object({
     bigQuery: ScanBigQueryConfigSchema.optional(),
     bulkStorage: BulkStorageConfigSchema.optional(),
-    // backfilling update history from peers; turn it off to load the update
-    // history from bulk storage instead
-    updateHistoryBackfillingFromPeers: z
-      .object({
-        enabled: z.boolean(),
-      })
-      .optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     resources: K8sResourceSchema,

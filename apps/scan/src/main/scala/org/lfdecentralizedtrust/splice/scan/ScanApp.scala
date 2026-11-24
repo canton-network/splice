@@ -267,14 +267,19 @@ class ScanApp(
         clock,
         partitionRunwayDays = config.updateHistoryPartitionRunwayDays,
       )
+      historyBackfillingOffBecause = ScanApp.historyBackfillingOffBecause(
+        isFoundingSv = config.isFirstSv,
+        updateHistoryLoadEnabled = config.bulkStorage.updateHistoryLoad.enabled,
+        hasLegacyUpdateHistory = updateHistory.lastLegacyRecordTime.isDefined,
+      )
       // The config as this Scan applies it. Its update history backfilling
       // flags depend on the update history, so everything from here on reads
       // them from this, not from `config`.
-      effectiveConfig = ScanApp.withoutHistoryBackfillingAfterCutover(config, updateHistory)
-      _ = updateHistory.lastLegacyRecordTime.foreach(_ =>
-        logger.info(
-          "Update history backfilling is off: this SV has update history from before the cutover to partitioned tables"
-        )
+      effectiveConfig = historyBackfillingOffBecause.fold(config)(_ =>
+        ScanApp.withoutHistoryBackfilling(config)
+      )
+      _ = historyBackfillingOffBecause.foreach(reason =>
+        logger.info(s"Update history backfilling from peers is off: $reason")
       )
       historicalVotesStore = DbVotesStore(
         TxLogStoreId.unwrap(store.txLogStoreId),
@@ -369,7 +374,6 @@ class ScanApp(
             acsSnapshotStore,
             updateHistory,
             currentMigrationId = domainMigrationId,
-            legacyUpdateHistoryBackfillEnabled = effectiveConfig.updateHistoryBackfillEnabled,
             kvProvider,
             historyStart,
             historyReadiness,
@@ -720,18 +724,32 @@ class ScanApp(
 
 object ScanApp {
 
-  def withoutHistoryBackfillingAfterCutover(
-      config: ScanAppBackendConfig,
-      updateHistory: UpdateHistory,
-  ): ScanAppBackendConfig =
-    updateHistory.lastLegacyRecordTime
-      .map(_ =>
-        config.copy(
-          updateHistoryBackfillEnabled = false,
-          updateHistoryBackfillImportUpdatesEnabled = false,
-        )
-      )
-      .getOrElse(config)
+  /** Why this Scan runs without update history backfilling from peers
+    * whatever its config says, None if it follows its config.
+    *
+    * Backfilling from peers is off on an SV with update history from before
+    * the cutover to partitioned tables, which it cannot backfill into
+    * (#8481), and on an SV that loads its update history from bulk storage
+    * instead (#6253). The founding SV keeps it, because it marks backfilling
+    * as complete from the founding transaction, which the update history
+    * read APIs wait for; it loads nothing from bulk storage anyway.
+    */
+  def historyBackfillingOffBecause(
+      isFoundingSv: Boolean,
+      updateHistoryLoadEnabled: Boolean,
+      hasLegacyUpdateHistory: Boolean,
+  ): Option[String] =
+    if (hasLegacyUpdateHistory)
+      Some("this SV has update history from before the cutover to partitioned tables")
+    else if (updateHistoryLoadEnabled && !isFoundingSv)
+      Some("this SV loads its update history from bulk storage instead")
+    else None
+
+  def withoutHistoryBackfilling(config: ScanAppBackendConfig): ScanAppBackendConfig =
+    config.copy(
+      updateHistoryBackfillEnabled = false,
+      updateHistoryBackfillImportUpdatesEnabled = false,
+    )
 
   case class State(
       participantAdminConnection: ParticipantAdminConnection,

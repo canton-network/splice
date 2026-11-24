@@ -17,10 +17,7 @@ import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.{PekkoRetryableService, PekkoRetryingService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.scan.config.{
-  ScanStorageConfig,
-  UpdateHistoryLoadConfig,
-}
+import org.lfdecentralizedtrust.splice.scan.config.{ScanStorageConfig, UpdateHistoryLoadConfig}
 import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{HistoryReadiness, HistoryStart}
 import org.lfdecentralizedtrust.splice.store.{
@@ -246,33 +243,6 @@ object UpdateHistoryLoadFromBulkStorage {
   val description = "UpdateHistoryLoadFromBulkStorage"
 
   val lastLoadedSegmentKvStoreKey = "update_history_from_bulk_storage_cursor"
-
-  /** Why loading update history from bulk storage is not started, None if it is
-    * started.
-    */
-  def notStartedBecause(
-      enabled: Boolean,
-      backfillingFromPeersEnabled: Boolean,
-  ): Option[NotStarted] =
-    if (!enabled) Some(NotStarted.Disabled)
-    else if (backfillingFromPeersEnabled) Some(NotStarted.BackfillingFromPeers)
-    else None
-
-  sealed abstract class NotStarted(val description: String) extends Product with Serializable
-  object NotStarted {
-    case object Disabled extends NotStarted("Loading update history from bulk storage is disabled")
-
-    /** With backfilling from peers enabled, it fills the same history, and the
-      * history start is genesis once it is complete.
-      */
-    case object BackfillingFromPeers
-        extends NotStarted(
-          "Not loading update history from bulk storage although bulk-storage.update-history-load.enabled is set, " +
-            "because update history backfilling from peers is enabled too. To load it from bulk storage, " +
-            "set update-history-backfill-enabled = false (Helm: updateHistoryBackfilling.enabled, " +
-            "Pulumi: scanApp.updateHistoryBackfillingFromPeers.enabled)"
-        )
-  }
 
   /** Splits a batch into runs of updates with the same migration id, keeping
     * their order, because one insert is for one migration id.
