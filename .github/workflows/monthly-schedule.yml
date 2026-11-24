@@ -8,6 +8,11 @@ on:
         required: true
         type: string
 
+      canton_version:
+        description: "Canton version, e.g. 3.5"
+        required: true
+        type: string
+
       month:
         description: "Month in YYYY-MM format, e.g. 2026-08"
         required: true
@@ -48,6 +53,7 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           MONDAY_BOARD_ID: ${{ secrets.MONDAY_BOARD_ID }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_CANTON_VERSION: ${{ inputs.canton_version }}
           INPUT_MONTH: ${{ inputs.month }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
           INPUT_DEV_ONLY: ${{ inputs.dev_only }}
@@ -56,6 +62,7 @@ jobs:
         run: |
           ARGS=(
             "$INPUT_VERSION"
+            "$INPUT_CANTON_VERSION"
             "$INPUT_MONTH"
           )
 
