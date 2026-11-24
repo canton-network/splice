@@ -644,37 +644,6 @@ class SvFrontendIntegrationTest
           }
         }
 
-        val newActivityWeight = BigDecimal("3.0")
-
-        val updateProposalContractId = assertCreateProposal(
-          "SRARC_UpdateFeaturedAppRight",
-          "update-featured-app",
-        ) { implicit webDriver =>
-          fillOutTextField("update-featured-app-partyId", providerPartyId)
-          selectFirstMuiOption("update-featured-app-rightCid-dropdown")
-          fillOutTextField("update-featured-app-activityWeight", newActivityWeight.toString)
-        }
-
-        clue("vote the update request to execution") {
-          val updateTrackingCid = eventually() {
-            val voteRequest = getVoteRequestForProposal(updateProposalContractId)
-            if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
-            else voteRequest.contractId
-          }
-
-          eventuallySucceeds() {
-            sv3Backend.castVote(updateTrackingCid, isAccepted = true, "", "")
-          }
-
-          eventually() {
-            val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
-            featuredAppRight shouldBe a[Some[?]]
-            featuredAppRight.value.payload.activityWeight.toScala.map(
-              BigDecimal(_)
-            ) shouldBe Some(newActivityWeight)
-          }
-        }
-
         val amendedActivityWeight = BigDecimal("3.5")
         val amendProposalContractId = assertCreateProposal(
           "SRARC_CreateFeaturedAppConfigUpdateInstruction",
@@ -707,7 +676,7 @@ class SvFrontendIntegrationTest
                 ) { case single :: Nil =>
                   single._1 shouldBe providerPartyId
                   single._2.baseConfig.activityWeight.toScala
-                    .map(BigDecimal(_)) shouldBe Some(newActivityWeight)
+                    .map(BigDecimal(_)) shouldBe Some(activityWeight)
                   single._2.newConfig.activityWeight.toScala
                     .map(BigDecimal(_)) shouldBe Some(amendedActivityWeight)
                 }

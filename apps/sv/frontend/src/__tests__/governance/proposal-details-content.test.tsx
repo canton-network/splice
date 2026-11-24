@@ -465,7 +465,7 @@ describe('Proposal Details Content', () => {
 
   test('should render amend featured app config proposal details', () => {
     const amendDetails = {
-      actionName: 'Update Featured Application Metadata (use with Splice 0.10.0 and later)',
+      actionName: 'Update Featured Application Metadata',
       action: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
       proposal: {
         updates: [
@@ -499,9 +499,7 @@ describe('Proposal Details Content', () => {
     );
 
     const action = screen.getByTestId('proposal-details-action-value');
-    expect(action.textContent).toMatch(
-      'Update Featured Application Metadata (use with Splice 0.10.0 and later)'
-    );
+    expect(action.textContent).toMatch('Update Featured Application Metadata');
 
     const amendSection = screen.getByTestId('proposal-details-amend-feature-app-section');
     expect(amendSection).toBeInTheDocument();

@@ -59,8 +59,7 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
   SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
-  SRARC_CreateFeaturedAppConfigUpdateInstruction:
-    'Update Featured Application Metadata (use with Splice 0.10.0 and later)',
+  SRARC_CreateFeaturedAppConfigUpdateInstruction: 'Update Featured Application Metadata',
 });
 
 export const createProposalActions: {
@@ -70,13 +69,8 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
-  // TODO(#8058): remove this legacy option in Splice 0.11.0
   {
-    name: 'Update Featured Application Metadata (use before Splice 0.10.0)',
-    value: 'SRARC_UpdateFeaturedAppRight',
-  },
-  {
-    name: 'Update Featured Application Metadata (use with Splice 0.10.0 and later)',
+    name: 'Update Featured Application Metadata',
     value: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
   },
   {
