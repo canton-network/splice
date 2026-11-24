@@ -66,7 +66,7 @@ class AcsSnapshotBulkStoragePersistentProgress(
 ) extends NamedLogging
     with Spanning {
 
-  import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.timestampCodec
+  import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
 
   def readLatestProcessedSnapshotTimestamp(implicit
       tc: TraceContext,

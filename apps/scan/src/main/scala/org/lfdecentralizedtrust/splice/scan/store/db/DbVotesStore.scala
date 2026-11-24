@@ -77,7 +77,7 @@ class DbVotesStore private (
   override def getFirstIngestedRecordTime()(implicit
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] = {
-    import ScanKeyValueProvider.timestampCodec
+    import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
     kvStore
       .readValueAndLogOnDecodingFailure[CantonTimestamp](firstIngestedRecordTimeKey(storeId))
       .value
@@ -427,7 +427,7 @@ object DbVotesStore {
       storeId: Int,
       recordTime: CantonTimestamp,
   ) extends PreparedIngestionAction {
-    import ScanKeyValueProvider.timestampCodec
+    import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
 
     override def action =
       kvStore.setValueIfNotExistsAction(firstIngestedRecordTimeKey(storeId), recordTime)

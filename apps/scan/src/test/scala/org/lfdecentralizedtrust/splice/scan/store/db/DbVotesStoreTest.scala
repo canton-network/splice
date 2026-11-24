@@ -601,8 +601,8 @@ class DbVotesStoreTest
           // The update history misses the exercise of one vote
           removed <- futureUnlessShutdownToFuture(
             storage.underlying.queryAndUpdate(
-              sqlu"""delete from update_history_exercises
-                     where row_id = (select min(row_id) from update_history_exercises
+              sqlu"""delete from update_history_exercises_legacy
+                     where row_id = (select min(row_id) from update_history_exercises_legacy
                                      where choice = 'DsoRules_CloseVoteRequest')""",
               "test.removeExercise",
             )
@@ -650,9 +650,9 @@ class DbVotesStoreTest
                 storage.underlying.queryAndUpdate(
                   DBIO
                     .seq(
-                      sqlu"""delete from update_history_exercises
+                      sqlu"""delete from update_history_exercises_legacy
                              where record_time >= ${firstIngested.toMicros}""",
-                      sqlu"""delete from update_history_transactions
+                      sqlu"""delete from update_history_transactions_legacy
                              where record_time >= ${firstIngested.toMicros}""",
                     )
                     .map(_ => ()),
@@ -1139,9 +1139,9 @@ class DbVotesStoreTest
               sqlu"""insert into update_history_last_ingested_offsets (history_id, migration_id)
                      values ($historyId, $domainMigrationId)
                      on conflict do nothing""",
-              sqlu"""delete from update_history_transactions
+              sqlu"""delete from update_history_transactions_legacy
                      where history_id = $historyId and update_id = 'last-ingested'""",
-              sqlu"""insert into update_history_transactions
+              sqlu"""insert into update_history_transactions_legacy
                        (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
                         effective_at, root_event_ids)
                      values ($historyId, 'last-ingested', ${ingestedUpTo.toMicros}, 'last-ingested',
@@ -1180,7 +1180,7 @@ class DbVotesStoreTest
       storage.underlying.queryAndUpdate(
         DBIO
           .seq(
-            sqlu"""insert into update_history_transactions
+            sqlu"""insert into update_history_transactions_legacy
                      (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
                       effective_at, root_event_ids)
                    select $historyId, substring(t.event_id from '^#?(.*):[0-9]+$$'), t.record_time,
@@ -1188,7 +1188,7 @@ class DbVotesStoreTest
                    from scan_txlog_store t
                    where t.store_id = $storeId and t.entry_type = 'vot'
                    on conflict do nothing""",
-            sqlu"""insert into update_history_exercises
+            sqlu"""insert into update_history_exercises_legacy
                      (history_id, event_id, update_row_id, child_event_ids, choice, package_name,
                       template_id_package_id, template_id_module_name, template_id_entity_name, contract_id,
                       consuming, argument, result, acting_parties, record_time, update_id, domain_id, migration_id)
@@ -1197,7 +1197,7 @@ class DbVotesStoreTest
                           $dsoRulesCid, false, '{}'::jsonb, '{}'::jsonb, array[]::text[],
                           u.record_time, u.update_id, u.domain_id, u.migration_id
                    from scan_txlog_store t
-                            join update_history_transactions u
+                            join update_history_transactions_legacy u
                                  on u.history_id = $historyId
                                      and u.migration_id = t.migration_id
                                      and u.domain_id = t.domain_id
@@ -1231,8 +1231,9 @@ class DbVotesStoreTest
     val script = scala.io.Source
       .fromResource("db/migration/canton-network/postgres/stable/V084__votes_store_from_txlog.sql")
       .mkString
+    val migration = onLegacyUpdateHistory(script)
     futureUnlessShutdownToFuture(
-      storage.underlying.queryAndUpdate(sqlu"#$script".map(_ => ()), "test.runTxLogMigration")
+      storage.underlying.queryAndUpdate(sqlu"#$migration".map(_ => ()), "test.runTxLogMigration")
     )
   }
 
@@ -1374,24 +1375,24 @@ class DbVotesStoreTest
       storage.underlying.queryAndUpdate(
         DBIO
           .seq(
-            sqlu"""insert into update_history_transactions
+            sqlu"""insert into update_history_transactions_legacy
                    (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
                     effective_at, root_event_ids)
                  select $historyId, v.update_id, v.record_time, '0', v.synchronizer_id, $domainMigrationId,
                         v.record_time, array['#0']
                  from votes_store_results v
                  where v.update_id = $updateId
-                   and not exists (select 1 from update_history_transactions t
+                   and not exists (select 1 from update_history_transactions_legacy t
                                    where t.history_id = $historyId and t.update_id = $updateId)
                  limit 1""",
-            sqlu"""insert into update_history_exercises
+            sqlu"""insert into update_history_exercises_legacy
                    (history_id, event_id, update_row_id, child_event_ids, choice, package_name, template_id_package_id,
                     template_id_module_name, template_id_entity_name, contract_id, consuming, argument, result, acting_parties,
                     record_time, update_id, domain_id, migration_id)
                  select $historyId, '#' || $updateId || ':' || $nodeId, t.row_id, array[]::text[], $choice, 'splice-dso-governance', 'pkg',
                         'Splice.DsoRules', 'DsoRules', $contractId, false, '{}'::jsonb, '{}'::jsonb, array[]::text[],
                         t.record_time, t.update_id, t.domain_id, t.migration_id
-                 from update_history_transactions t
+                 from update_history_transactions_legacy t
                  where t.history_id = $historyId and t.update_id = $updateId""",
           )
           .map(_ => ()),
@@ -1407,11 +1408,16 @@ class DbVotesStoreTest
     val script = scala.io.Source
       .fromResource("db/migration/canton-network/postgres/stable/V081__votes_store_contract_id.sql")
       .mkString
-    val update = script.substring(script.indexOf("update votes_store_results"))
+    val update = onLegacyUpdateHistory(
+      script.substring(script.indexOf("update votes_store_results"))
+    )
     futureUnlessShutdownToFuture(
       storage.underlying.queryAndUpdate(sqlu"#$update".map(_ => ()), "test.runMigration")
     )
   }
+
+  private def onLegacyUpdateHistory(script: String): String =
+    script.replaceAll("\\b(update_history_(transactions|exercises))\\b", "$1_legacy")
 
   private case class Stores(
       scanStore: ScanStore,
@@ -1543,7 +1549,9 @@ class DbVotesStoreTest
         kvStore,
         loggerFactory,
       )
-      initializeResult <- scanStore.multiDomainAcsStore.testIngestionSink.initialize()
+      initializeResult <- scanStore.multiDomainAcsStore.testIngestionSink.initialize(
+        mockLedgerConnection()
+      )
       _ <- initializeResult match {
         case ResumeAtOffset(_) | UpdateHistoryInitAtLatestPrunedOffset => Future.unit
         case InitializeAcsAtLatestOffset | InitializeAcsAtOffset(_) =>
