@@ -407,8 +407,10 @@ class UpdateHistoryBackfillingFromBulkStorageTest extends UpdateHistoryTestBase 
       if (recordTime >= destinationIngestsFrom) createOnDestinationToo(i, recordTime)
       else create(domain1, validContractId(i), validOffset(i), party1, source, recordTime)
     for {
-      _ <- initStore(source)
-      _ <- initStore(destination)
+      // The partitioned tables are shared, so this creates the day's partitions
+      // for both histories.
+      _ <- initStore(source, timeStart = at(0, 0), partitionRunwayDays = 1)
+      _ <- initStore(destination, timeStart = at(0, 0), partitionRunwayDays = 1)
       _ <- create(domain1, validContractId(1), validOffset(1), party1, source, at(0, 10))
       _ <- create(domain1, validContractId(2), validOffset(2), party1, source, at(0, 40))
       _ <- unassign(

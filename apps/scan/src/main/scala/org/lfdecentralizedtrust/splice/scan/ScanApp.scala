@@ -267,7 +267,10 @@ class ScanApp(
         clock,
         partitionRunwayDays = config.updateHistoryPartitionRunwayDays,
       )
-      automationConfig = ScanApp.withoutHistoryBackfillingAfterCutover(config, updateHistory)
+      // The config as this Scan applies it. Its update history backfilling
+      // flags depend on the update history, so everything from here on reads
+      // them from this, not from `config`.
+      effectiveConfig = ScanApp.withoutHistoryBackfillingAfterCutover(config, updateHistory)
       _ = updateHistory.lastLegacyRecordTime.foreach(_ =>
         logger.info(
           "Update history backfilling is off: this SV has update history from before the cutover to partitioned tables"
@@ -316,12 +319,6 @@ class ScanApp(
           retryProvider,
         )
       )
-      // The config as this Scan applies it. Its update history backfilling
-      // flags can depend on the update history (#7770), so everything from here
-      // on reads them from this, not from `config`. With #7770, use the line
-      // below.
-      effectiveConfig = config
-      // effectiveConfig = ScanApp.withoutHistoryBackfillingAfterCutover(config, updateHistory)
       acsSnapshotStore = AcsSnapshotStore(
         storage,
         updateHistory,
@@ -412,7 +409,7 @@ class ScanApp(
         loggerFactory,
       )
       automation = new ScanAutomationService(
-        automationConfig,
+        effectiveConfig,
         clock,
         ledgerClient,
         retryProvider,

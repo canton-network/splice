@@ -2549,7 +2549,6 @@ class UpdateHistory private (
       fromRecordTime: CantonTimestamp,
       toRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
-    /* With the partitioned tables (#6257):
     val days = Iterator
       .iterate(dayOf(fromRecordTime))(_.plusDays(1))
       .takeWhile(!_.isAfter(dayOf(toRecordTime)))
@@ -2560,11 +2559,6 @@ class UpdateHistory private (
       _ <- MonadUtil.sequentialTraverse(missing)(createPartitions)
       _ <- if (missing.nonEmpty) analyzePartitionedTables() else Future.unit
     } yield ()
-     */
-    logger.trace(
-      s"No update history partitions to create for record times $fromRecordTime to $toRecordTime"
-    )
-    Future.unit
   }
 
   lazy val destinationHistory: HistoryBackfilling.DestinationHistory[
