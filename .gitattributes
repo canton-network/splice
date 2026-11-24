@@ -1,1 +1,2 @@
 *.daml linguist-language=Haskell
+apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/DarResources.scala linguist-generated=true
