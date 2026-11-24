@@ -6,7 +6,7 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 import { ContractId } from '@daml/types';
 
-import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../contexts/GovernanceReadClientContext';
 import { useConfigPollInterval } from '../utils';
 import { retryOnRateLimit, retryQuery } from '@canton-network/splice-common-frontend';
 
@@ -15,7 +15,7 @@ export const useVoteRequest = (
   retry: boolean = true,
   poll: boolean = true
 ): UseQueryResult<Contract<VoteRequest>> => {
-  const { lookupDsoRulesVoteRequest } = useSvAdminClient();
+  const { lookupDsoRulesVoteRequest } = useGovernanceReadClient();
   const pollInterval = useConfigPollInterval();
 
   return useQuery({

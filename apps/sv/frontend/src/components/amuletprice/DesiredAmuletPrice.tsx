@@ -138,7 +138,7 @@ const DesiredAmuletPrice: React.FC<DesiredAmuletPriceProps> = ({ canEditVote }) 
 };
 
 interface EditDesiredPriceSectionProps {
-  svPartyId: string;
+  svPartyId: string | undefined;
   amuletName: string;
   isReadyToEdit: boolean;
   curPriceText: string;

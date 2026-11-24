@@ -71,7 +71,7 @@ export const VoteRequestDetails: React.FC = () => {
     );
   }
 
-  const svPartyId = dsoInfosQuery.data?.svPartyId || '';
+  const svPartyId = dsoInfosQuery.data?.svPartyId;
   const svs = dsoInfosQuery.data?.dsoRules.payload.svs;
   const allSvs = svs?.entriesArray().map(e => e[0]) || [];
   const amuletOrDsoAction = getActionValue(request.action);

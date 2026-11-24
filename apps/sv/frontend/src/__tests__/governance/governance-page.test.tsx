@@ -6,12 +6,16 @@ import { SvConfigProvider } from '../../utils';
 import userEvent from '@testing-library/user-event';
 import App from '../../App';
 import { navigateToGovernancePage } from '../helpers';
+import { http, HttpResponse } from 'msw';
 import {
   activeProposalCid,
   closedVoteCid,
+  svPartyId,
+  voteRequests,
   voteResultsAmuletRules,
   voteResultsDsoRules,
 } from '../mocks/constants';
+import { server, svUrl } from '../setup/setup';
 import { CONTRACT_ID_VALIDATION_MESSAGE } from '../../utils/proposalSearch';
 
 type UserEvent = ReturnType<typeof userEvent.setup>;
@@ -75,6 +79,31 @@ describe('Governance Page', () => {
 
     const actions = screen.getAllByTestId('action-required-card');
     expect(actions.length).toBe(4);
+  });
+
+  test('nav badge counts the vote requests the SV has not voted on', async () => {
+    // The SV has voted on the first request only, so the badge counts the other ones.
+    const [first, ...rest] = voteRequests.dso_rules_vote_requests;
+    const firstWithSvVote = {
+      ...first,
+      payload: {
+        ...(first.payload as object),
+        votes: [['sv', { sv: svPartyId, accept: true, reason: { url: '', body: '' } }]],
+      },
+    };
+    server.use(
+      http.get(`${svUrl}/v0/admin/sv/voterequests`, () =>
+        HttpResponse.json({ dso_rules_vote_requests: [firstWithSvVote, ...rest] })
+      )
+    );
+    render(<GovernanceWithConfig />);
+
+    await waitFor(() =>
+      expect(document.getElementById('nav-badge-governance-count')).toHaveTextContent(
+        String(rest.length)
+      )
+    );
+    expect(rest.length).toBeGreaterThan(0);
   });
 
   test('should show the correct number of Inflight Proposals', async () => {

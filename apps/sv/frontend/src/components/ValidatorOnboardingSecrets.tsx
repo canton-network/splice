@@ -27,7 +27,7 @@ import TableRow from '@mui/material/TableRow';
 
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
 import { useValidatorOnboardings } from '../hooks/useValidatorOnboardings';
-import { useSvConfig } from '../utils';
+import { useOperatorConfig } from '../utils';
 import { useNetworkInstanceName } from '../hooks';
 import dayjs from 'dayjs';
 import { dateTimeFormatISO, getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
@@ -215,7 +215,7 @@ const OnboardingRow: React.FC<OnboardingRowProps> = props => {
 };
 
 const ValidatorOnboardingSecretsWithContexts: React.FC = () => {
-  const config = useSvConfig();
+  const config = useOperatorConfig();
   return (
     <SvClientProvider url={config.services.sv.url}>
       <ValidatorOnboardingSecrets />
