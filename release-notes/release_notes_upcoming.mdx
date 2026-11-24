@@ -17,9 +17,6 @@
       deprecated: `true` is accepted and has no effect, `false` is rejected at startup. Remove it from your configuration.
     - An SV that joins after the switch cannot backfill update history from other SVs until a later release.
       Its Scan does not create ACS snapshots until then.
-    - Update history backfilling stops with this upgrade. Before upgrading, check that `/v0/backfilling/status` of your
-      Scan returns `complete: true`. A Scan that is upgraded while its backfilling is incomplete stays incomplete and
-      does not create ACS snapshots until a later release.
 
   - Validator App
 
