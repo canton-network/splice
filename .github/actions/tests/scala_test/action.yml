@@ -264,6 +264,12 @@ runs:
         cmd_retry_count: 5 # Retry in case of dependency download errors
         additional_nix_args: "--keep DOCKER_CERT_PATH --keep DOCKER_HOST --keep DOCKER_MACHINE_NAME --keep DOCKER_TLS_VERIFY --keep PULUMI_VERSION --keep NO_PROXY --keep CIRCLE_REPOSITORY_URL --keep CIRCLE_SHA1"
 
+    - name: Compile tests
+      if: ${{ steps.list_tests.outputs.test_count != '0' }}
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        cmd: Test/compile
+
     - name: Wait for Canton to be ready
       shell: bash
       run: |
