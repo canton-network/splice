@@ -60,7 +60,9 @@ def parse_args() -> argparse.Namespace:
         description="Create/update the monthly Splice release schedule in monday.com."
     )
 
-    parser.add_argument("version", help="Minor version, e.g. 0.8")
+    parser.add_argument("version", help="Splice minor version, e.g. 0.8")
+
+    parser.add_argument("canton_version", help="Canton minor version, e.g. 3.5")
 
     parser.add_argument("month", help="Month in YYYY-MM format, e.g. 2026-08")
 
@@ -80,6 +82,9 @@ def parse_args() -> argparse.Namespace:
 
     if re.fullmatch(r"\d+\.\d+", args.version) is None:
         parser.error("version must be in MAJOR.MINOR form, for example 0.8")
+
+    if re.fullmatch(r"\d+\.\d+", args.canton_version) is None:
+        parser.error("canton_version must be in MAJOR.MINOR form, for example 3.5")
 
     if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", args.month) is None:
         parser.error("month must be in YYYY-MM format")
@@ -663,7 +668,7 @@ def set_dependency(
     )
 
 
-def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
+def make_schedule(version: str, canton_version: str, month: str) -> list[ScheduledEvent]:
     events: list[ScheduledEvent] = []
 
     patch_count = mondays_in_month(month)
@@ -791,7 +796,9 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
         # Canton & WG releases are cut the day before the Splice release.
         events.append(
             ScheduledEvent(
-                title=(f"Cut Canton & WG releases for Splice {version}.{patch}"),
+                title=(
+                    f"Cut Canton {canton_version}.x & WG releases for Splice {version}.{patch}"
+                ),
                 date=splice_cut_date - datetime.timedelta(days=1),
                 network="",
                 activity=(ACTIVITY_RELEASE),
@@ -846,7 +853,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
 
     events.append(
         ScheduledEvent(
-            title=(f"Cut Canton & WG release line for Splice {version}.0"),
+            title=(f"Cut Canton {canton_version} release line for Splice {version}.0"),
             date=schedule_date(month, "tuesday", -3),
             network="",
             activity=(ACTIVITY_RELEASE),
@@ -858,7 +865,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
     return events
 
 
-def calendar_markdown(version: str, month: str, events: list[ScheduledEvent]) -> str:
+def calendar_markdown(version: str, canton_version: str, month: str, events: list[ScheduledEvent]) -> str:
     first_monday = first_monday_in_month(month)
 
     def week_of(event: ScheduledEvent) -> int:
@@ -885,7 +892,7 @@ def calendar_markdown(version: str, month: str, events: list[ScheduledEvent]) ->
     weekdays = sorted({weekday for _, weekday in cells})
 
     lines = [
-        f"## Splice {version}.x schedule for {month}",
+        f"## Splice {version}.x (Canton {canton_version}.x) schedule for {month}",
         "",
         "Week 0 starts on the first Monday of the month. Times are US Eastern.",
         "",
@@ -905,8 +912,10 @@ def calendar_markdown(version: str, month: str, events: list[ScheduledEvent]) ->
     return "\n".join(lines) + "\n"
 
 
-def write_calendar(version: str, month: str, events: list[ScheduledEvent]) -> None:
-    markdown = calendar_markdown(version, month, events)
+def write_calendar(
+    version: str, canton_version: str, month: str, events: list[ScheduledEvent]
+) -> None:
+    markdown = calendar_markdown(version, canton_version, month, events)
 
     print(markdown)
 
@@ -932,6 +941,8 @@ def main() -> None:
 
     print(f"Splice {args.version}.x")
 
+    print(f"Canton {args.canton_version}.x")
+
     print(f"Monday board: {board_id}")
 
     print(f"Target group: {group_name}")
@@ -950,7 +961,7 @@ def main() -> None:
 
     print("Preflight validation: OK")
 
-    events = make_schedule(args.version, args.month)
+    events = make_schedule(args.version, args.canton_version, args.month)
 
     if args.dev_only:
         events = [event for event in events if event.dev]
@@ -960,7 +971,7 @@ def main() -> None:
     print()
 
     if args.dry_run:
-        write_calendar(args.version, args.month, events)
+        write_calendar(args.version, args.canton_version, args.month, events)
 
     item_ids_by_title: dict[str, str] = {}
 
