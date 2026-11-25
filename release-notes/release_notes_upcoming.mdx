@@ -13,16 +13,30 @@
       repair commands such as `participant.repair.import_acs`.
       The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
 
+  - Daml
+
+    - Dedicated synchronizers ([CIP-0132](https://github.com/canton-foundation/cips/blob/main/cip-0132/cip-0132.md)):
+      the SVs can register, update and archive a dedicated synchronizer and its paymaster by vote, through the new
+      `DsoRules` actions `SRARC_RegisterSynchronizer`, `SRARC_UpdateSynchronizerRegistration` and
+      `SRARC_ArchiveSynchronizerRegistration`. A registered synchronizer's paymaster can buy traffic for it through
+      `AmuletRules_BuyMemberTraffic` or the token standard.
+
   - Scan App
 
     - SVs can enable bulk storage: Scan exports its update history and daily ACS snapshots to S3-compatible object
       storage. It is optional for now. See [SV Bulk Storage](https://docs.canton.network/global-synchronizer/production-operations/sv-bulk-storage)
       for the buckets, credentials and Helm values, and the commented `bulkStorage` section in the example `scan-values.yaml`.
+    - For a token standard traffic purchase whose memo names a registered dedicated synchronizer, the transfer
+      factory endpoints (`/registry/transfer-instruction/v1/transfer-factory` and
+      `/registry/transfer-instruction/v2/transfer-factory`) now return the synchronizer's `DedicatedSynchronizer`
+      contract in the choice context under the `dedicated-synchronizer` key. The synchronizer's paymaster needs it
+      to buy traffic for the synchronizer through the token standard.
 
   - SV App
 
     - Removed the legacy "Update Featured Application Metadata (use before Splice 0.10.0)" proposal option from the SV UI.
       Use "Update Featured Application Metadata" instead. Existing votes of the old type are still displayed.
+    - The SV UI supports the votes to register, update and archive a dedicated synchronizer.
 
   - Validator
 

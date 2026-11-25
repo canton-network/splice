@@ -2019,7 +2019,7 @@ buyMemberTraffic eventLogCid csum trafficConfig optPaymasterPurchase purchase (t
     numPurchases = 1
     amuletSpent = trafficCostAmulet
     usdSpent = trafficCostUsd
-  -- TODO(ChainSafe/canton-extending-mainnet#155): Given a paymaster's purchase, record the
+  -- TODO(ChainSafe/canton-extending-mainnet#163): Given a paymaster's purchase, record the
   -- `paymasterActivity` it earns for `purchase.trafficAmount` through the CIP-0104
   -- `ActivityRecorder` hook once upstream Splice ships it.
   pure MemberTrafficPurchaseResult with ..
