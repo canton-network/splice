@@ -108,6 +108,9 @@
           }
         }
       },
+      "containerSecurityContext": {
+        "runAsUser": 1001
+      },
       "extraEnv": [
         {
           "name": "WG_STORE_PASSWORD",
