@@ -1051,6 +1051,85 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
     }
   }
 
+  "DbScanVerdictStore.insertVerdictAndTransactionViews" should {
+
+    "attach each verdict's views to its own row in a multi-verdict batch" in {
+      val viewIdsByUpdateId = Seq(
+        "update1" -> Seq(0),
+        "update2" -> Seq(0, 1, 2),
+        "update3" -> Seq.empty[Int],
+        "update4" -> Seq(0, 1),
+      )
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        _ <- verdictStore.insertVerdictAndTransactionViews(
+          viewIdsByUpdateId.zipWithIndex.map { case ((updateId, viewIds), i) =>
+            mkVerdict(
+              verdictStore,
+              updateId,
+              CantonTimestamp.MinValue.plusSeconds(i.toLong + 1),
+            ) -> { (rowId: Long) =>
+              viewIds.map(viewId =>
+                new verdictStore.TransactionViewT(
+                  verdictRowId = rowId,
+                  viewId = viewId,
+                  informees = Seq(dsoParty.toProtoPrimitive),
+                  confirmingParties = Json.arr(),
+                  subViews = Seq.empty,
+                )
+              )
+            }
+          }
+        )
+        stored <- Future.traverse(viewIdsByUpdateId) { case (updateId, _) =>
+          for {
+            verdict <- verdictStore.getVerdictByUpdateId(updateId)
+            views <- verdictStore.listTransactionViews(verdict.value.rowId)
+          } yield updateId -> views.map(_.viewId)
+        }
+      } yield stored shouldBe viewIdsByUpdateId
+    }
+
+    "attach views to the right rows when the batch spans several insert chunks" in {
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        numVerdicts = verdictStore.MaxVerdictsPerInsert + 1
+        viewIds = 0 to verdictStore.MaxViewsPerInsert / verdictStore.MaxVerdictsPerInsert
+        updateIds = (1 to numVerdicts).map(i => s"chunked-update$i")
+        _ <- verdictStore.insertVerdictAndTransactionViews(
+          updateIds.zipWithIndex.map { case (updateId, i) =>
+            mkVerdict(
+              verdictStore,
+              updateId,
+              CantonTimestamp.MinValue.plusSeconds(i.toLong + 1),
+            ) -> { (rowId: Long) =>
+              viewIds.map(viewId =>
+                new verdictStore.TransactionViewT(
+                  verdictRowId = rowId,
+                  viewId = viewId,
+                  informees = Seq(dsoParty.toProtoPrimitive),
+                  confirmingParties = Json.arr(),
+                  subViews = Seq.empty,
+                )
+              )
+            }
+          }
+        )
+        stored <- Future.traverse(updateIds) { updateId =>
+          for {
+            verdict <- verdictStore.getVerdictByUpdateId(updateId)
+            views <- verdictStore.listTransactionViews(verdict.value.rowId)
+          } yield views.map(_.viewId)
+        }
+      } yield {
+        viewIds.size * numVerdicts should be > verdictStore.MaxViewsPerInsert
+        stored.distinct shouldBe Seq(viewIds)
+      }
+    }
+  }
+
   /** @return the row ID of the inserted verdict */
   private def insertVerdictWithViews(
       verdictStore: DbScanVerdictStore,
