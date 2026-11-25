@@ -543,6 +543,7 @@ case class SvAppBackendConfig(
     unclaimedDevelopmentFundCouponsThreshold: Int = 10,
     svAcsStoreDescriptorUserVersion: Option[Long] = None,
     dsoAcsStoreDescriptorUserVersion: Option[Long] = None,
+    unavailablePartiesStoreDescriptorUserVersion: Option[Long] = None,
     // TODO(#3897) Consider removing this once we're confident in this approach.
     // Safety option in case setting the observers ends up causing issues e.g. overloading validators that now receive larger transactions.
     convertFeaturedAppActivityMarkerObservers: Boolean = true,
