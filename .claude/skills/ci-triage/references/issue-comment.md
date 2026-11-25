@@ -21,20 +21,21 @@ Shape (Markdown, short paragraphs of one to three sentences; as short as the fac
    of the investigation, no list of runs checked.
 5. Resolution only when someone has to act and the action is not obvious from the verdict: the fix in one sentence
    (file and change) and the owner. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
-Diagrams (optional, rare): add one only when the cause is an interaction between several components that a reader
-cannot follow from the log lines alone: several SVs, sequencers, participants or threads, and an order of events
-that matters (a race, a close during a call, a topology change while sends are in flight). Most failures need none;
-leave it out for a single actor or a single step: a failed download or `curl` 403, a config or permission error, a
-timeout of one process, a missing cache, a Pulumi or Helm error. Use Mermaid (GitHub renders it in the comment),
-placed before the log block, and keep to the facts of that block:
-- Network (`flowchart LR`) when more than two components are involved: one box per component, one arrow per
-  interaction, the failing arrow red (`linkStyle <n> stroke:#d00,stroke-width:3px,color:#d00`). No timestamps.
-- Timeline (`sequenceDiagram`) when the order within milliseconds or seconds is the cause: a lifeline per component or
-  thread, one message per log line from the block, offsets (`.703`) with the date and the log file in a note.
-- Often one is enough; use both only when the network picture and the order are both needed.
-- Short labels (at most about 30 characters per line, `<br/>` for line breaks), so nothing is cut off at comment width.
-  Never a step or a name the quoted lines do not show. Check the syntax before handing over the comment (the Mermaid
-  parser: `mermaid.parse` under jsdom accepts or rejects the source); the rendering is only seen on the issue.
+Diagrams (optional): the goal is that a reader understands the failure many times faster with the diagram next to
+the log lines and the description than with the text alone. There is no fixed recipe; for each issue pick the form
+that does that best, or none:
+- Whether: when the cause is an interaction between several components (SVs, sequencers, participants, threads) and
+  the way they interact or the order of events matters. Leave it out when one actor or one step explains the failure
+  (a failed download or `curl` 403, a config or permission error, a timeout of one process, a missing cache, a
+  Pulumi or Helm error): the description and the log lines are then faster than any picture.
+- Which: a network picture (who talks to whom, the failing interaction marked), a timeline (the order of events,
+  for a race or a close during a call), both, or another form that fits better (a state change, a before and after
+  of a topology). Choose by what the reader would otherwise have to work out from the log lines.
+- How: Mermaid (GitHub renders it in the comment), placed before the log block. Short labels (at most about 30
+  characters per line, `<br/>` for line breaks) so nothing is cut off at comment width; the failing step stands
+  out (red link: `linkStyle <n> stroke:#d00,stroke-width:3px,color:#d00`); times as offsets with the date and the
+  log file in a note. Only steps and names that the quoted lines show. Check the syntax before handing over the
+  comment (`mermaid.parse` under jsdom accepts or rejects the source); the rendering is only seen on the issue.
 
 Do not claim evidence is absent ("not in the artifacts", "the logs do not show") unless a stated search settled it; an unexplained step is left out or named as open ("not found" is a statement about our search, not the logs). No triage-dataset vocabulary: no family letters ("family L") or packet names; describe the mechanism instead. No speculation about causes the evidence does not show (who or what did something, why), no @mentions (the
 assignee is set with the command), and no "Not checked" paragraph unless the missing evidence decides whether
