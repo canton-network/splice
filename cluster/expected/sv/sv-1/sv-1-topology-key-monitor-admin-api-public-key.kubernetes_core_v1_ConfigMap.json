@@ -1,0 +1,16 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "apiVersion": "v1",
+    "data": {},
+    "kind": "ConfigMap",
+    "metadata": {
+      "name": "topology-key-monitor-admin-api-token-public-key",
+      "namespace": "sv-1"
+    }
+  },
+  "name": "sv-1-topology-key-monitor-admin-api-public-key",
+  "provider": "",
+  "type": "kubernetes:core/v1:ConfigMap"
+}

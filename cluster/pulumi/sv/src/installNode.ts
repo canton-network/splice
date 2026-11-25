@@ -9,6 +9,7 @@ import {
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
   installTopologyKeyMonitor,
+  installTopologyKeyMonitorAdminApiTokenSecrets,
 } from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
@@ -42,6 +43,9 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   }
   const backupConfig = await readBackupConfig();
   const version = config.versionOverride ?? activeVersion;
+  const secrets = config.topologyKeyMonitor?.enable
+    ? installTopologyKeyMonitorAdminApiTokenSecrets(xns)
+    : undefined;
   const participant = await installParticipant(
     {
       xns,
@@ -56,7 +60,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       enableAutoInit:
         !backupConfig.bootstrappingDumpConfig && !(isSvRunbook && participantIdentitiesFile),
     },
-    { dependsOn: [...imagePullDeps, ledgerApiUserSecret] }
+    { dependsOn: [...imagePullDeps, ledgerApiUserSecret, ...(secrets ?? [])] }
   );
   if (config.topologyKeyMonitor) {
     installTopologyKeyMonitor(
@@ -65,7 +69,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       config.topologyKeyMonitor,
       version,
       serviceAccountName,
-      { dependsOn: [...imagePullDeps, participant.chart] }
+      { dependsOn: [...imagePullDeps, participant.chart, ...(secrets ?? [])] }
     );
   }
 }
