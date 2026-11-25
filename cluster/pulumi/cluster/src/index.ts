@@ -3,11 +3,13 @@
 import { config } from '@canton-network/splice-pulumi-common';
 
 import { installFluentBit } from './fluentBit';
+import { installGkeCluster } from './gkeCluster';
 import { installNodePools } from './nodePools';
 import { installStorageClasses } from './storageClasses';
 
 // eslint-disable-next-line @typescript-eslint/no-floating-promises
 (async () => {
+  installGkeCluster();
   await installNodePools();
   installStorageClasses();
   // This is an env var instead of reading from config.yaml as we also want to read it from cncluster.

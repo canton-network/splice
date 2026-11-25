@@ -1,0 +1,12 @@
+{
+  "custom": true,
+  "id": "projects/da-cn-devnet/locations/europe-west6/clusters/cn-mocknet",
+  "inputs": {
+    "location": "europe-west6",
+    "name": "cn-mocknet",
+    "project": "da-cn-devnet"
+  },
+  "name": "gke-cluster",
+  "provider": "",
+  "type": "gcp:container/cluster:Cluster"
+}
