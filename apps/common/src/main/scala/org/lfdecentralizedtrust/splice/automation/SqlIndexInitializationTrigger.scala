@@ -11,15 +11,9 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
-import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.{
-  IndexAction,
-  IndexStatus,
-  defaultIndexActions,
-  getIndexStatusAction,
-}
+import org.lfdecentralizedtrust.splice.store.db.{AdvisoryLocks, SqlIndexInitializer}
+import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.{IndexAction, defaultIndexActions}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
-import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContextExecutor, Future, Promise}
@@ -48,6 +42,8 @@ class SqlIndexInitializationTrigger(
   )
   private[automation] val remainingActionsEmpty: Promise[Unit] = Promise()
 
+  private val initializer = new SqlIndexInitializer(storage, loggerFactory)
+
   private def nextTask(actions: List[IndexAction])(implicit
       tc: TraceContext
   ): FutureUnlessShutdown[Seq[Task]] =
@@ -55,43 +51,13 @@ class SqlIndexInitializationTrigger(
       case None =>
         FutureUnlessShutdown.pure(Seq.empty)
       case Some(head) =>
-        for {
-          headStatus <- storage.query(
-            getIndexStatusAction(head.indexName),
-            "getIndexStatusAction",
-          )
-        } yield (head, headStatus) match {
-          case (_, IndexStatus.InProgress(pid)) =>
-            logger.info(
-              s"Index ${head.indexName} is being built by backend process $pid, skipping."
-            )
+        initializer.nextStep(head).map {
+          case SqlIndexInitializer.Step.Done => Seq(Task.ConfirmActionCompleted(head))
+          case SqlIndexInitializer.Step.Execute(action) => Seq(Task.ExecuteAction(action))
+          case SqlIndexInitializer.Step.Wait(_) =>
             // Do not mess with the index if it is being built.
             // Return no task, causing the trigger to try again after the next polling interval.
             Seq.empty
-
-          case (IndexAction.Create(indexName, _), IndexStatus.Valid) =>
-            logger.info(s"Index $indexName should be created and is valid, skipping.")
-            Seq(Task.ConfirmActionCompleted(head))
-
-          case (IndexAction.Create(indexName, _), IndexStatus.DoesNotExist) =>
-            logger.info(s"Index $indexName should be created and does not exist, creating it.")
-            Seq(Task.ExecuteAction(head))
-
-          case (IndexAction.Create(indexName, _), IndexStatus.Invalid) =>
-            logger.warn(s"Index $indexName should be created and is invalid, dropping it.")
-            Seq(Task.ExecuteAction(IndexAction.Drop(indexName)))
-
-          case (IndexAction.Drop(indexName), IndexStatus.DoesNotExist) =>
-            logger.info(s"Index $indexName should be dropped and does not exist, skipping.")
-            Seq(Task.ConfirmActionCompleted(head))
-
-          case (IndexAction.Drop(indexName), IndexStatus.Valid) =>
-            logger.info(s"Index $indexName should be dropped and is valid, dropping.")
-            Seq(Task.ExecuteAction(head))
-
-          case (IndexAction.Drop(indexName), IndexStatus.Invalid) =>
-            logger.warn(s"Index $indexName should be dropped and is invalid, dropping.")
-            Seq(Task.ExecuteAction(head))
         }
     }
 
@@ -119,28 +85,11 @@ class SqlIndexInitializationTrigger(
   override protected def completeTask(task: SqlIndexInitializationTrigger.Task)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = (task match {
-    case Task.ExecuteAction(IndexAction.Drop(indexName)) =>
-      logger.info(s"Dropping index $indexName")
-      storage
-        .queryAndUpdate(
-          AdvisoryLocks.withDdlLock(sqlu"drop index concurrently if exists #$indexName"),
-          "drop_" + indexName,
-        )
-        .unwrap
-        .map { _ =>
-          logger.info(s"Finished dropping index $indexName")
-          TaskSuccess(s"Dropped index $indexName")
-        }
+    case Task.ExecuteAction(action @ IndexAction.Drop(indexName)) =>
+      initializer.execute(action).unwrap.map(_ => TaskSuccess(s"Dropped index $indexName"))
 
-    case Task.ExecuteAction(IndexAction.Create(indexName, createAction)) =>
-      logger.info(s"Creating index $indexName")
-      storage
-        .queryAndUpdate(AdvisoryLocks.withDdlLock(createAction), "create_" + indexName)
-        .unwrap
-        .map { _ =>
-          logger.info(s"Finished creating index $indexName")
-          TaskSuccess(s"Created index $indexName")
-        }
+    case Task.ExecuteAction(action @ IndexAction.Create(indexName, _)) =>
+      initializer.execute(action).unwrap.map(_ => TaskSuccess(s"Created index $indexName"))
 
     case Task.ConfirmActionCompleted(action) =>
       remainingActions.updateAndGet(_.filterNot(_ == action))
