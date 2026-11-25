@@ -10,6 +10,9 @@ Checks:
   updates         - /v2/updates (within a record time window)
   import_updates  - /v0/backfilling/import-updates (limited by number of contracts)
   acs             - /v2/state/acs on the latest snapshot available on all scans (limited by number of contracts)
+  votes           - /v0/admin/sv/voteresults and /v1/admin/sv/voteresults: all vote results completed before a
+                    cutoff, compared across scans for each version, and between the two versions on each scan.
+                    Scans that do not serve v1 yet (older version, or still backfilling) are skipped for v1.
 
 Guarantees at most one in-flight request per scan.
 
@@ -34,7 +37,7 @@ from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Mapping, Optional, TypeVar
 
 import requests
 
@@ -53,8 +56,9 @@ PROFILES = {
     "full":     dict(update_window="24h", import_limit=0,      acs_limit=0,      max_tracked_ids=1_000_000),
 }
 
-ALL_CHECKS = ["updates", "import_updates", "acs"]
-UNITS = {"updates": "updates", "import_updates": "import updates", "acs": "contracts"}
+ALL_CHECKS = ["updates", "import_updates", "acs", "votes"]
+UNITS = {"updates": "updates", "import_updates": "import updates", "acs": "contracts",
+         "votes_v0": "vote results", "votes_v1": "vote results"}
 MAX_EXAMPLES = 5
 MASK256 = (1 << 256) - 1
 
@@ -94,6 +98,10 @@ class ScanError(Exception):
     pass
 
 
+class ScanUnavailable(ScanError):
+    """The scan cannot serve the request yet, e.g., because it is still backfilling."""
+
+
 class ScanClient:
     """HTTP client for a single scan. Only ever used from one thread at a time."""
 
@@ -102,8 +110,9 @@ class ScanClient:
         self.args = args
         self.session = requests.Session()
 
-    def request(self, method: str, path: str, **kwargs: Any) -> Optional[dict[str, Any]]:
-        """Returns parsed JSON, None on 404, raises ScanError on permanent failure."""
+    def request(self, method: str, path: str, fail_fast: Iterable[int] = (), **kwargs: Any) -> Optional[dict[str, Any]]:
+        """Returns parsed JSON, None on 404, raises ScanError on permanent failure.
+        Status codes in `fail_fast` raise ScanUnavailable right away instead of being retried."""
         full = f"{self.url}/api/scan{path}"
         for attempt in range(self.args.max_retries + 1):
             try:
@@ -113,6 +122,8 @@ class ScanClient:
                     return result
                 if r.status_code == 404:
                     return None
+                if r.status_code in fail_fast:
+                    raise ScanUnavailable(f"{method} {full} -> HTTP {r.status_code}: {r.text[:300]}")
                 if r.status_code != 429 and r.status_code < 500:
                     raise ScanError(f"{method} {full} -> HTTP {r.status_code}: {r.text[:300]}")
                 reason = f"HTTP {r.status_code}"
@@ -294,6 +305,95 @@ def fetch_acs(c: ScanClient, args: argparse.Namespace, record_time: str) -> Dige
     return d
 
 
+@dataclass
+class Votes:
+    """The vote results of one scan, from both versions of the endpoint."""
+    v0: Digest
+    v1: Optional[Digest]  # None if the scan does not serve v1 (yet)
+    v1_unavailable: Optional[str] = None
+    # Vote results by the hash of their canonical JSON without null fields, for comparing the two versions.
+    v0_by_hash: dict[int, str] = field(default_factory=dict)
+    v1_by_hash: dict[int, str] = field(default_factory=dict)
+
+
+def vote_id(result: dict[str, Any]) -> str:
+    """The id of a vote result: the contract id of its vote request."""
+    cid = result.get("request", {}).get("trackingCid")
+    return cid if isinstance(cid, str) and cid else f"<no tracking cid, hash {short(canonical_hash(result))}>"
+
+
+def without_nulls(item: Any) -> Any:
+    """Drops the fields with a null value. Optional fields without a value can be null or omitted, depending on
+    the version of the app that encoded them."""
+    if isinstance(item, dict):
+        return {k: without_nulls(v) for k, v in item.items() if v is not None}
+    if isinstance(item, list):
+        return [without_nulls(v) for v in item]
+    return item
+
+
+def canonical_hash(item: Any) -> int:
+    return sha256_int(json.dumps(item, sort_keys=True, separators=(",", ":")).encode())
+
+
+def completed_before(result: dict[str, Any], cutoff: datetime) -> bool:
+    return parse_ts(result["completedAt"]) < cutoff
+
+
+def fetch_votes(c: ScanClient, args: argparse.Namespace, cutoff: datetime) -> Votes:
+    """All vote results completed before `cutoff`, from /v0/admin/sv/voteresults and /v1/admin/sv/voteresults.
+    Votes completed later are ignored, so that votes closed while this script runs do not cause differences."""
+    prog = Progress(c.url, "votes", args.progress_interval)
+    votes = Votes(v0=Digest(args.max_tracked_ids), v1=Digest(args.max_tracked_ids))
+    v0_token: Optional[int] = None
+    try:
+        while True:
+            body: dict[str, Any] = {"limit": args.page_size}
+            if v0_token is not None:
+                body["pageToken"] = v0_token
+            v0_page = c.request("POST", "/v0/admin/sv/voteresults", json=body) or {}
+            results = v0_page.get("dso_rules_vote_results", [])
+            for result in results:
+                if completed_before(result, cutoff):
+                    votes.v0.add(vote_id(result), result)
+                    votes.v0_by_hash[canonical_hash(without_nulls(result))] = vote_id(result)
+            v0_token = v0_page.get("next_page_token")
+            if not results or v0_token is None:
+                break
+            prog.tick(f"v0: {votes.v0.count} vote results")
+    except ScanError as e:
+        votes.v0.error = str(e)
+
+    assert votes.v1 is not None
+    v1_token: Optional[int] = None
+    try:
+        while True:
+            body = {"page_size": args.page_size}
+            if v1_token is not None:
+                body["page_token"] = v1_token
+            # Fail fast while the scan is still backfilling its votes, instead of retrying.
+            page = c.request("POST", "/v1/admin/sv/voteresults", fail_fast=[503], json=body)
+            if page is None:
+                raise ScanUnavailable("/v1/admin/sv/voteresults not found, the scan is probably on an older version")
+            items = page.get("vote_results", [])
+            for item in items:
+                if completed_before(item["vote_result"], cutoff):
+                    votes.v1.add(f"{item['update_id']}:{item['event_number']}", item)
+                    votes.v1_by_hash[canonical_hash(without_nulls(item["vote_result"]))] = vote_id(item["vote_result"])
+            v1_token = page.get("next_page_token")
+            if not items or v1_token is None:
+                break
+            prog.tick(f"v1: {votes.v1.count} vote results")
+    except ScanUnavailable as e:
+        votes.v1, votes.v1_unavailable, votes.v1_by_hash = None, str(e), {}
+    except ScanError as e:
+        votes.v1.error = str(e)
+
+    v1 = votes.v1.summary() if votes.v1 else f"unavailable: {votes.v1_unavailable}"
+    prog.tick(f"finished: v0 {votes.v0.summary()}, v1 {v1}", force=True)
+    return votes
+
+
 # ---------------------------------------------------------------------------
 # Comparison / reporting
 # ---------------------------------------------------------------------------
@@ -358,6 +458,35 @@ def compare_digests(name: str, unit: str, results: Dict[str, Digest], max_tracke
     return consistent
 
 
+def compare_vote_versions(results: Mapping[str, Votes]) -> bool:
+    """Checks that each scan serves the same vote results from v0 (txlog) and v1 (votes store).
+    Ignores the order: v0 orders ties by insertion order, and compares timestamps as text.
+    Ignores null fields: v1 serves the JSON as stored, v0 re-encodes it with the codegen of the serving app."""
+    log.info("=" * 100)
+    log.info("Result [votes_v0_vs_v1] (each scan serves the same vote results from v0 and v1)")
+    consistent = True
+    for url, votes in results.items():
+        if votes.v1 is None:
+            log.warning("  - %s: skipped, v1 is unavailable: %s", url, votes.v1_unavailable)
+            continue
+        if votes.v0.error or votes.v1.error:
+            consistent = False
+            log.error("  ✖ %s: failed: %s", url, votes.v0.error or votes.v1.error)
+            continue
+        missing = votes.v0_by_hash.keys() - votes.v1_by_hash.keys()
+        extra = votes.v1_by_hash.keys() - votes.v0_by_hash.keys()
+        if not missing and not extra:
+            log.info("  ✔ %s: the same %d vote results", url, len(votes.v0_by_hash))
+            continue
+        consistent = False
+        log.error("  ✖ %s: %d vote results in v0, %d in v1", url, len(votes.v0_by_hash), len(votes.v1_by_hash))
+        if missing:
+            log.error("    %d only in v0: %s", len(missing), examples(votes.v0_by_hash[h] for h in missing))
+        if extra:
+            log.error("    %d only in v1: %s", len(extra), examples(votes.v1_by_hash[h] for h in extra))
+    return consistent
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -378,6 +507,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--acs-limit", type=int, help="Max ACS contracts to compare (0 = all)")
     p.add_argument("--acs-before", default=None, help="Use latest common snapshot before this time (default: now)")
     p.add_argument("--max-tracked-ids", type=int, help="Max ids per scan kept in memory for set diffs")
+    p.add_argument("--votes-before", default=None,
+                   help="Only compare vote results completed before this time (ISO 8601). Default: 10 minutes ago")
     # Transport
     p.add_argument("--page-size", type=int, default=100)
     p.add_argument("--max-retries", type=int, default=8)
@@ -478,25 +609,39 @@ def main() -> int:
             log.error("No common ACS snapshot found; skipping acs check")
             had_errors = True
 
+    # --- choose the cutoff for vote results ---
+    votes_cutoff = (parse_ts(args.votes_before) if args.votes_before
+                    else datetime.now(timezone.utc) - timedelta(minutes=10))
+    if "votes" in args.checks:
+        log.info("Comparing vote results completed before %s", fmt_ts(votes_cutoff))
+
     # --- phase 2: heavy checks, sequential per scan ---
-    def phase2(c: ScanClient) -> Dict[str, Digest]:
-        res: Dict[str, Digest] = {}
+    def phase2(c: ScanClient) -> Dict[str, Digest | Votes]:
+        res: Dict[str, Digest | Votes] = {}
         if window:
             res["updates"] = fetch_updates(c, args, window[0], window[1])
         if "import_updates" in args.checks:
             res["import_updates"] = fetch_import_updates(c, args)
         if snapshot:
             res["acs"] = fetch_acs(c, args, snapshot)
+        if "votes" in args.checks:
+            votes = fetch_votes(c, args, votes_cutoff)
+            res["votes_v0"] = votes.v0
+            if votes.v1:
+                res["votes_v1"] = votes.v1
+            res["votes"] = votes
         return res
 
     p2 = run_per_scan(clients, phase2)
-    for check in ["updates", "import_updates", "acs"]:
-        per_scan = {}
+    for check in ["updates", "import_updates", "acs", "votes_v0", "votes_v1"]:
+        per_scan: Dict[str, Digest] = {}
         for u, r in p2.items():
             if isinstance(r, Exception):
                 per_scan[u] = Digest(0, error=str(r))
             elif check in r:
-                per_scan[u] = r[check]
+                d = r[check]
+                assert isinstance(d, Digest)
+                per_scan[u] = d
         if per_scan:
             ok &= compare_digests(check, UNITS[check], per_scan, args.max_tracked_ids)
             had_errors |= any(d.error for d in per_scan.values())
@@ -506,6 +651,9 @@ def main() -> int:
                           "for a past migration pass --updates-from and --updates-to", mid)
                 ok = False
                 had_errors = True
+    if "votes" in args.checks:
+        all_votes = {u: r["votes"] for u, r in p2.items() if not isinstance(r, Exception)}
+        ok &= compare_vote_versions({u: v for u, v in all_votes.items() if isinstance(v, Votes)})
 
     log.info("=" * 100)
     if ok:
