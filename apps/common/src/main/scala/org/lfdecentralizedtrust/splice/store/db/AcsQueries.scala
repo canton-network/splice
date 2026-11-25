@@ -6,19 +6,13 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.daml.ledger.javaapi.data.{Identifier, Template}
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.google.protobuf.ByteString
 import io.circe.Json
-import io.grpc.Status
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.{ContractCompanion, ContractState}
 import org.lfdecentralizedtrust.splice.store.StoreErrors
-import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{
-  AcsStoreId,
-  SelectFromAcsTableResult,
-  SelectFromAcsTableWithStateResult,
-  SelectFromContractStateResult,
-}
+import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{AcsStoreId, SelectFromAcsTableResult}
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import scalaz.{@@, Tag}
@@ -72,7 +66,7 @@ trait AcsQueries extends Queries with AcsJdbcTypes {
       )
     }
 
-  /** Similar to [[selectFromAcsTable]], but also returns the contract state (i.e., the domain to which a contract is currently assigned) */
+  /** Similar to [[selectFromAcsTable]] */
   protected def selectFromAcsTableWithState[C, TCid <: ContractId[?], T](
       tableName: String,
       storeId: AcsStoreId,
@@ -81,41 +75,19 @@ trait AcsQueries extends Queries with AcsJdbcTypes {
       additionalWhere: SQLActionBuilder = sql"",
       orderLimit: SQLActionBuilder = sql"",
   )(implicit companionClass: ContractCompanion[C, TCid, T]): SqlStreamingAction[Vector[
-    SelectFromAcsTableWithStateResult
-  ], SelectFromAcsTableWithStateResult, Effect.Read] = {
+    SelectFromAcsTableResult
+  ], SelectFromAcsTableResult, Effect.Read] = {
     val packageQualifiedName = companionClass.packageQualifiedName(companion)
     (sql"""
-       select #${SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+       select #${SelectFromAcsTableResult.sqlColumnsCommaSeparated()}
        from #$tableName acs
        where acs.store_id = $storeId
          and acs.migration_id = $migrationId
          and acs.package_name = ${packageQualifiedName.packageName}
          and acs.template_id_qualified_name = ${packageQualifiedName.qualifiedName}
          """ ++ additionalWhere ++ sql"""
-       """ ++ orderLimit).toActionBuilder.as[AcsQueries.SelectFromAcsTableWithStateResult]
+       """ ++ orderLimit).toActionBuilder.as[AcsQueries.SelectFromAcsTableResult]
   }
-
-  implicit val GetResultSelectFromContractStateResult
-      : GetResult[AcsQueries.SelectFromContractStateResult] =
-    GetResult { prs =>
-      AcsQueries.SelectFromContractStateResult(
-        prs.<<[Long],
-        prs.<<[Option[SynchronizerId]],
-        prs.<<[Long],
-        prs.<<[Option[SynchronizerId]],
-        prs.<<[Option[SynchronizerId]],
-        prs.<<[Option[PartyId]],
-        prs.<<[Option[String]],
-      )
-    }
-
-  implicit val GetResultSelectFromAcsTableWithState
-      : GetResult[AcsQueries.SelectFromAcsTableWithStateResult] =
-    GetResult { prs =>
-      val acsRow = prs.<<[AcsQueries.SelectFromAcsTableResult]
-      val stateRow = prs.<<[AcsQueries.SelectFromContractStateResult]
-      AcsQueries.SelectFromAcsTableWithStateResult(acsRow, stateRow)
-    }
 
   /** Same as [[selectFromAcsTable]], but joins with the store_descriptors and store_last_ingested_offsets table to get the last_ingested_offset.
     * This guarantees that the fetched contracts exist in the given offset,
@@ -126,7 +98,7 @@ trait AcsQueries extends Queries with AcsJdbcTypes {
       storeId: AcsStoreId,
       migrationId: Long,
       companion: C,
-      where: SQLActionBuilder,
+      where: SQLActionBuilder = sql"true",
       orderLimit: SQLActionBuilder = sql"",
   )(implicit companionClass: ContractCompanion[C, TCid, T]) = {
     val packageQualifiedName = companionClass.packageQualifiedName(companion)
@@ -182,88 +154,6 @@ trait AcsQueries extends Queries with AcsJdbcTypes {
     )
   }
 
-  /** Same as [[selectFromAcsTableWithOffset]], but also includes the contract state.
-    */
-  protected def selectFromAcsTableWithStateAndOffset[C, TCid <: ContractId[?], T](
-      tableName: String,
-      storeId: AcsStoreId,
-      migrationId: Long,
-      companion: C,
-      where: SQLActionBuilder = sql"true",
-      orderLimit: SQLActionBuilder = sql"",
-  )(implicit companionClass: ContractCompanion[C, TCid, T]) = {
-    val packageQualifiedName = companionClass.packageQualifiedName(companion)
-    (sql"""
-       select
-         acs.store_id,
-         acs.migration_id,
-         o.last_ingested_offset,
-         acs.event_number,
-         acs.contract_id,
-         acs.template_id_package_id,
-         acs.template_id_qualified_name,
-         acs.package_name,
-         acs.create_arguments,
-         acs.created_event_blob,
-         acs.created_at,
-         acs.contract_expires_at,
-         acs.state_number,
-         acs.assigned_domain,
-         acs.reassignment_counter,
-         acs.reassignment_target_domain,
-         acs.reassignment_source_domain,
-         acs.reassignment_submitter,
-         acs.reassignment_unassign_id
-       from store_descriptors sd
-           left join store_last_ingested_offsets o
-               on sd.id = o.store_id
-           left join #$tableName acs
-               on o.store_id = acs.store_id
-               and o.migration_id = acs.migration_id
-               and acs.package_name = ${packageQualifiedName.packageName}
-               and acs.template_id_qualified_name = ${packageQualifiedName.qualifiedName}
-               and """ ++ where ++ sql"""
-       where sd.id = $storeId and o.migration_id = $migrationId
-       """ ++ orderLimit).toActionBuilder
-      .as[AcsQueries.SelectFromAcsTableResultWithStateAndOffset]
-  }
-
-  implicit val GetResultSelectFromAcsTableResultWithStateOffset
-      : GetResult[AcsQueries.SelectFromAcsTableResultWithStateAndOffset] = {
-    (pp: PositionedResult) =>
-      val storeIdFromAcsRow = pp.<<[Option[AcsStoreId]]
-      val migrationIdFromAcsRow = pp.<<[Option[Long]]
-      AcsQueries.SelectFromAcsTableResultWithStateAndOffset(
-        LegacyOffset.Api.assertFromStringToLong(pp.<<[String]),
-        for {
-          storeId <- storeIdFromAcsRow
-          migrationId <- migrationIdFromAcsRow
-        } yield AcsQueries.SelectFromAcsTableWithStateResult(
-          AcsQueries.SelectFromAcsTableResult(
-            storeId,
-            migrationId,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-          ),
-          AcsQueries.SelectFromContractStateResult(
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-            pp.<<,
-          ),
-        ),
-      )
-  }
-
   protected def contractFromRow[C, TCId <: ContractId[?], T](companion: C)(
       row: AcsQueries.SelectFromAcsTableResult
   )(implicit
@@ -271,41 +161,6 @@ trait AcsQueries extends Queries with AcsJdbcTypes {
       decoder: TemplateJsonDecoder,
   ): Contract[TCId, T] = {
     row.toContract(companion)
-  }
-
-  protected def assignedContractFromRow[C, TCid <: ContractId[?], T](companion: C)(
-      row: SelectFromAcsTableWithStateResult
-  )(implicit
-      companionClass: ContractCompanion[C, TCid, T],
-      templateJsonDecoder: TemplateJsonDecoder,
-  ): AssignedContract[TCid, T] = {
-    val contract = contractFromRow(companion)(row.acsRow)
-    row.stateRow.assignedDomain match {
-      case Some(domain) => AssignedContract(contract, domain)
-      case None =>
-        throw Status.FAILED_PRECONDITION
-          .withDescription(
-            s"Cannot read contract ${contract.contractId} as AssignedContract, it is in flight with ${row.stateRow}"
-          )
-          .asRuntimeException()
-    }
-  }
-
-  protected def contractWithStateFromRow[C, TCid <: ContractId[?], T](companion: C)(
-      row: SelectFromAcsTableWithStateResult
-  )(implicit
-      companionClass: ContractCompanion[C, TCid, T],
-      templateJsonDecoder: TemplateJsonDecoder,
-  ): ContractWithState[TCid, T] = {
-    val state = contractStateFromRow(row.stateRow)
-    val contract = contractFromRow(companion)(row.acsRow)
-    ContractWithState(contract, state)
-  }
-
-  protected def contractStateFromRow(
-      row: SelectFromContractStateResult
-  ): ContractState = {
-    row.assignedDomain.fold[ContractState](ContractState.InFlight)(id => ContractState.Assigned(id))
   }
 
   /** Decodes a stored ACS row without a caller-supplied companion.
@@ -399,45 +254,32 @@ object AcsQueries {
           ${qualifier}contract_expires_at"""
   }
 
-  case class SelectFromContractStateResult(
-      stateNumber: Long,
-      assignedDomain: Option[SynchronizerId],
-      reassignmentCounter: Long,
-      reassignmentTargetDomain: Option[SynchronizerId],
-      reassignmentSourceDomain: Option[SynchronizerId],
-      reassignmentSubmitter: Option[PartyId],
-      reassignmentUnassignId: Option[String],
-  )
-
-  case class SelectFromAcsTableWithStateResult(
-      acsRow: SelectFromAcsTableResult,
-      stateRow: SelectFromContractStateResult,
-  )
-
-  object SelectFromAcsTableWithStateResult {
-    def sqlColumnsCommaSeparated(qualifier: String = "") =
-      SelectFromAcsTableResult.sqlColumnsCommaSeparated(
-        qualifier
-      ) + "," + stateColumnsCommaSeparated(qualifier)
-
-    def stateColumnsCommaSeparated(qualifier: String = "") = s"""
-        ${qualifier}state_number,
-        ${qualifier}assigned_domain,
-        ${qualifier}reassignment_counter,
-        ${qualifier}reassignment_target_domain,
-        ${qualifier}reassignment_source_domain,
-        ${qualifier}reassignment_submitter,
-        ${qualifier}reassignment_unassign_id
-      """
-  }
-
   case class SelectFromAcsTableResultWithOffset(
       offset: Long,
       row: Option[SelectFromAcsTableResult],
   )
+}
 
-  case class SelectFromAcsTableResultWithStateAndOffset(
-      offset: Long,
-      row: Option[SelectFromAcsTableWithStateResult],
-  )
+trait SingleSynchronizerAcsQueries extends AcsQueries {
+
+  protected def acsSynchronizerId: SynchronizerId
+
+  protected def assignedContractFromRow[C, TCid <: ContractId[?], T](companion: C)(
+      row: SelectFromAcsTableResult
+  )(implicit
+      companionClass: ContractCompanion[C, TCid, T],
+      templateJsonDecoder: TemplateJsonDecoder,
+  ): AssignedContract[TCid, T] =
+    AssignedContract(contractFromRow(companion)(row), acsSynchronizerId)
+
+  protected def contractWithStateFromRow[C, TCid <: ContractId[?], T](companion: C)(
+      row: SelectFromAcsTableResult
+  )(implicit
+      companionClass: ContractCompanion[C, TCid, T],
+      templateJsonDecoder: TemplateJsonDecoder,
+  ): ContractWithState[TCid, T] =
+    ContractWithState(
+      contractFromRow(companion)(row),
+      ContractState.Assigned(acsSynchronizerId),
+    )
 }

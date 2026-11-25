@@ -18,7 +18,7 @@
     - [Running The Preflight Check](#running-the-preflight-check)
       - [Configure Auth0 Environment](#configure-auth0-environment)
       - [Configure SV Web UI Password](#configure-sv-web-ui-password)
-    - [Setting up `lnav` to Inspect Canton and CometBFT logs](#setting-up-lnav-to-inspect-canton-and-cometbft-logs)
+    - [Setting up `lnav` to Inspect Canton logs](#setting-up-lnav-to-inspect-canton-logs)
       - [Using `lnav` to inspect logs from Docker compose containers](#using-lnav-to-inspect-logs-from-docker-compose-containers)
     - [Handling Errors in Integration Tests](#handling-errors-in-integration-tests)
     - [Connecting external tools to the shared Canton instances](#connecting-external-tools-to-the-shared-canton-instances)
@@ -236,17 +236,6 @@ If you run integration tests using sbt, we recommend running them within `apps-a
 Documentation about common pitfalls when writing new integration tests and debugging existing ones can be found [here](/apps/app/src/test/scala/org/lfdecentralizedtrust/splice/integration/tests/README.md).
 If you wish to extend our testing topology please also consult [this README](/apps/app/src/test/resources/README.md) about name and port allocation.
 
-### Enabling the new Canton bft ordering layer
-
-If you want to run the integration tests locally with the new Canton bft, canton must be started with the `-e` flag.
-This can be done by running `./start-canton.sh -we`.
-Furthermore the integration test must run with the `SPLICE_USE_CANTON_BFT_SEQUENCER` environment variable set to `true`.
-Eg of test run:
-
-```bash
- SPLICE_USE_CANTON_BFT_SEQUENCER=1 sbt 'apps-app/ testOnly org.lfdecentralizedtrust.splice.integration.tests.SvDevNetReonboardingIntegrationTest'
-```
-
 ### Testing App Behaviour Outside of Tests Without Running Bundle
 
 Sometimes, you may need to debug startup behaviour of the Splice apps that is causing issues for the
@@ -339,16 +328,15 @@ For testing that we can interact with the web UIs of our own SVs (sv1-4), the pr
 At the moment all 4 SVs share the same password, which needs to be configured via the `SV_DEV_NET_WEB_UI_PASSWORD` environment variable.
 Contact the Maintainers for the currently used password.
 
-### Setting up `lnav` to Inspect Canton and CometBFT logs
+### Setting up `lnav` to Inspect Canton logs
 
-If you have never used `lnav` to inspect Canton or CometBFT logs, then we recommend:
+If you have never used `lnav` to inspect Canton logs, then we recommend:
 
 1. Call `lnav --help` to determine the configuration directory. It should be something like `~/.lnav` or `~/.config/lnav`.
 2. Set `export LNAV_CONFIG_DIR=<the directory output by the help text above>`
-3. Create the following symlinks to automatically keep the format definitions up to date:
+3. Create the following symlink to automatically keep the format definition up to date:
    ```
    ln -sf $PWD/canton/canton-json.lnav.json $LNAV_CONFIG_DIR/formats/installed/canton_logstash_json.json
-   ln -sf $PWD/network-health/cometbft-json.lnav.json $LNAV_CONFIG_DIR/formats/installed/cometbft-json.json
    ```
 4. Type `lnav log/canton_network_test.clog` to inspect the test logs.
 5. Take the time to familiarize yourself with docs for the `lnav` [UI](https://docs.lnav.org/en/latest/ui.html#ui)
@@ -474,18 +462,18 @@ Any more specific run requires using NPM directly. To do that the following prer
 
 To run all tests from one or more Pulumi projects execute the following command.
 ```
-npm exec -- jest --selectProjects <project> [project]...
+npm run test -- --selectProjects <project> [project]...
 ```
 Specific suites are selected by passing one or more patterns as positional arguments. For example
 the following matches `$SPLICE_ROOT/cluster/pulumi/common/src/retries.test.ts` but also any suite
 that contains `retries` in its path.
 ```
-npm exec -- jest retries
+npm run test retries
 ```
 Lastly, individual tests can be filtered using the `--testNamePattern` or `-t` for short as shown
 in the following example:
 ```
-npm exec -- jest -t "retry runs the action again if it fails with an exception"
+npm run test -- -t "retry runs the action again if it fails with an exception"
 ```
 All the above ways of filtering tests can be combined to achieve the desired run. More information
 on jest CLI can be found [here](https://jestjs.io/docs/cli). One might also opt for an IDE extension.

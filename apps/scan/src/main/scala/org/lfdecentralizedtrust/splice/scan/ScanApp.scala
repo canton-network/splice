@@ -97,9 +97,9 @@ import org.lfdecentralizedtrust.splice.store.{
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
-import org.lfdecentralizedtrust.splice.util.HasHealth
+import org.lfdecentralizedtrust.splice.util.{HasHealth, ValueJsonCodecTranscode}
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 import cats.implicits.*
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
@@ -186,6 +186,12 @@ class ScanApp(
         }
       }
     }
+    // Reading the Daml-LF packages takes a few seconds, so it is started right away, in parallel with
+    // the other init steps. Requests using the ledger_api_json encoding would otherwise block on it.
+    // Scan only starts serving requests once initialization has finished.
+    val packagesLoaded = appInitStep("Load Daml-LF packages for ledger_api_json encoding") {
+      Future(blocking(ValueJsonCodecTranscode.initialize()))
+    }
     for {
       dsoParty <- appInitStep("Get DSO party from user metadata") {
         appInitConnection.getDsoPartyFromUserMetadata(config.svUser)
@@ -204,6 +210,14 @@ class ScanApp(
       domainMigrationId <- appInitStep("Resolving domain migration id") {
         resolveDomainMigrationId()
       }
+      synchronizerId <-
+        retryProvider.getValueWithRetries(
+          RetryFor.WaitingOnInitDependency,
+          "synchronizer id",
+          "synchronizer id from participant",
+          participantAdminConnection.getSynchronizerId(config.globalSynchronizerAlias),
+          logger,
+        )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       store <- ScanStore(
         key = ScanStore.Key(dsoParty = dsoParty),
@@ -211,6 +225,7 @@ class ScanApp(
         loggerFactory,
         retryProvider,
         domainMigrationId,
+        synchronizerId,
         participantId,
         config.cache,
         scanAppMetrics.dbScanStore,
@@ -321,14 +336,6 @@ class ScanApp(
         config.rewardMintingAllowanceTolerance,
         loggerFactory,
       )
-      synchronizerId <-
-        retryProvider.getValueWithRetries(
-          RetryFor.WaitingOnInitDependency,
-          "synchronizer id",
-          "synchronizer id from participant",
-          participantAdminConnection.getSynchronizerId(config.globalSynchronizerAlias),
-          logger,
-        )
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
         synchronizerId,
         appInitConnection,
@@ -351,6 +358,7 @@ class ScanApp(
         amuletAppParameters.upgradesConfig,
         packageVersionSupport,
         historyReadiness,
+        kvStore,
       )
       _ = automation.registerHistoryStartTrigger(historyStart)
       scanVerdictStore = DbScanVerdictStore(
@@ -416,6 +424,7 @@ class ScanApp(
         scanAppMetrics.verdictIngestion,
         rewardsReferenceStore,
       )
+      _ <- packagesLoaded
       scanHandler = new HttpScanHandler(
         serviceUserPrimaryParty,
         config.svUser,

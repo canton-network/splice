@@ -1,10 +1,10 @@
 package org.lfdecentralizedtrust.splice.util
 
 import org.lfdecentralizedtrust.splice.console.SvAppBackendReference
+import org.lfdecentralizedtrust.splice.sv.config.SvCantonIdentifierConfig
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.IsTheCantonSequencerBFTEnabled
 import org.scalatest.Suite
 
 trait StandaloneCanton extends PostgresAroundEach with NamedLogging with ProcessTestUtil {
@@ -15,19 +15,21 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
 
   override def usesDbs = {
     Seq(
-      s"sequencer_driver_${dbsSuffix}",
       s"participant_extra_$dbsSuffix",
       s"participant_second_extra_$dbsSuffix",
-    ) ++
-      (1 to 4).flatMap(index =>
-        Seq(
-          s"participant_sv${index}_${dbsSuffix}",
-          s"sequencer_sv${index}_${dbsSuffix}",
-          s"sequencer_sv${index}_${dbsSuffix}_bft",
-          s"mediator_sv${index}_${dbsSuffix}",
-        )
-      )
+    ) ++ svDbs(dbsSuffix)
   }
+
+  // The SV node DBs used by withCantonSvNodes with the given suffix, see overrideSvDbsSuffix
+  def svDbs(suffix: String): Seq[String] =
+    (1 to 4).flatMap(index =>
+      Seq(
+        s"participant_sv${index}_${suffix}",
+        s"sequencer_sv${index}_${suffix}",
+        s"sequencer_sv${index}_${suffix}_bft",
+        s"mediator_sv${index}_${suffix}",
+      )
+    )
 
   def withCantonSvNodes[A](
       adminUsersFromSvBackends: (
@@ -42,13 +44,15 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       participants: Boolean = true,
       sequencersMediators: Boolean = true,
       overrideSvDbsSuffix: Option[String] = None,
-      overrideSequencerDriverDbSuffix: Option[String] = None,
       portsRange: Option[Int] = None,
       extraParticipantsConfigFileNames: Seq[String] = Seq.empty,
       extraParticipantsEnvMap: Map[String, String] = Map.empty,
-      enableBftSequencer: Boolean = IsTheCantonSequencerBFTEnabled,
       extraSequencerConfig: Seq[String] = Seq.empty,
       enableKeyDownload: Boolean = false,
+      // The SVs whose participant should NOT be initialized by Canton, because
+      // the test sets that participant's identity up itself. Every other SV
+      // participant auto-initializes, as in production.
+      manualInitParticipants: Set[Int] = Set.empty,
   )(extraEnv: (String, String)*)(test: => A)(implicit tc: TraceContext): A = {
 
     def conditionalConf(condition: Boolean, filename: String) =
@@ -61,20 +65,22 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
     val configs =
       Seq(testResourcesPath / "include" / "canton-basic.conf") ++
         conditionalConf(svs123 && participants, "standalone-participants-sv123.conf") ++
+        (1 to 3).flatMap(i =>
+          conditionalConf(
+            svs123 && participants && manualInitParticipants.contains(i),
+            s"standalone-participant-sv${i}-manual-init.conf",
+          )
+        ) ++
         conditionalConf(
           svs123 && sequencersMediators,
           "standalone-sequencers-mediators-sv123.conf",
         ) ++
-        conditionalConf(
-          svs123 && sequencersMediators && enableBftSequencer,
-          "standalone-sequencers-sv123-extra-enable-bft.conf",
-        ) ++
         conditionalConf(sv4 && participants, "standalone-participant-sv4.conf") ++
-        conditionalConf(sv4 && sequencersMediators, "standalone-sequencer-mediator-sv4.conf") ++
         conditionalConf(
-          sv4 && sequencersMediators && enableBftSequencer,
-          "standalone-sequencer-sv4-extra-enable-bft.conf",
+          sv4 && participants && manualInitParticipants.contains(4),
+          "standalone-participant-sv4-manual-init.conf",
         ) ++
+        conditionalConf(sv4 && sequencersMediators, "standalone-sequencer-mediator-sv4.conf") ++
         extraParticipantsConfigFileNames.toList.map(testResourcesPath / _)
 
     def adminUserEnv(index: Integer) = {
@@ -84,9 +90,29 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
         .map(s"SV${index}_ADMIN_USER" -> _.config.ledgerApiUser)
     }
 
+    // Canton auto-initializes these participants, so it needs the same node
+    // identifier the SV app expects. Tests may rename it, e.g. through
+    // `withCantonNodeNameSuffix`, so we read it off the app config.
+    //
+    // This is mandatory in the participant configs, and stays mandatory even
+    // for an SV in `manualInitParticipants`: the participant is built by
+    // concatenating substitutions, so Canton resolves the identifier before the
+    // manual-init override drops it. That is fine because it is emitted from the
+    // same backend `Option` as `SV<n>_ADMIN_USER`, which those configs already
+    // require - any SV whose participant config is loaded has a backend here.
+    def participantIdentifierEnv(index: Integer) = {
+      adminUsersFromSvBackends
+        .productElement(index - 1)
+        .asInstanceOf[Option[SvAppBackendReference]]
+        .map(backend =>
+          s"SV${index}_PARTICIPANT_IDENTIFIER" -> backend.config.cantonIdentifierConfig
+            .getOrElse(SvCantonIdentifierConfig.default(backend.config))
+            .participant
+        )
+    }
+
     val dbNamesEnv = {
       val svDbsSuffix = overrideSvDbsSuffix.getOrElse(dbsSuffix)
-      val sequencerDriverDbSuffix = overrideSequencerDriverDbSuffix.getOrElse(dbsSuffix)
       (1 to 4).flatMap(i =>
         Seq(
           s"SV${i}_PARTICIPANT_DB" -> s"participant_sv${i}_${svDbsSuffix}",
@@ -94,8 +120,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
           s"SV${i}_SEQUENCER_DB" -> s"sequencer_sv${i}_${svDbsSuffix}",
           s"SV${i}_MEDIATOR_DB" -> s"mediator_sv${i}_${svDbsSuffix}",
         )
-      ) :+
-        "SEQUENCER_DRIVER_DB" -> s"sequencer_driver_${sequencerDriverDbSuffix}"
+      )
     }
 
     val portsEnv = portsRange.fold(Seq(): Seq[(String, String)])(range =>
@@ -114,6 +139,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
     val allExtraEnv =
       (extraEnv ++
         (1 to 4).flatMap(adminUserEnv(_)) ++
+        (1 to 4).flatMap(participantIdentifierEnv(_)) ++
         portsEnv ++
         dbNamesEnv) ++ extraParticipantsEnvMap.toList
 

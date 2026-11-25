@@ -22,8 +22,10 @@ function write_participant_config() {
     cat <<EOF >> /app/app.conf
 canton.participants.participant_$index = {
     init = {
-        generate-topology-transactions-and-keys = false
-        identity.type = manual
+        generate-topology-transactions-and-keys = true
+        identity.type = auto
+        identity.identifier.type = explicit
+        identity.identifier.name = "participant_$index"
     }
 
     sequencer-client {
@@ -119,7 +121,6 @@ canton.participants.participant_$index = {
         }
     }
 
-    # TODO(DACH-NY/canton-network-node#8331) Tune cache sizes
     # from https://docs.daml.com/2.8.0/canton/usermanual/performance.html#configuration
     # tune caching configs of the ledger api server
     ledger-api {

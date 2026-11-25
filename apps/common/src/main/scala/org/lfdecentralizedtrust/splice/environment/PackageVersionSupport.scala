@@ -102,23 +102,6 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  def supportsAmuletAllocationV2(
-      parties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      Seq(
-        PackageIdResolver.Package.SpliceAmulet -> parties
-      ),
-      now,
-      DarResources.amulet,
-      DarResources.amulet_0_1_21,
-      ignoreRedundantCheck = false,
-    )
-  }
-
   def supportsGovernanceLock(
       parties: Seq[PartyId],
       now: CantonTimestamp,
@@ -156,6 +139,26 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  /** Whether DsoRules_SetSynchronizerNodeConfig takes the node states of the other SVs to check
+    * that an SV does not claim the sequencer or mediator id of another SV.
+    */
+  def supportsSynchronizerNodeIdClaimsCheck(
+      dsoGovernanceParties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = {
+    isDarSupported(
+      Seq(
+        PackageIdResolver.Package.SpliceDsoGovernance -> dsoGovernanceParties
+      ),
+      now,
+      DarResources.dsoGovernance,
+      DarResources.dsoGovernance_0_1_32,
+      ignoreRedundantCheck = false,
+    )
+  }
+
   // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
 
   def supportsExpireTransferInstructions(
@@ -183,6 +186,18 @@ trait PackageVersionSupport extends NamedLogging {
       now,
       DarResources.amulet,
       DarResources.amulet_0_1_19,
+      ignoreRedundantCheck = true,
+    )
+
+  def supportsTbarV1_1(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceAmulet,
+      now,
+      DarResources.amulet,
+      DarResources.amulet_0_1_25,
       ignoreRedundantCheck = true,
     )
 

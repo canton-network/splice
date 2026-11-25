@@ -36,10 +36,6 @@ A port number has five digits and is of the form `<Network Index><Node Index><AP
 - `<Node Index>` is between 0 and 9 and uniquely identifies the node within the network.
 - `<API Index>` is between 0 and 99 and uniquely identifies an API exposed by the node.
 
-**Exception:** Ports used by CometBFT instances are allocated using a dedicated scheme based on the CometBFT default ports.
-All CometBFT ports we use (both locally and on clusters) are of the form `266<Node Index><API Index>`,
-where `<Node Index>` defaults to 0 and `<API Index>` is one of `6` (P2P), `7` (RPC) and `0` (Prometheus metrics).
-
 ### Allocated Networks (Network Index)
 
 To avoid collisions with our grpc-web proxy (which proxies ports `N` to `N+1000`, see below),
@@ -54,7 +50,6 @@ all network indices must be odd numbers.
   - See `simple-topology.conf` with ports bumped by 10k, `simple-topology-canton-simtime.conf`
 - `25`: Toxi-proxy ports
   - See `simple-topology.conf` with ports bumped by 20k (currently for the ledger API, but may be extended for other connections in the future)
-- `26`: Reserved for CometBFT
 - `27`: Standalone Canton instances launched in integration tests
 - `28`: Canton instances used for soft domain migration tests
 

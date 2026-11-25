@@ -3,11 +3,13 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.{
   ARC_AmuletRules,
   ARC_DsoRules,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_CreateFeaturedAppConfigUpdateInstruction,
   SRARC_OffboardSv,
   SRARC_SetConfig,
 }
@@ -580,83 +582,146 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "Grant, Update and Revoke Featured App Right" in { implicit env =>
-      val providerParty = sv3Backend.getDsoInfo().svParty
-      val providerPartyId = providerParty.toProtoPrimitive
-      val activityWeight = BigDecimal("2.5")
+    "Grant, Update, Amend and Revoke Featured App Right" taggedAs (org.lfdecentralizedtrust.splice.util.Tags.SpliceAmulet_0_1_25) in {
+      implicit env =>
+        val providerParty = sv3Backend.getDsoInfo().svParty
+        val providerPartyId = providerParty.toProtoPrimitive
+        val activityWeight = BigDecimal("2.5")
+        // opsParties must not include the provider; use sv2's party (valid and distinct).
+        val opsPartyId = sv2Backend.getDsoInfo().svParty.toProtoPrimitive
 
-      // First, create a Grant proposal for the provider.
-      val grantProposalContractId = assertCreateProposal(
-        "SRARC_GrantFeaturedAppRight",
-        "grant-featured-app",
-      ) { implicit webDriver =>
-        fillOutTextField("grant-featured-app-idValue", providerPartyId)
-        fillOutTextField("grant-featured-app-activityWeight", activityWeight.toString)
-      }
-
-      clue("vote the grant request to execution before creating revoke request") {
-        val grantTrackingCid = eventually() {
-          val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] =
-            getVoteRequestForProposal(grantProposalContractId)
-
-          if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
-          else voteRequest.contractId
+        // First, create a Grant proposal for the provider, exercising the new appKind and
+        // opsParties fields (CIP-104 1.1).
+        val grantProposalContractId = assertCreateProposal(
+          "SRARC_GrantFeaturedAppRight",
+          "grant-featured-app",
+        ) { implicit webDriver =>
+          fillOutTextField("grant-featured-app-idValue", providerPartyId)
+          fillOutTextField("grant-featured-app-activityWeight", activityWeight.toString)
+          selectMuiOptionByValue("grant-featured-app-appKind-dropdown", "FAK_AssetMoving")
+          // MUI's Select popup lingers/animates after choosing; wait for it to close so it
+          // does not obscure the opsParties controls below it.
+          eventually() {
+            webDriver.findElements(By.cssSelector("ul.MuiMenu-list")).size() shouldBe 0
+          }
+          // opsParties is an add-a-row widget: add one row, then fill it.
+          click on testId("grant-featured-app-opsParties-add")
+          eventually() {
+            inside(find(testId("grant-featured-app-opsParties-row-0"))) { case Some(row) =>
+              row.underlying.sendKeys(opsPartyId)
+            }
+          }
         }
 
-        // With 4 SVs, 3 votes pass a request: sv1 (requester) and sv2 already
-        // voted in assertCreateProposal, so sv3's vote here reaches the threshold
-        // and archives the VoteRequest. We don't cast sv4's redundant vote: it
-        // races the archival and ~once a month fails with NOT_FOUND, flaking.
-        eventuallySucceeds() {
-          sv3Backend.castVote(grantTrackingCid, true, "", "")
+        clue("vote the grant request to execution before creating revoke request") {
+          val grantTrackingCid = eventually() {
+            val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] =
+              getVoteRequestForProposal(grantProposalContractId)
+
+            if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
+            else voteRequest.contractId
+          }
+
+          // With 4 SVs, 3 votes pass a request: sv1 (requester) and sv2 already
+          // voted in assertCreateProposal, so sv3's vote here reaches the threshold
+          // and archives the VoteRequest. We don't cast sv4's redundant vote: it
+          // races the archival and ~once a month fails with NOT_FOUND, flaking.
+          eventuallySucceeds() {
+            sv3Backend.castVote(grantTrackingCid, true, "", "")
+          }
+
+          eventually() {
+            val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
+            featuredAppRight shouldBe a[Some[?]]
+            featuredAppRight.value.payload.activityWeight.toScala.map(
+              BigDecimal(_)
+            ) shouldBe Some(activityWeight)
+            featuredAppRight.value.payload.appKind.toScala shouldBe Some(
+              FeaturedAppKind.FAK_ASSETMOVING
+            )
+            featuredAppRight.value.payload.opsParties.toScala
+              .map(_.asScala.toList) shouldBe Some(List(opsPartyId))
+          }
         }
 
-        eventually() {
-          val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
-          featuredAppRight shouldBe a[Some[?]]
-          featuredAppRight.value.payload.activityWeight.toScala.map(
-            BigDecimal(_)
-          ) shouldBe Some(activityWeight)
-        }
-      }
+        val newActivityWeight = BigDecimal("3.0")
 
-      val newActivityWeight = BigDecimal("3.0")
-
-      val updateProposalContractId = assertCreateProposal(
-        "SRARC_UpdateFeaturedAppRight",
-        "update-featured-app",
-      ) { implicit webDriver =>
-        fillOutTextField("update-featured-app-partyId", providerPartyId)
-        selectFirstMuiOption("update-featured-app-rightCid-dropdown")
-        fillOutTextField("update-featured-app-activityWeight", newActivityWeight.toString)
-      }
-
-      clue("vote the update request to execution") {
-        val updateTrackingCid = eventually() {
-          val voteRequest = getVoteRequestForProposal(updateProposalContractId)
-          if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
-          else voteRequest.contractId
+        val updateProposalContractId = assertCreateProposal(
+          "SRARC_UpdateFeaturedAppRight",
+          "update-featured-app",
+        ) { implicit webDriver =>
+          fillOutTextField("update-featured-app-partyId", providerPartyId)
+          selectFirstMuiOption("update-featured-app-rightCid-dropdown")
+          fillOutTextField("update-featured-app-activityWeight", newActivityWeight.toString)
         }
 
-        eventuallySucceeds() {
-          sv3Backend.castVote(updateTrackingCid, isAccepted = true, "", "")
+        clue("vote the update request to execution") {
+          val updateTrackingCid = eventually() {
+            val voteRequest = getVoteRequestForProposal(updateProposalContractId)
+            if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
+            else voteRequest.contractId
+          }
+
+          eventuallySucceeds() {
+            sv3Backend.castVote(updateTrackingCid, isAccepted = true, "", "")
+          }
+
+          eventually() {
+            val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
+            featuredAppRight shouldBe a[Some[?]]
+            featuredAppRight.value.payload.activityWeight.toScala.map(
+              BigDecimal(_)
+            ) shouldBe Some(newActivityWeight)
+          }
         }
 
-        eventually() {
-          val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
-          featuredAppRight shouldBe a[Some[?]]
-          featuredAppRight.value.payload.activityWeight.toScala.map(
-            BigDecimal(_)
-          ) shouldBe Some(newActivityWeight)
+        val amendedActivityWeight = BigDecimal("3.5")
+        val amendProposalContractId = assertCreateProposal(
+          "SRARC_CreateFeaturedAppConfigUpdateInstruction",
+          "amend-featured-app",
+        ) { implicit webDriver =>
+          // Entering the provider auto-resolves its single right and prepopulates the form
+          // (the rightCid picker is hidden); wait for that prepopulation before editing.
+          fillOutTextField("amend-featured-app-partyId", providerPartyId)
+          eventually() {
+            inside(find(id("amend-featured-app-activityWeight"))) { case Some(element) =>
+              element.underlying.getAttribute("value") should not be empty
+            }
+          }
+          inside(find(id("amend-featured-app-activityWeight"))) { case Some(element) =>
+            element.underlying.clear()
+          }
+          fillOutTextField("amend-featured-app-activityWeight", amendedActivityWeight.toString)
         }
-      }
 
-      // Now create a Revoke proposal by selecting a contract ID from the provider's dropdown.
-      assertCreateProposal("SRARC_RevokeFeaturedAppRight", "revoke-featured-app") {
-        implicit webDriver =>
-          fillOutTextField("revoke-featured-app-partyId", providerPartyId)
-          selectFirstMuiOption("revoke-featured-app-rightCid-dropdown")
-      }
+        clue("the created instruction vote request carries the amended config") {
+          eventually() {
+            val request = sv1Backend
+              .listVoteRequests()
+              .find(getTrackingId(_).contractId == amendProposalContractId)
+              .value
+            inside(request.payload.action) { case arc: ARC_DsoRules =>
+              inside(arc.dsoAction) { case srarc: SRARC_CreateFeaturedAppConfigUpdateInstruction =>
+                inside(
+                  srarc.dsoRules_CreateFeaturedAppConfigUpdateInstructionValue.updates.asScala.toList
+                ) { case single :: Nil =>
+                  single._1 shouldBe providerPartyId
+                  single._2.baseConfig.activityWeight.toScala
+                    .map(BigDecimal(_)) shouldBe Some(newActivityWeight)
+                  single._2.newConfig.activityWeight.toScala
+                    .map(BigDecimal(_)) shouldBe Some(amendedActivityWeight)
+                }
+              }
+            }
+          }
+        }
+
+        // Now create a Revoke proposal by selecting a contract ID from the provider's dropdown.
+        assertCreateProposal("SRARC_RevokeFeaturedAppRight", "revoke-featured-app") {
+          implicit webDriver =>
+            fillOutTextField("revoke-featured-app-partyId", providerPartyId)
+            selectFirstMuiOption("revoke-featured-app-rightCid-dropdown")
+        }
     }
 
     "Set Dso Rules Configuration" in { implicit env =>
@@ -760,58 +825,57 @@ class SvFrontendIntegrationTest
           )
         }
 
-        clue("Pausing vote request expiration automation") {
-          sv1Backend.dsoDelegateBasedAutomation
-            .trigger[CloseVoteRequestTrigger]
-            .pause()
-            .futureValue
-        }
+        // Any SV can close the expired request, so pause the trigger on all of them. The trigger
+        // is resumed even if a step below fails, since the environment is shared with other test
+        // cases.
+        val rejectedProposalCid = TriggerTestUtil.setTriggersWithin(
+          triggersToPauseAtStart = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).map(
+            _.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger]
+          )
+        ) {
+          actAndCheck(
+            "sv1 creates a proposal with a short expiration time",
+            createShortLivedSetConfigProposal(),
+          )(
+            "the short-lived proposal exists",
+            _ => newVoteRequestWithReason(expiringProposalReason),
+          )
 
-        actAndCheck(
-          "sv1 creates a proposal with a short expiration time",
-          createShortLivedSetConfigProposal(),
-        )(
-          "the short-lived proposal exists",
-          _ => newVoteRequestWithReason(expiringProposalReason),
-        )
-
-        val rejectedProposalCid = clue("sv1 creates a proposal via the UI") {
-          withFrontEnd("sv1") { implicit webDriver =>
-            loginToGovernance(sv1UIPort, sv1Backend.config.ledgerApiUser)
-            selectActionAndNavigateToForm("SRARC_SetConfig", "set-dso-config-rules")
-            fillAndSubmitProposalForm(
-              "set-dso-config-rules",
-              rejectedProposalReason,
-              requestReasonUrl,
-              effectiveAtThreshold = true,
-              { implicit webDriver =>
-                eventually() {
-                  inside(find(testId("config-field-numMemberTrafficContractsThreshold"))) {
-                    case Some(element) => element.underlying.sendKeys("42")
+          val proposalCid = clue("sv1 creates a proposal via the UI") {
+            withFrontEnd("sv1") { implicit webDriver =>
+              loginToGovernance(sv1UIPort, sv1Backend.config.ledgerApiUser)
+              selectActionAndNavigateToForm("SRARC_SetConfig", "set-dso-config-rules")
+              fillAndSubmitProposalForm(
+                "set-dso-config-rules",
+                rejectedProposalReason,
+                requestReasonUrl,
+                effectiveAtThreshold = true,
+                { implicit webDriver =>
+                  eventually() {
+                    inside(find(testId("config-field-numMemberTrafficContractsThreshold"))) {
+                      case Some(element) => element.underlying.sendKeys("42")
+                    }
                   }
-                }
-              },
-            )
+                },
+              )
+            }
+            newVoteRequestWithReason(rejectedProposalReason)
           }
-          newVoteRequestWithReason(rejectedProposalReason)
-        }
 
-        withFrontEnd("sv1") { implicit webDriver =>
-          clue("sv1 sees both proposals in flight and neither in the vote history") {
-            go to s"http://localhost:$sv1UIPort/governance"
-            eventually() {
-              val inflight = rowDescriptions("inflight-proposals")
-              inflight should contain(expiringProposalReason)
-              inflight should contain(rejectedProposalReason)
-              val history = rowDescriptions("vote-history")
-              history should not contain expiringProposalReason
-              history should not contain rejectedProposalReason
+          withFrontEnd("sv1") { implicit webDriver =>
+            clue("sv1 sees both proposals in flight and neither in the vote history") {
+              go to s"http://localhost:$sv1UIPort/governance"
+              eventually() {
+                val inflight = rowDescriptions("inflight-proposals")
+                inflight should contain(expiringProposalReason)
+                inflight should contain(rejectedProposalReason)
+                val history = rowDescriptions("vote-history")
+                history should not contain expiringProposalReason
+                history should not contain rejectedProposalReason
+              }
             }
           }
-        }
-
-        clue("Resuming vote request expiration automation") {
-          sv1Backend.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger].resume()
+          proposalCid
         }
 
         withFrontEnd("sv2") { implicit webDriver =>

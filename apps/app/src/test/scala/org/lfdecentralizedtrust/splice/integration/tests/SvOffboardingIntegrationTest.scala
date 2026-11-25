@@ -16,7 +16,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_act
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
-  IsTheCantonSequencerBFTEnabled,
   updateAutomationConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
@@ -183,13 +182,8 @@ class SvOffboardingIntegrationTest
         Seq(
           svb.dsoAutomation.trigger[SvOffboardingMediatorTrigger],
           svb.dsoAutomation.trigger[SvOffboardingSequencerTrigger],
-        ) ++ {
-          if (IsTheCantonSequencerBFTEnabled) {
-            Seq(svb.dsoAutomation.trigger[SvBftSequencerPeerOffboardingTrigger])
-          } else {
-            Seq.empty
-          }
-        }
+          svb.dsoAutomation.trigger[SvBftSequencerPeerOffboardingTrigger],
+        )
       }
       withClue("pause offboarding triggers") {
         MonadUtil
@@ -355,13 +349,11 @@ class SvOffboardingIntegrationTest
                 .toSet
             }
 
-            if (IsTheCantonSequencerBFTEnabled) {
-              clue("check sequencer offboarded from p2p connections") {
-                sv3Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection
-                  .listCurrentPeerEndpoints()
-                  .futureValue
-                  .size shouldBe 2
-              }
+            clue("check sequencer offboarded from p2p connections") {
+              sv3Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection
+                .listConfiguredPeerEndpoints()
+                .futureValue
+                .size shouldBe 2
             }
           },
       )

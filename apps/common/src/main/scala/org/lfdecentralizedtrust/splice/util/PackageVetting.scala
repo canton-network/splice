@@ -31,7 +31,6 @@ class PackageVetting(
     participantAdminConnection: ParticipantAdminConnection,
     override val loggerFactory: NamedLoggerFactory,
     latestPackagesOnly: Boolean,
-    enableUnsupportedDarsUnvetting: Boolean,
 )(implicit ec: ExecutionContext, tracer: Tracer)
     extends NamedLogging
     with Spanning {
@@ -58,16 +57,18 @@ class PackageVetting(
         .getRequiredPackageVersions(
           pkg.packageName,
           packageVersion,
-          enableUnsupportedDarsUnvetting,
           additionalPackagesToUnvet = additionalPackagesToUnvet,
         )
         .map(versionToVet => pkg -> versionToVet.metadata.version)
-    // Stores filter by interfaces contained in this package, including the interface id in the GetUpdates request.
-    // Said request will fail if the package is not present. Thus, we upload and vet all token standard packages.
+    // Stores filter by interfaces contained in the `splice-api-*` packages, including the interface id in the GetUpdates request.
+    // Said request will fail if the package is not present. Thus, we upload and vet all `splice-api-*` interface packages.
     // Since interfaces are not upgradeable, there's no gain in coordinating it via package config.
     // An interface itself also does nothing, only the implementations do, so it's OK from a vetting perspective.
+    //
+    // Only add interface packages here. Packages with templates or choices must be vetted via the package config,
+    // e.g., by making one of the packages in the package config depend on them.
     } ++
-      Seq(
+      (Seq(
         // Token Standard V1
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenMetadataV1,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenHoldingV1,
@@ -82,20 +83,25 @@ class PackageVetting(
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationRequestV2,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationInstructionV2,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenTransferEventsV2,
-        PackageIdResolver.Package.TokenStandard.SpliceTokenStandardUtils,
-        PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet,
-        PackageIdResolver.Package.SpliceUtilBatchedMarkers,
         PackageIdResolver.Package.SpliceApiRewardAssignmentV1,
-      ).flatMap(pkg =>
+      ).map(pkg => pkg -> PackageIdResolver.readPackageVersion(currentPackageConfig, pkg)) ++
+        // Not interface packages: pinned to the last versions released before `splice-wallet` depended on them,
+        // so that validators keep vetting them until a `splice-wallet` version that depends on them is voted in.
+        // TODO(#8637): remove once `splice-wallet` 0.1.27 or later is voted in on all networks.
+        Seq(
+          PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet ->
+            PackageVersion.assertFromString("1.1.2"),
+          PackageIdResolver.Package.SpliceUtilBatchedMarkers ->
+            PackageVersion.assertFromString("1.0.5"),
+        )).flatMap { case (pkg, packageVersion) =>
         DarResourcesUtil
           .getRequiredPackageVersions(
             pkg.packageName,
-            PackageIdResolver.readPackageVersion(currentPackageConfig, pkg),
-            enableUnsupportedDarsUnvetting,
+            packageVersion,
             additionalPackagesToUnvet = additionalPackagesToUnvet,
           )
           .map(versionToVet => pkg -> versionToVet.metadata.version)
-      )
+      }
 
     vetPackages(
       domainId,
@@ -170,7 +176,6 @@ class PackageVetting(
       vettedPackageIds = vettedPackages.flatMap(_.mapping.packages).map(_.packageId)
       unsupportedPackages = DarResourcesUtil.filterUnsupportedPackageVersions(
         vettedPackageIds,
-        enableUnsupportedDarsUnvetting,
         latestPackagesOnly,
         additionalPackagesToUnvet,
         (currentPackageConfig +: pendingPackageConfigs).map(PackageIdResolver.toPackageConfigMap),
@@ -299,7 +304,6 @@ class PackageVetting(
               .getRequiredPackageVersions(
                 pkg.packageName,
                 configPackageVersion,
-                enableUnsupportedDarsUnvetting,
                 additionalPackagesToUnvet = additionalPackagesToUnvet,
               )
               .map(_.metadata.version)

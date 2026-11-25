@@ -69,8 +69,9 @@ import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 import org.lfdecentralizedtrust.splice.util.{Contract, PackageVetting, TemplateJsonDecoder}
 
 import java.security.interfaces.ECPrivateKey
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, blocking}
 import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
 
 /** Container for the methods required by the SvApp to initialize a joining SV node. */
 class JoiningNodeInitializer(
@@ -233,12 +234,14 @@ class JoiningNodeInitializer(
       svStore <- newSvStore(
         storeKey,
         domainMigrationId,
+        decentralizedSynchronizerId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
+        decentralizedSynchronizerId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
@@ -264,10 +267,6 @@ class JoiningNodeInitializer(
         )
       )
       currentNode <- synchronizerNodeService.activeSynchronizerNode()
-      // We need to first wait to ensure the CometBFT node is caught up
-      // If the CometBFT node is not caught up and we start the CometBFT triggers, if the network doesn't have any
-      // fault tolerance then it might be blocked until the CometBFT node is caught up.
-      _ <- waitUntilCometBftNodeHasCaughtUp(currentNode)
       withSvStore = new WithSvStore(
         svAutomation,
         new JoiningNodeDsoPartyHosting(
@@ -276,6 +275,7 @@ class JoiningNodeInitializer(
           upgradesConfig,
           dsoPartyId,
           dsoPartyHosting,
+          config.onboardingSnapshots,
           retryProvider,
           loggerFactory,
         ),
@@ -284,6 +284,7 @@ class JoiningNodeInitializer(
       dsoAutomation <-
         if (dsoPartyIsAuthorized) {
           logger.info("DSO party is authorized to our participant.")
+          deleteDsoPartySnapshotDownload()
           for {
             _ <- SetupUtil.grantSvUserRightActAsDso(
               connection,
@@ -297,6 +298,7 @@ class JoiningNodeInitializer(
               retryProvider,
               loggerFactory,
               config.scan,
+              packageVersionSupport,
             )
             dsoAutomation <-
               newSvDsoAutomationService(
@@ -362,12 +364,6 @@ class JoiningNodeInitializer(
         connection,
         upgradesConfig,
       )
-      _ <- ensureCometBftGovernanceKeysAreSet(
-        currentNode.cometbftNode,
-        svParty,
-        dsoStore,
-        dsoAutomation,
-      )
       // Set autoConnect=true now that DSO party migration is complete
       _ <- participantAdminConnection.modifySynchronizerConnectionConfig(
         config.domains.global.alias,
@@ -418,6 +414,18 @@ class JoiningNodeInitializer(
     }
   }
 
+  private def deleteDsoPartySnapshotDownload(): Unit = {
+    val download = SvOnboardingSnapshotDownload.downloadDirectory(
+      config.onboardingSnapshots,
+      JoiningNodeDsoPartyHosting.SnapshotDownloadName,
+    )
+    try blocking(SvOnboardingSnapshotDownload.deleteDownload(download))
+    catch {
+      case NonFatal(error) =>
+        logger.warn(s"Failed to delete DSO party snapshot download $download", error)
+    }
+  }
+
   private def vetThroughSponsor(joiningConfig: SvOnboardingConfig.JoinWithKey): Future[Unit] = {
     logger.info("Vetting packages based on state from sponsor")
     for {
@@ -435,7 +443,6 @@ class JoiningNodeInitializer(
         participantAdminConnection,
         loggerFactory,
         config.latestPackagesOnly,
-        config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
       )
       _ <- vetting.vetCurrentPackages(
         synchronizerId,
@@ -489,7 +496,6 @@ class JoiningNodeInitializer(
       _ <- (
         waitForSvParticipantToBeOnboarded(dsoPartyId, decentralizedSynchronizer),
         waitForDsoSvRole(dsoStore),
-        waitUntilCometBftNodeIsValidator(currentNode),
       ).tupled
       _ <-
         if (!config.shouldSkipSynchronizerInitialization) {
@@ -511,6 +517,7 @@ class JoiningNodeInitializer(
             physicalSynchronizerId <-
               currentNode.onboardLocalSequencerIfRequired(
                 svConnection.map(_._2),
+                config.onboardingSnapshots,
                 // Add the new local domain node to the DSO rules with an "onboarding" status
                 // This triggers automation in other SV apps, that's why we make sure the sequencer is known first
                 preInit = () =>
@@ -712,62 +719,6 @@ class JoiningNodeInitializer(
     )
   }
 
-  private def waitUntilCometBftNodeIsValidator(activeNode: LocalSynchronizerNode) = {
-    activeNode.cometbftNode
-      .map(_.cometBftClient)
-      .map(cometBftClient =>
-        retryProvider.waitUntil(
-          RetryFor.WaitingOnInitDependency,
-          "cometbft_is_validator",
-          "CometBFT node is a validator",
-          cometBftClient
-            .nodeStatus()
-            .map { status =>
-              if (status.validatorInfo.votingPower.toDouble == 0) {
-                throw Status.FAILED_PRECONDITION
-                  .withDescription(
-                    s"CometBFT node is not a validator; voting power is 0."
-                  )
-                  .asRuntimeException()
-              }
-            },
-          logger,
-        )
-      )
-      .getOrElse({
-        logger.info("No CometBFT node found, so not waiting on CometBFT validator.")
-        Future.unit
-      })
-  }
-
-  private def waitUntilCometBftNodeHasCaughtUp(activeNode: LocalSynchronizerNode) = {
-    activeNode.cometbftNode
-      .map(_.cometBftClient)
-      .map(cometBftClient =>
-        retryProvider.waitUntil(
-          RetryFor.WaitingOnInitDependency,
-          "cometbft_up_to_date",
-          "CometBFT node has caught up",
-          cometBftClient
-            .nodeStatus()
-            .map { status =>
-              if (status.syncInfo.catchingUp) {
-                throw Status.FAILED_PRECONDITION
-                  .withDescription(
-                    s"CometBFT node is still catching up; currently at block ${status.syncInfo.latestBlockHeight}."
-                  )
-                  .asRuntimeException()
-              }
-            },
-          logger,
-        )
-      )
-      .getOrElse({
-        logger.info("No CometBFT node found, so not waiting on CometBFT sync.")
-        Future.unit
-      })
-  }
-
   /** Private class to share svStore, dsoPartyHosting, and global domain-id
     * across utility methods.
     */
@@ -935,6 +886,7 @@ class JoiningNodeInitializer(
                   retryProvider,
                   loggerFactory,
                   config.scan,
+                  packageVersionSupport,
                 )
                 dsoAutomation <- newSvDsoAutomationService(
                   svStore,
@@ -1015,7 +967,6 @@ class JoiningNodeInitializer(
 
     private def startHostingDsoPartyInParticipant(): Future[Unit] = {
       dsoPartyHosting
-        // TODO(DACH-NY/canton-network-node#5364): consider inlining the relevant parts from DsoPartyHosting
         .hostPartyOnOwnParticipant(
           config.domains.global.alias,
           synchronizerId,

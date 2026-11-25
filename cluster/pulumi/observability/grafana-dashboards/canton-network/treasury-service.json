@@ -151,7 +151,7 @@
         "spec": {
           "id": 27,
           "title": "Treasury service queue latency",
-          "description": "Time items spent in the treasury service queue before being processed.",
+          "description": "Time operations spent in the treasury service queue before their batch started executing (average and selected quantile). Excludes the execution of the batch itself.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -169,12 +169,33 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "histogram_quantile($quantile, sum by (namespace, job, owner) (rate(splice_wallet_treasury_queue_latency_duration_seconds[$__rate_interval])))",
-                        "legendFormat": "{{namespace}}-{{job}}-{{owner}}",
+                        "expr": "histogram_quantile($quantile, sum by (namespace, job, owner) (rate(splice_wallet_treasury_queue_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",owner=~\"$owner\"}[$__rate_interval])))",
+                        "legendFormat": "q$quantile {{namespace}}-{{job}}-{{owner}}",
                         "range": true
                       }
                     },
                     "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "histogram_avg(sum by (namespace, job, owner) (rate(splice_wallet_treasury_queue_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",owner=~\"$owner\"}[$__rate_interval])))",
+                        "legendFormat": "avg {{namespace}}-{{job}}-{{owner}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
                     "hidden": false
                   }
                 }
@@ -197,7 +218,7 @@
                 },
                 "tooltip": {
                   "hideZeros": false,
-                  "mode": "single",
+                  "mode": "multi",
                   "sort": "none"
                 }
               },
@@ -260,6 +281,534 @@
             }
           }
         }
+      },
+      "panel-30": {
+        "kind": "Panel",
+        "spec": {
+          "id": 30,
+          "title": "Treasury executor saturation",
+          "description": "Estimate of how saturated the treasury batch executor is. Batches are executed strictly one at a time, so once it is busy every operation waits for the in-flight batch: average queue wait \u00d7 batches per second \u2248 0 when idle, \u2248 0.5 when batches run back-to-back, and > 1 when operations wait for more than one batch (batch size capped or queue backlog). Saturation means throughput can only grow via larger batches, at the cost of latency. Batch metrics are not labelled by owner, so they are aggregated per validator app and ignore the owner filter.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "histogram_avg(sum by (namespace, job) (rate(splice_wallet_treasury_queue_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\"}[$__rate_interval]))) * histogram_count(sum by (namespace, job) (rate(splice_wallet_treasury_batch_size{namespace=~\"$namespace\",job=~\"$job\"}[$__rate_interval])))",
+                        "legendFormat": "{{namespace}}-{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "12.4.0",
+            "spec": {
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 0.25,
+                        "color": "yellow"
+                      },
+                      {
+                        "value": 0.45,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "line+area"
+                    }
+                  },
+                  "unit": "none",
+                  "decimals": 2
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-31": {
+        "kind": "Panel",
+        "spec": {
+          "id": 31,
+          "title": "Queue wait vs. batch interval",
+          "description": "Average time between batch executions (1 / batches per second) compared to the average time operations wait in the queue. When the executor is saturated, the batch interval equals the batch execution time and the queue wait approaches half of it or more. Batch metrics are not labelled by owner, so they are aggregated per validator app and ignore the owner filter.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "1 / histogram_count(sum by (namespace, job) (rate(splice_wallet_treasury_batch_size{namespace=~\"$namespace\",job=~\"$job\"}[$__rate_interval])))",
+                        "legendFormat": "batch interval {{namespace}}-{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "histogram_avg(sum by (namespace, job) (rate(splice_wallet_treasury_queue_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\"}[$__rate_interval])))",
+                        "legendFormat": "avg queue wait {{namespace}}-{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "12.4.0",
+            "spec": {
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "unit": "s"
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-32": {
+        "kind": "Panel",
+        "spec": {
+          "id": 32,
+          "title": "Treasury throughput",
+          "description": "Operations dequeued per second (per owner) and batches executed per second (per validator app). Batch metrics are not labelled by owner, so they are aggregated per validator app and ignore the owner filter.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "sum by (namespace, job, owner) (histogram_count(rate(splice_wallet_treasury_queue_latency_duration_seconds{namespace=~\"$namespace\",job=~\"$job\",owner=~\"$owner\"}[$__rate_interval])))",
+                        "legendFormat": "ops {{namespace}}-{{job}}-{{owner}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "histogram_count(sum by (namespace, job) (rate(splice_wallet_treasury_batch_size{namespace=~\"$namespace\",job=~\"$job\"}[$__rate_interval])))",
+                        "legendFormat": "batches {{namespace}}-{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "12.4.0",
+            "spec": {
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "unit": "ops"
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-33": {
+        "kind": "Panel",
+        "spec": {
+          "id": 33,
+          "title": "Treasury batch size",
+          "description": "Number of operations per executed batch: average and the selected quantile. Batch size grows as the executor saturates and is capped by the configured treasury batch-size. Batch metrics are not labelled by owner, so they are aggregated per validator app and ignore the owner filter.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "histogram_avg(sum by (namespace, job) (rate(splice_wallet_treasury_batch_size{namespace=~\"$namespace\",job=~\"$job\"}[$__rate_interval])))",
+                        "legendFormat": "avg {{namespace}}-{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "prometheus"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "histogram_quantile($quantile, sum by (namespace, job) (rate(splice_wallet_treasury_batch_size{namespace=~\"$namespace\",job=~\"$job\"}[$__rate_interval])))",
+                        "legendFormat": "q$quantile {{namespace}}-{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "12.4.0",
+            "spec": {
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "unit": "none"
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
       }
     },
     "layout": {
@@ -271,8 +820,60 @@
             "spec": {
               "x": 0,
               "y": 0,
-              "width": 24,
-              "height": 9,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-30"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-31"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 8,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-32"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 12,
+              "y": 8,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-33"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 16,
+              "width": 12,
+              "height": 8,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-27"
@@ -282,10 +883,10 @@
           {
             "kind": "GridLayoutItem",
             "spec": {
-              "x": 0,
-              "y": 9,
-              "width": 24,
-              "height": 10,
+              "x": 12,
+              "y": 16,
+              "width": 12,
+              "height": 8,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-25"
@@ -364,7 +965,7 @@
             "value": "$__all"
           },
           "hide": "dontHide",
-          "refresh": "onDashboardLoad",
+          "refresh": "onTimeRangeChanged",
           "skipUrlSync": false,
           "query": {
             "kind": "DataQuery",
@@ -375,14 +976,14 @@
             },
             "spec": {
               "qryType": 1,
-              "query": "label_values(splice_wallet_treasury_queue_size,job)",
+              "query": "label_values(splice_wallet_treasury_queue_size{namespace=~\"$namespace\"},job)",
               "refId": "PrometheusVariableQueryEditor-VariableQuery"
             }
           },
           "regex": "",
           "regexApplyTo": "value",
           "sort": "disabled",
-          "definition": "label_values(splice_wallet_treasury_queue_size,job)",
+          "definition": "label_values(splice_wallet_treasury_queue_size{namespace=~\"$namespace\"},job)",
           "options": [],
           "multi": true,
           "includeAll": true,
@@ -401,7 +1002,7 @@
             ]
           },
           "hide": "dontHide",
-          "refresh": "onDashboardLoad",
+          "refresh": "onTimeRangeChanged",
           "skipUrlSync": false,
           "query": {
             "kind": "DataQuery",
@@ -412,14 +1013,14 @@
             },
             "spec": {
               "qryType": 1,
-              "query": "label_values(splice_wallet_treasury_queue_size,owner)",
+              "query": "label_values(splice_wallet_treasury_queue_size{namespace=~\"$namespace\",job=~\"$job\"},owner)",
               "refId": "PrometheusVariableQueryEditor-VariableQuery"
             }
           },
           "regex": "",
           "regexApplyTo": "value",
           "sort": "disabled",
-          "definition": "label_values(splice_wallet_treasury_queue_size,owner)",
+          "definition": "label_values(splice_wallet_treasury_queue_size{namespace=~\"$namespace\",job=~\"$job\"},owner)",
           "options": [],
           "multi": true,
           "includeAll": true,

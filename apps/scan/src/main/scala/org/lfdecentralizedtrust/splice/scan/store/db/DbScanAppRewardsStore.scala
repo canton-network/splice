@@ -38,7 +38,9 @@ object DbScanAppRewardsStore {
       roundNumber: Long,
       totalAppActivityWeight: Long,
       appProviderParty: String,
-      numActivityRecords: Long,
+      numAppActivityRecords: Long,
+      numAssetActivityRecords: Long,
+      totalAssetActivityWeight: Long,
   )
 
   final case class AppActivityRoundTotalT(
@@ -47,6 +49,7 @@ object DbScanAppRewardsStore {
       totalRoundAppActivityWeight: Long,
       activeAppProviderPartiesCount: Long,
       activityRecordsCount: Long,
+      totalRoundAssetActivityWeight: Long,
   )
 
   final case class AppRewardPartyTotalT(
@@ -64,6 +67,10 @@ object DbScanAppRewardsStore {
       totalAppRewardThresholded: BigDecimal,
       totalAppRewardUnclaimed: BigDecimal,
       rewardedAppProviderPartiesCount: Long,
+      totalAppRewardFromAppActivity: BigDecimal,
+      totalAppRewardFromAssetActivity: BigDecimal,
+      issuancePerFeaturedAppActivity: BigDecimal,
+      issuancePerFeaturedAssetActivity: BigDecimal,
   )
 
   final case class AppRewardBatchHashT(
@@ -174,7 +181,9 @@ class DbScanAppRewardsStore(
       roundNumber = prs.<<[Long],
       totalAppActivityWeight = prs.<<[Long],
       appProviderParty = prs.<<[String],
-      numActivityRecords = prs.<<[Long],
+      numAppActivityRecords = prs.<<[Long],
+      numAssetActivityRecords = prs.<<[Long],
+      totalAssetActivityWeight = prs.<<[Long],
     )
   }
 
@@ -186,6 +195,7 @@ class DbScanAppRewardsStore(
       totalRoundAppActivityWeight = prs.<<[Long],
       activeAppProviderPartiesCount = prs.<<[Long],
       activityRecordsCount = prs.<<[Long],
+      totalRoundAssetActivityWeight = prs.<<[Long],
     )
   }
 
@@ -209,6 +219,10 @@ class DbScanAppRewardsStore(
       totalAppRewardThresholded = prs.<<[BigDecimal],
       totalAppRewardUnclaimed = prs.<<[BigDecimal],
       rewardedAppProviderPartiesCount = prs.<<[Long],
+      totalAppRewardFromAppActivity = prs.<<[BigDecimal],
+      totalAppRewardFromAssetActivity = prs.<<[BigDecimal],
+      issuancePerFeaturedAppActivity = prs.<<[BigDecimal],
+      issuancePerFeaturedAssetActivity = prs.<<[BigDecimal],
     )
   }
 
@@ -253,12 +267,16 @@ class DbScanAppRewardsStore(
       val values = sqlCommaSeparated(items.map { row =>
         sql"""(${row.historyId}, ${row.roundNumber}, ${row.totalAppActivityWeight},
               ${row.appProviderParty},
-              ${row.numActivityRecords})"""
+              ${row.numAppActivityRecords},
+              ${row.numAssetActivityRecords},
+              ${row.totalAssetActivityWeight})"""
       })
       (sql"""insert into #${Tables.appActivityPartyTotals}(
               history_id, round_number, total_app_activity_weight,
               app_provider_party,
-              num_activity_records
+              num_app_activity_records,
+              num_asset_activity_records,
+              total_asset_activity_weight
             ) values """ ++ values).asUpdate
     }
   }
@@ -285,7 +303,9 @@ class DbScanAppRewardsStore(
     runQuery(
       sql"""select history_id, round_number, total_app_activity_weight,
                    app_provider_party,
-                   num_activity_records
+                   num_app_activity_records,
+                   num_asset_activity_records,
+                   total_asset_activity_weight
             from #${Tables.appActivityPartyTotals}
             where history_id = $historyId and round_number = $roundNumber
             order by app_provider_party
@@ -303,11 +323,13 @@ class DbScanAppRewardsStore(
     else {
       val values = sqlCommaSeparated(items.map { row =>
         sql"""(${row.historyId}, ${row.roundNumber}, ${row.totalRoundAppActivityWeight},
-              ${row.activeAppProviderPartiesCount}, ${row.activityRecordsCount})"""
+              ${row.activeAppProviderPartiesCount}, ${row.activityRecordsCount},
+              ${row.totalRoundAssetActivityWeight})"""
       })
       (sql"""insert into #${Tables.appActivityRoundTotals}(
               history_id, round_number, total_round_app_activity_weight,
-              active_app_provider_parties_count, activity_records_count
+              active_app_provider_parties_count, activity_records_count,
+              total_round_asset_activity_weight
             ) values """ ++ values).asUpdate
     }
   }
@@ -333,7 +355,8 @@ class DbScanAppRewardsStore(
 
     runQuerySingle(
       sql"""select history_id, round_number, total_round_app_activity_weight,
-                   active_app_provider_parties_count, activity_records_count
+                   active_app_provider_parties_count, activity_records_count,
+                   total_round_asset_activity_weight
             from #${Tables.appActivityRoundTotals}
             where history_id = $historyId and round_number = $roundNumber
             limit 1
@@ -342,13 +365,13 @@ class DbScanAppRewardsStore(
     )
   }
 
-  /** DBIO action to read the total activity weight for a round. */
+  /** DBIO action to read the per-round `(appWeight, assetWeight)` for a round. */
   // .head is safe: only called after aggregateActivityTotalsAction in the same transaction.
-  private def getAppActivityRoundTotalWeightAction(roundNumber: Long) =
-    sql"""select total_round_app_activity_weight
+  private def getRoundActivityWeightsAction(roundNumber: Long) =
+    sql"""select total_round_app_activity_weight, total_round_asset_activity_weight
           from #${Tables.appActivityRoundTotals}
           where history_id = $historyId and round_number = $roundNumber
-    """.as[Long].head
+    """.as[(Long, Long)].head
 
   // -- app_reward_party_totals ----------------------------------------------
 
@@ -408,12 +431,16 @@ class DbScanAppRewardsStore(
       val values = sqlCommaSeparated(items.map { row =>
         sql"""(${row.historyId}, ${row.roundNumber},
               ${row.totalAppRewardMintingAllowance}, ${row.totalAppRewardThresholded},
-              ${row.totalAppRewardUnclaimed}, ${row.rewardedAppProviderPartiesCount})"""
+              ${row.totalAppRewardUnclaimed}, ${row.rewardedAppProviderPartiesCount},
+              ${row.totalAppRewardFromAppActivity}, ${row.totalAppRewardFromAssetActivity},
+              ${row.issuancePerFeaturedAppActivity}, ${row.issuancePerFeaturedAssetActivity})"""
       })
       (sql"""insert into #${Tables.appRewardRoundTotals}(
               history_id, round_number,
               total_app_reward_minting_allowance, total_app_reward_thresholded,
-              total_app_reward_unclaimed, rewarded_app_provider_parties_count
+              total_app_reward_unclaimed, rewarded_app_provider_parties_count,
+              total_app_reward_from_app_activity, total_app_reward_from_asset_activity,
+              issuance_per_featured_app_activity, issuance_per_featured_asset_activity
             ) values """ ++ values).asUpdate
     }
   }
@@ -440,7 +467,9 @@ class DbScanAppRewardsStore(
     runQuerySingle(
       sql"""select history_id, round_number,
                    total_app_reward_minting_allowance, total_app_reward_thresholded,
-                   total_app_reward_unclaimed, rewarded_app_provider_parties_count
+                   total_app_reward_unclaimed, rewarded_app_provider_parties_count,
+                   total_app_reward_from_app_activity, total_app_reward_from_asset_activity,
+                   issuance_per_featured_app_activity, issuance_per_featured_asset_activity
             from #${Tables.appRewardRoundTotals}
             where history_id = $historyId and round_number = $roundNumber
             limit 1
@@ -691,10 +720,10 @@ class DbScanAppRewardsStore(
       _ <- runUpdate(
         (for {
           _ <- aggregateActivityTotalsAction(roundNumber)
-          totalWeight <- getAppActivityRoundTotalWeightAction(roundNumber)
-          params = inputs.deriveIssuanceParams(totalWeight)
+          (appWeight, assetWeight) <- getRoundActivityWeightsAction(roundNumber)
+          params = inputs.deriveIssuanceParams(appWeight, assetWeight)
           _ <- computeRewardTotalsAction(roundNumber, params)
-          _ <- assertMintingAllowanceWithinMintingCurve(roundNumber, params)
+          _ <- assertCombinedMintingAllowanceWithinIssuanceBudget(roundNumber, params)
           _ <- computeRewardHashesAction(roundNumber, batchSize)
         } yield ())
           .map(_ => logger.debug(s"Computed and stored rewards for round $roundNumber."))
@@ -729,21 +758,48 @@ class DbScanAppRewardsStore(
       ++ insertPartyTotals(historyId, roundNumber) ++ sql" "
       ++ insertRoundTotals(historyId, roundNumber)).asUpdate
 
-  /** Unnest per-verdict activity arrays and aggregate weights by party. */
+  /** Unnest per-verdict activity arrays and aggregate weights by party.
+    * TBAR v1.1 attribution is pre-applied in `app_provider_parties`.
+    */
   private def unnestAndAggregate(historyId: Long, roundNumber: Long) =
-    sql"""unnested as (
+    sql"""app_unnested as (
             select party, weight
             from app_activity_record_store a
             cross join lateral unnest(a.app_provider_parties, a.app_activity_weights)
-                 as party_and_weight(party, weight)
+                 as pw(party, weight)
             where a.history_id = $historyId
               and a.round_number = $roundNumber
           ),
-          aggregated as (
-            select party, sum(weight) as total_weight,
-                   count(*) as num_activity_records
-            from unnested
+          app_aggregated as (
+            select party, sum(weight) as total_app_weight,
+                   count(*) as num_app_activity_records
+            from app_unnested
             group by party
+          ),
+          asset_unnested as (
+            select party, weight
+            from app_activity_record_store a
+            cross join lateral unnest(
+                   coalesce(a.asset_activity_provider_parties, '{}'::text[]),
+                   coalesce(a.asset_activity_weights,          '{}'::bigint[]))
+                 as pw(party, weight)
+            where a.history_id = $historyId
+              and a.round_number = $roundNumber
+          ),
+          asset_aggregated as (
+            select party, sum(weight) as total_asset_weight,
+                   count(*) as num_asset_activity_records
+            from asset_unnested
+            group by party
+          ),
+          combined_parties as (
+            select coalesce(a.party, s.party)                as party,
+                   coalesce(a.total_app_weight, 0)           as total_app_weight,
+                   coalesce(a.num_app_activity_records, 0)   as num_app_activity_records,
+                   coalesce(s.total_asset_weight, 0)         as total_asset_weight,
+                   coalesce(s.num_asset_activity_records, 0) as num_asset_activity_records
+            from app_aggregated a
+            full outer join asset_aggregated s on a.party = s.party
           )"""
 
   /** Insert per-party totals and return the inserted weights via RETURNING. */
@@ -754,11 +810,20 @@ class DbScanAppRewardsStore(
                round_number,
                total_app_activity_weight,
                app_provider_party,
-               num_activity_records)
-            select $historyId, $roundNumber, total_weight, party,
-                   num_activity_records
-            from aggregated
-            returning total_app_activity_weight, num_activity_records
+               num_app_activity_records,
+               num_asset_activity_records,
+               total_asset_activity_weight)
+            select $historyId,
+                   $roundNumber,
+                   total_app_weight,
+                   party,
+                   num_app_activity_records,
+                   num_asset_activity_records,
+                   total_asset_weight
+            from combined_parties
+            returning total_app_activity_weight,
+                      num_app_activity_records,
+                      total_asset_activity_weight
           )"""
 
   /** Insert the round-level totals from the RETURNING output of insertPartyTotals. */
@@ -768,12 +833,14 @@ class DbScanAppRewardsStore(
              round_number,
              total_round_app_activity_weight,
              active_app_provider_parties_count,
-             activity_records_count)
+             activity_records_count,
+             total_round_asset_activity_weight)
           select $historyId,
                  $roundNumber,
                  coalesce(sum(total_app_activity_weight), 0),
-                 count(*),
-                 coalesce(sum(num_activity_records), 0)
+                 count(*) filter (where total_app_activity_weight > 0),
+                 coalesce(sum(num_app_activity_records), 0),
+                 coalesce(sum(total_asset_activity_weight), 0)
           from inserted_parties"""
 
   // -- Reward computation -----------------------------------------------------
@@ -798,8 +865,9 @@ class DbScanAppRewardsStore(
   /** Stage 2 of the reward computation pipeline.
     *
     * Reads per-party activity weights from `app_activity_party_totals` (stage 1
-    * output), converts bytes to CC minting allowances via the issuance rate,
-    * filters out parties below the reward threshold, and assigns contiguous
+    * output), converts bytes to CC minting allowances (combined app + asset
+    * portions per party under TBAR v1.1), filters out parties whose combined
+    * amount is below the reward threshold, and assigns contiguous
     * `app_provider_party_seq_num` values (0..M-1) to the M rewarded parties.
     *
     * Writes to `app_reward_party_totals` (per-party rewards with seq_num and
@@ -811,15 +879,17 @@ class DbScanAppRewardsStore(
       roundNumber: Long,
       params: RewardIssuanceParams,
   ) = {
-    val issuance = params.issuancePerFeaturedAppTraffic_CCperMB
-    val threshold = params.threshold_CC
-    val totalIssuance = params.totalIssuanceForFeaturedAppRewards
-    val unclaimed = params.unclaimedAppRewardAmount
-
-    (sql"""with computed as (
-             select history_id, round_number, app_provider_party,
+    (sql"""with combined as (
+             -- Per the amendment's per-party reward formula:
+             --   appBurnCC × issuancePerAppBurnCC + assetBurnCC × issuancePerAssetBurnCC.
+             -- Rewritten using the per-MB rates since (bytes/1e6) × ratePerMB == burnCC × ratePerCC,
+             -- saving one Numeric multiplication per row.
+             select app_provider_party,
                     (cast(total_app_activity_weight as decimal(38,10)) / 1000000.0)
-                      * $issuance as total_app_reward_amount
+                      * ${params.issuancePerAppBurnCCPerMB}
+                    + (cast(total_asset_activity_weight as decimal(38,10)) / 1000000.0)
+                      * ${params.issuancePerAssetBurnCCPerMB}
+                      as combined_amount
              from #${Tables.appActivityPartyTotals}
              where history_id = $historyId and round_number = $roundNumber
            ),
@@ -827,31 +897,42 @@ class DbScanAppRewardsStore(
              insert into #${Tables.appRewardPartyTotals}
                (history_id, round_number, app_provider_party_seq_num,
                 app_provider_party, total_app_reward_amount)
-             select history_id, round_number,
+             select $historyId, $roundNumber,
                     (row_number() over (order by app_provider_party) - 1)::int,
-                    app_provider_party, total_app_reward_amount
-             from computed
-             where total_app_reward_amount >= $threshold
+                    app_provider_party, combined_amount
+             from combined
+             -- The amendment's threshold rule zeros below-threshold rewards;
+             -- filtering is equivalent at the sum.
+             where combined_amount >= ${params.appRewardCouponThresholdCC}
              returning total_app_reward_amount
            )
            insert into #${Tables.appRewardRoundTotals}
              (history_id, round_number, total_app_reward_minting_allowance,
               total_app_reward_thresholded, total_app_reward_unclaimed,
-              rewarded_app_provider_parties_count)
+              rewarded_app_provider_parties_count,
+              total_app_reward_from_app_activity, total_app_reward_from_asset_activity,
+              issuance_per_featured_app_activity, issuance_per_featured_asset_activity)
            select $historyId, $roundNumber,
              coalesce(sum(total_app_reward_amount), 0),
-             $totalIssuance - $unclaimed - coalesce(sum(total_app_reward_amount), 0),
-             $unclaimed,
-             count(*)
+             ${params.appMintingAllowanceCC} + ${params.assetMintingAllowanceCC}
+               - coalesce(sum(total_app_reward_amount), 0),
+             ${params.unclaimedMintingAllowanceCC},
+             count(*),
+             ${params.appMintingAllowanceCC}, ${params.assetMintingAllowanceCC},
+             ${params.issuancePerAppBurnCC}, ${params.issuancePerAssetBurnCC}
            from inserted_parties""").asUpdate
   }
 
-  /** Assert that the total reward minting allowance for a round does not exceed
-    * the total issuance.
+  /** Assert that the combined app+asset minting allowance for a round does not
+    * exceed the sum of app-side and asset-side issuance allocations.
+    *
+    * Under TBAR v1.1 `total_app_reward_minting_allowance` holds the per-party
+    * sum from both app and asset activity, bounded above by the combined
+    * `appMintingAllowanceCC + assetMintingAllowanceCC`.
     *
     * Called inside a transactional block which rolls back if it fails.
     */
-  private[store] def assertMintingAllowanceWithinMintingCurve(
+  private[store] def assertCombinedMintingAllowanceWithinIssuanceBudget(
       roundNumber: Long,
       params: RewardIssuanceParams,
   ) = {
@@ -861,11 +942,13 @@ class DbScanAppRewardsStore(
             and round_number = $roundNumber
     """.as[BigDecimal].head.map { totalRewardAmount =>
       val tolerance = rewardMintingAllowanceTolerance
-      if (totalRewardAmount > params.totalIssuanceForFeaturedAppRewards + tolerance) {
+      val combinedAllocation =
+        params.appMintingAllowanceCC + params.assetMintingAllowanceCC
+      if (totalRewardAmount > combinedAllocation + tolerance) {
         throw Status.INTERNAL
           .withDescription(
-            s"Round $roundNumber: actual total app reward minting allowance ($totalRewardAmount) " +
-              s"exceeds minting curve allowance (${params.totalIssuanceForFeaturedAppRewards}) " +
+            s"Round $roundNumber: combined app+asset minting allowance ($totalRewardAmount) " +
+              s"exceeds the sum of app-side and asset-side allocations ($combinedAllocation) " +
               s"by more than tolerance ($tolerance)"
           )
           .asRuntimeException()

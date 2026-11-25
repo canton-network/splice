@@ -110,7 +110,7 @@ class UpdateHistoryIntegrationTest
 
     val (_, paymentRequest) =
       actAndCheck(timeUntilSuccess = 40.seconds, maxPollInterval = 1.second)(
-        "alice initiates transfer on splitwell domain",
+        "alice initiates transfer",
         aliceSplitwellClient.initiateTransfer(
           key,
           Seq(
@@ -131,11 +131,11 @@ class UpdateHistoryIntegrationTest
       "alice initiates payment accept request on global domain",
       aliceWalletClient.acceptAppPaymentRequest(paymentRequest.contractId),
     )(
-      "alice sees balance update on splitwell domain",
+      "alice sees balance update on the global synchronizer",
       _ =>
         inside(aliceSplitwellClient.listBalanceUpdates(key)) { case Seq(update) =>
           val synchronizerId = aliceValidatorBackend.participantClient.synchronizers.id_of(
-            SynchronizerAlias.tryCreate("splitwell")
+            SynchronizerAlias.tryCreate("global")
           )
           aliceValidatorBackend.participantClient.ledger_api_extensions.acs
             .lookup_contract_domain(

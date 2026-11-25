@@ -2,7 +2,7 @@
 LOCAL_VERDICT_TIMEOUT.* Rejected transaction due to a participant determined timeout.*c.d.c.p.p.TransactionProcessingSteps:participant=sv
 SEQUENCER_SENDER_UNKNOWN.*MED::sv4
 
-# TODO(DACH-NY/canton-network-node#13011):Remove once canton fixes https://github.com/DACH-NY/canton/issues/20594
+# TODO(canton-network/splice#8539):Remove once canton fixes https://github.com/DACH-NY/canton/issues/20594
 Submission was refused because traffic control validation failed: IncorrectEventCost
 The domain Domain 'global' failed the following topology transactions
 INCORRECT_EVENT_COST.*: Missing or incorrect event cost provided by member
@@ -14,6 +14,8 @@ TOPOLOGY_UNAUTHORIZED_TRANSACTION
 Failed to send result to sequencer for request.*Unregistered recipients.*unregistered senders.*MED::sv4SvOffboarding
 
 Member MED::sv4SvOffboarding.* access is disabled
+
+SEQUENCER_SUBMISSION_REQUEST_MALFORMED.*MED::sv4SvOffboarding.*(is not part of the mediator group|Validation of aggregation rule failed)
 
 Could not send a time-advancing message
 

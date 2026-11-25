@@ -9,7 +9,7 @@ import { splitwellConfig } from '@canton-network/splice-pulumi-common/src/config
 // versions depend on amulet versions that the validator unvets, so vetting them again on every
 // validator restart would conflict with the validator's unvetting.
 // TODO(DACH-NY/canton-network-internal#7639): set this automatically from source of truth
-const minDarVersion = '0.1.20';
+const minDarVersion = '0.1.22';
 
 if (splitwellConfig?.maxDarVersion && semver.lt(splitwellConfig.maxDarVersion, minDarVersion)) {
   throw new Error(

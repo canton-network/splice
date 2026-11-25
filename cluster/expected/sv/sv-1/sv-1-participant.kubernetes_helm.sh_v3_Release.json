@@ -11,10 +11,6 @@
     "values": {
       "additionalEnvVars": [
         {
-          "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",
-          "value": "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
-        },
-        {
           "name": "CUSTOM_MOCK_ENV_VAR_NAME",
           "value": "CUSTOM_MOCK_ENV_VAR_VALUE"
         }
@@ -53,6 +49,7 @@
         "hostname": "mock.global.canton.network.digitalasset.com",
         "name": "cn-mocknet"
       },
+      "enableAutoInit": true,
       "enableHealthProbes": true,
       "enableKeyDownload": true,
       "enablePostgresMetrics": true,
@@ -64,6 +61,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "Digital-Asset-2",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",

@@ -25,10 +25,13 @@ import {
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
 
+import { type FlywayMigrationToWaitFor } from './bigQueryFlywayMigration';
 import {
-  type FlywayMigrationToWaitFor,
-  migrationIncludesInternedStrings,
-} from './bigQueryFlywayMigration';
+  type AppendMode,
+  type ReplicatedTableConfig,
+  type ReplicatedTables,
+  replicatedTablesFor,
+} from './bigQueryReplicatedTables';
 import { ScanBigQueryConfig } from './singleSvConfig';
 
 // ============================================================================
@@ -55,84 +58,6 @@ const publicationName = 'update_history_datastream_pub';
 // Stream 2 (Stag-Prod) CDC Replication Configuration
 const replicationSlotNameStagProd = 'update_history_datastream_stag_prod_r_slot';
 const publicationNameStagProd = 'update_history_datastream_stag_prod_pub';
-
-// ============================================================================
-// SINGLE SOURCE OF TRUTH: REPLICATED TABLE CONFIGURATION
-// ============================================================================
-
-// How the hourly scheduled query appends staging rows to production:
-// - 'watermark': rows up to an hour before the newest staging row,
-//   past a watermark (hourly_append.sql); for tables written
-//   continuously
-// - 'newKeys': every row whose single-column primaryKey isn't in
-//   production yet (append_new_keys.sql); for insert-only tables
-//   written in bursts, whose last hour the watermark would leave in
-//   staging until the next burst
-type AppendMode = 'watermark' | 'newKeys';
-
-interface ReplicatedTableConfig {
-  primaryKey: string;
-  datePartitionColumn: string;
-  timeType: 'micros' | 'datastream_metadata';
-  appendMode: AppendMode;
-}
-
-type ReplicatedTables = Record<string, ReplicatedTableConfig>;
-
-const alwaysReplicatedTables: ReplicatedTables = {
-  update_history_creates: {
-    primaryKey: 'row_id',
-    datePartitionColumn: 'record_time',
-    timeType: 'micros',
-    appendMode: 'watermark',
-  },
-  update_history_exercises: {
-    primaryKey: 'row_id',
-    datePartitionColumn: 'record_time',
-    timeType: 'micros',
-    appendMode: 'watermark',
-  },
-  scan_verdict_store: {
-    primaryKey: 'row_id',
-    datePartitionColumn: 'record_time',
-    timeType: 'micros',
-    appendMode: 'watermark',
-  },
-  scan_verdict_transaction_view_store: {
-    primaryKey: 'verdict_row_id, view_id',
-    datePartitionColumn: 'source_timestamp',
-    timeType: 'datastream_metadata',
-    appendMode: 'watermark',
-  },
-  app_activity_record_store: {
-    primaryKey: 'verdict_row_id',
-    datePartitionColumn: 'source_timestamp',
-    timeType: 'datastream_metadata',
-    appendMode: 'watermark',
-  },
-};
-
-const internedStringsTable: ReplicatedTables = {
-  interned_strings: {
-    primaryKey: 'id',
-    datePartitionColumn: 'source_timestamp',
-    timeType: 'datastream_metadata',
-    // new strings arrive in bursts, e.g. on package upgrades, and
-    // are never changed
-    appendMode: 'newKeys',
-  },
-};
-
-// What tables from Scan to replicate to BigQuery. All should exist once
-// `flywayMigrationToWaitFor` has been applied, so the publication, both
-// Datastreams and the scheduled queries always agree on the replicated
-// tables.
-function replicatedTablesFor(flywayMigrationToWaitFor: FlywayMigrationToWaitFor): ReplicatedTables {
-  return {
-    ...alwaysReplicatedTables,
-    ...(migrationIncludesInternedStrings(flywayMigrationToWaitFor) ? internedStringsTable : {}),
-  };
-}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -368,15 +293,17 @@ function installBigqueryDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.
     friendlyName: `${scanBigQuery.dataset} Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true, //retaining old value
-    // TODO (DACH-NY/canton-network-internal#343) reduce time travel window from 7-day default to 2 days if
-    // it makes a cost difference
+    // TODO (#1167) reduce time travel window from 7-day default to 2
+    // days if it makes a cost difference
     labels: {
       cluster: CLUSTER_BASENAME,
       datastream_id: 'legacy',
     },
   });
 }
-/* TODO (DACH-NY/canton-network-internal#341) remove this comment when enabled on all relevant clusters
+/* The Datastream API must be enabled manually in each cluster's GCP
+project; see "Enabling the Datastream API" in this project's README.
+
 If you see an error like this
   gcp:datastream:ConnectionProfile (sv-4-scan-bq-cxn):
     error: 1 error occurred:
@@ -387,8 +314,6 @@ or the same for
   gcp:datastream:PrivateConnection (sv-4-scan-update-history-datastream-vpc)
 
 you have to manually enable the API as described for that cluster.
-- done for da-cn-scratchnet
-- done for da-cn-ci-2
  */
 
 function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
@@ -462,13 +387,30 @@ const appendSqlTemplates: Record<AppendMode, string> = {
 // expanded into both append templates as {{createProdTable}}
 const createProdTableSqlTemplate = readSql('create_prod_table.sql');
 
+// the per-table routine that fixes a production table's schema, and
+// its {{fillSinceColumns}}
+const fixProdSchemaSqlTemplate = `BEGIN
+  DECLARE oldest_record_date DATE;
+
+  -- 1. Add the listed columns that production lacks
+  CALL {{fixRoutineName}}({{fixRoutineArgs}});
+
+  {{fillSinceColumns}}
+END;
+`;
+const fillSinceColumnsSqlTemplate = readSql('fill_since_columns.sql');
+
 // Replaces each `{{name}}` in `template` with `vars[name]`. A
 // multi-line value whose placeholder starts a line gets that line's
-// indentation on every line.
+// indentation on every line. An empty value whose placeholder is a
+// line of its own removes that line, and a blank line after it.
 function expandSql(template: string, vars: Record<string, string>): string {
   const expanded = Object.entries(vars).reduce(
     (sql, [name, value]) =>
       sql
+        .replace(new RegExp(`^[ \\t]*\\{\\{${name}\\}\\}\\n(?:[ \\t]*\\n)?`, 'gm'), line =>
+          value ? line : ''
+        )
         .replace(new RegExp(`^([ \\t]*)\\{\\{${name}\\}\\}`, 'gm'), (_, indent: string) =>
           value
             .trimEnd()
@@ -486,42 +428,382 @@ function expandSql(template: string, vars: Record<string, string>): string {
   return expanded;
 }
 
-function installHourlyScheduledQueries(
+// BigQuery's service account in `projectId`, which runs the
+// scheduled queries
+function bigQueryServiceAccountName(projectId: pulumi.Input<string>): pulumi.Output<string> {
+  return pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`;
+}
+
+// a scheduled query's schedule: every hour, `minute` past
+function hourlySchedule(minute: number): string {
+  const mm = String(minute).padStart(2, '0');
+  return `every 1 hours from 00:${mm} to 23:${mm}`;
+}
+
+// the minute past each hour at which the appends run
+const appendMinute = 7;
+// 5 minutes before the appends, so they rarely find a column missing
+const fixMinute = appendMinute - 5;
+
+// ============================================================================
+// PRODUCTION SCHEMA MIGRATION
+// ============================================================================
+// The appends copy each table's listed columns by name. A column with
+// a `since` in bigquery-replicated-tables.yaml is listed once
+// `flywayMigrationToWaitFor` reaches it, but production tables keep
+// the columns they were created with. For those tables, the append
+// first checks that production has every listed column, and a
+// separate hourly routine per table adds the missing ones, and fills
+// the `since` columns in the rows that staging still has.
+
+const checkProdSchemaRoutineId = 'sp_check_prod_schema';
+const fixProdSchemaRoutineId = 'sp_fix_prod_schema';
+
+// fixes production `tableName`, with sp_fix_prod_schema
+function fixTableSchemaRoutineId(tableName: string): string {
+  return `${fixProdSchemaRoutineId}_${tableName}`;
+}
+
+const stringType = JSON.stringify({ typeKind: 'STRING' });
+const stringArrayType = JSON.stringify({
+  typeKind: 'ARRAY',
+  arrayElementType: { typeKind: 'STRING' },
+});
+
+// the arguments of both shared routines
+const prodSchemaRoutineArguments = [
+  { name: 'staging_table_name', dataType: stringType },
+  { name: 'prod_table_name', dataType: stringType },
+  { name: 'columns', dataType: stringArrayType },
+];
+
+function stagingTableNameFor(namespace: ExactNamespace, tableName: string): string {
+  return `${scanAppDatabaseName(namespace)}_${tableName}`;
+}
+
+// the arguments to either routine for `tableName`, as GoogleSQL
+function prodSchemaRoutineArgs(
+  namespace: ExactNamespace,
+  tableName: string,
+  columns: string[]
+): string {
+  const columnsArray = columns.map(column => `'${column}'`).join(', ');
+  return `'${stagingTableNameFor(namespace, tableName)}', '${tableName}', [${columnsArray}]`;
+}
+
+// the record time of a staging row, as a TIMESTAMP, from the
+// table's `datePartitionColumn` or Datastream's source timestamp
+function recordTimestampExprFor(tableConfig: ReplicatedTableConfig): string {
+  const colName = tableConfig.datePartitionColumn;
+  if (tableConfig.timeType === 'micros') {
+    return `TIMESTAMP_MICROS(staging.${colName})`;
+  } else if (tableConfig.timeType === 'datastream_metadata') {
+    return `TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)`;
+  } else {
+    throw new Error(`impossible time config: ${tableConfig.timeType satisfies never}`);
+  }
+}
+
+// the production record_date of a staging row
+function recordDateExprFor(tableConfig: ReplicatedTableConfig): string {
+  return `CAST(${recordTimestampExprFor(tableConfig)} AS DATE)`;
+}
+
+// where fill_since_columns.sql reads and writes
+export interface FillTarget {
+  project: string;
+  prodDataset: string;
+  stagingDataset: string;
+  prodTableName: string;
+  stagingTableName: string;
+}
+
+// {{fillSinceColumns}} of fixProdSchemaSqlTemplate for `tableConfig`;
+// empty if it has no `since` columns yet. Exported for tests.
+export function fillSinceColumnsSql(
+  tableConfig: ReplicatedTableConfig,
+  target: FillTarget
+): string {
+  const { sinceColumns } = tableConfig;
+  if (sinceColumns.length === 0) {
+    return '';
+  }
+  const { project, prodDataset, stagingDataset, prodTableName, stagingTableName } = target;
+  const keys = tableConfig.primaryKey.split(',').map(key => key.trim());
+  const quoted = (alias: string, column: string) => `${alias}.\`${column}\``;
+  return expandSql(fillSinceColumnsSqlTemplate, {
+    prodTable: `\`${project}.${prodDataset}.${prodTableName}\``,
+    stagingTable: `\`${project}.${stagingDataset}.${stagingTableName}\``,
+    prodColumnsView: `\`${project}.${prodDataset}.INFORMATION_SCHEMA.COLUMNS\``,
+    stagingColumnsView: `\`${project}.${stagingDataset}.INFORMATION_SCHEMA.COLUMNS\``,
+    prodTableName,
+    stagingTableName,
+    sinceColumnArray: `[${sinceColumns.map(column => `'${column}'`).join(', ')}]`,
+    recordDateExpr: recordDateExprFor(tableConfig),
+    primaryKeyExpr: tableConfig.primaryKey,
+    // whether a production row lacks a value for any `since`
+    // column; with none, the IF EXISTS skips the UPDATE
+    prodLacksAny: sinceColumns.map(column => `${quoted('prod', column)} IS NULL`).join('\nOR '),
+    // the UPDATE's SET: each `since` column from staging where
+    // production lacks a value, else production's own
+    fillColumns: sinceColumns
+      .map(
+        column => `\`${column}\` = COALESCE(${quoted('prod', column)}, ${quoted('latest', column)})`
+      )
+      .join(',\n'),
+    // what the fill reads from each row's latest staging change:
+    // the primary key, to match production's row, and the `since`
+    // columns
+    fillSourceColumns: [...keys, ...sinceColumns]
+      .map(column => quoted('staging', column))
+      .join(',\n'),
+    // matches a production row with its latest staging change, on
+    // every primary key column
+    primaryKeyMatch: keys
+      .map(key => `${quoted('prod', key)} = ${quoted('latest', key)}`)
+      .join(' AND '),
+    // limits the UPDATE to rows where staging has a value for some
+    // `since` column that production lacks, so that rows already
+    // filled aren't rewritten every hour
+    fillableAny: sinceColumns
+      .map(
+        column => `(${quoted('prod', column)} IS NULL AND ${quoted('latest', column)} IS NOT NULL)`
+      )
+      .join('\nOR '),
+  });
+}
+
+interface ProdSchemaMigration {
+  // sp_check_prod_schema, which the appends of tables with `since`
+  // columns call, so they depend on it
+  checkRoutine: gcp.bigquery.Routine;
+  // fully qualified and quoted, for CALL
+  checkRoutineName: pulumi.Output<string>;
+}
+
+// For the tables with `since` columns, installs the shared
+// sp_check_prod_schema and sp_fix_prod_schema, an
+// sp_fix_prod_schema_<table> per table, and the hourly query that
+// calls the latter. Returns undefined, installing nothing, if no
+// table has a `since` column.
+function installProdSchemaMigrationRoutines(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
   prodDataset: gcp.bigquery.Dataset,
   context: ScheduledQueryContext,
   replicatedTables: ReplicatedTables
+): ProdSchemaMigration | undefined {
+  const migratingTables = Object.entries(replicatedTables).filter(
+    ([, tableConfig]) => tableConfig.migratesSchema
+  );
+  if (migratingTables.length === 0) {
+    return undefined;
+  }
+  const { projectId, transferServiceAgentPermission } = context;
+  const routineName = (routineId: string) =>
+    pulumi.interpolate`\`${projectId}.${prodDataset.datasetId}.${routineId}\``;
+  const checkRoutineName = routineName(checkProdSchemaRoutineId);
+  const fixRoutineName = routineName(fixProdSchemaRoutineId);
+  const infoSchema = (dataset: gcp.bigquery.Dataset, view: string) =>
+    pulumi.interpolate`\`${projectId}.${dataset.datasetId}.INFORMATION_SCHEMA.${view}\``;
+  const stagingColumns = infoSchema(stagingDataset, 'COLUMNS');
+  const prodColumns = infoSchema(prodDataset, 'COLUMNS');
+  const prodTables = infoSchema(prodDataset, 'TABLES');
+
+  // Fails the calling append if a listed column is missing.
+  const checkRoutine = new gcp.bigquery.Routine('prod-schema-check-routine', {
+    datasetId: prodDataset.datasetId,
+    routineId: checkProdSchemaRoutineId,
+    routineType: 'PROCEDURE',
+    language: 'SQL',
+    arguments: prodSchemaRoutineArguments,
+    definitionBody: pulumi.interpolate`BEGIN
+  DECLARE missing ARRAY<STRING>;
+
+  -- Datastream adds a column to staging once it replicates a row
+  -- that has it
+  SET missing = ARRAY(
+    SELECT listed FROM UNNEST(columns) AS listed
+    WHERE listed NOT IN (
+      SELECT column_name FROM ${stagingColumns}
+      WHERE table_name = staging_table_name
+    )
+    ORDER BY listed
+  );
+  IF ARRAY_LENGTH(missing) > 0 THEN
+    RAISE USING MESSAGE = FORMAT(
+      'Staging %s lacks columns %s, which Datastream adds once it replicates them',
+      staging_table_name, ARRAY_TO_STRING(missing, ', '));
+  END IF;
+
+  SET missing = ARRAY(
+    SELECT listed FROM UNNEST(columns) AS listed
+    WHERE listed NOT IN (
+      SELECT column_name FROM ${prodColumns}
+      WHERE table_name = prod_table_name
+    )
+    ORDER BY listed
+  );
+  IF ARRAY_LENGTH(missing) > 0 THEN
+    RAISE USING MESSAGE = FORMAT(
+      'Production %s lacks columns %s; CALL \`%s.%s.%s_%s\`(), which also runs hourly, adds and fills them',
+      prod_table_name, ARRAY_TO_STRING(missing, ', '), '${projectId}',
+      '${prodDataset.datasetId}', '${fixProdSchemaRoutineId}', prod_table_name);
+  END IF;
+END`,
+  });
+
+  // Adds the listed columns missing from production, with their
+  // staging types, in one ALTER TABLE. The DDL is built as a string
+  // only because those types are read from staging.
+  const fixRoutine = new gcp.bigquery.Routine('prod-schema-fix-routine', {
+    datasetId: prodDataset.datasetId,
+    routineId: fixProdSchemaRoutineId,
+    routineType: 'PROCEDURE',
+    language: 'SQL',
+    arguments: prodSchemaRoutineArguments,
+    definitionBody: pulumi.interpolate`BEGIN
+  DECLARE added ARRAY<STRING>;
+  DECLARE add_columns STRING;
+
+  SET added = [];
+  -- the append creates production with every listed column
+  IF EXISTS (
+    SELECT 1 FROM ${prodTables}
+    WHERE table_name = prod_table_name
+  ) THEN
+    SET added = ARRAY(
+      SELECT column_name FROM ${stagingColumns}
+      WHERE table_name = staging_table_name
+        AND column_name IN UNNEST(columns)
+        AND column_name NOT IN (
+          SELECT column_name FROM ${prodColumns}
+          WHERE table_name = prod_table_name
+        )
+      ORDER BY ordinal_position
+    );
+    SET add_columns = (
+      SELECT STRING_AGG(
+        FORMAT('ADD COLUMN IF NOT EXISTS \`%s\` %s', column_name, data_type),
+        ', ' ORDER BY ordinal_position)
+      FROM ${stagingColumns}
+      WHERE table_name = staging_table_name
+        AND column_name IN UNNEST(added)
+    );
+    IF add_columns IS NOT NULL THEN
+      EXECUTE IMMEDIATE FORMAT(
+        'ALTER TABLE \`%s.%s.%s\` %s',
+        '${projectId}', '${prodDataset.datasetId}', prod_table_name, add_columns);
+    END IF;
+  END IF;
+END`,
+  });
+
+  // Per table, so that the CALL that the check names also fills the
+  // `since` columns.
+  const tableFixRoutines = migratingTables.map(([tableName, tableConfig]) => {
+    const definitionBody = pulumi
+      .all([projectId, prodDataset.datasetId, stagingDataset.datasetId, fixRoutineName])
+      .apply(([proj, prodDs, stagingDs, fixRoutineQualified]) => {
+        return expandSql(fixProdSchemaSqlTemplate, {
+          fixRoutineName: fixRoutineQualified,
+          fixRoutineArgs: prodSchemaRoutineArgs(namespace, tableName, tableConfig.columns),
+          fillSinceColumns: fillSinceColumnsSql(tableConfig, {
+            project: proj,
+            prodDataset: prodDs,
+            stagingDataset: stagingDs,
+            prodTableName: tableName,
+            stagingTableName: stagingTableNameFor(namespace, tableName),
+          }),
+        });
+      });
+    return new gcp.bigquery.Routine(
+      `${tableName}-prod-schema-fix-routine`,
+      {
+        datasetId: prodDataset.datasetId,
+        routineId: fixTableSchemaRoutineId(tableName),
+        routineType: 'PROCEDURE',
+        language: 'SQL',
+        definitionBody,
+      },
+      { dependsOn: [fixRoutine] }
+    );
+  });
+
+  new gcp.bigquery.DataTransferConfig(
+    `${CLUSTER_BASENAME}_prod-schema-hourly-fix`,
+    {
+      displayName: `${CLUSTER_BASENAME} Production Schema Hourly Fix`,
+      location: cloudsdkComputeRegion(),
+      serviceAccountName: bigQueryServiceAccountName(projectId),
+      dataSourceId: 'scheduled_query',
+      schedule: hourlySchedule(fixMinute),
+
+      params: {
+        // Each table's fix runs even if another's fails; the query
+        // still fails, naming every table that did.
+        query: pulumi.all([projectId, prodDataset.datasetId]).apply(([proj, prodDs]) =>
+          [
+            'DECLARE failed ARRAY<STRING> DEFAULT [];',
+            ...migratingTables.map(
+              ([tableName]) => `BEGIN
+  CALL \`${proj}.${prodDs}.${fixTableSchemaRoutineId(tableName)}\`();
+EXCEPTION WHEN ERROR THEN
+  SET failed = ARRAY_CONCAT(failed, [FORMAT('%s: %s', '${tableName}', @@error.message)]);
+END;`
+            ),
+            `IF ARRAY_LENGTH(failed) > 0 THEN
+  RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');
+END IF;`,
+          ].join('\n')
+        ),
+      },
+    },
+    {
+      dependsOn: [transferServiceAgentPermission, ...tableFixRoutines],
+    }
+  );
+
+  return { checkRoutine, checkRoutineName };
+}
+
+function installHourlyScheduledQueries(
+  namespace: ExactNamespace,
+  stagingDataset: gcp.bigquery.Dataset,
+  prodDataset: gcp.bigquery.Dataset,
+  context: ScheduledQueryContext,
+  replicatedTables: ReplicatedTables,
+  prodSchemaMigration: ProdSchemaMigration | undefined
 ) {
   const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
+    const checkSchema = tableConfig.migratesSchema ? prodSchemaMigration : undefined;
     const primaryKeyExpr = tableConfig.primaryKey;
-    const colName = tableConfig.datePartitionColumn;
     const { appendMode } = tableConfig;
     if (appendMode === 'newKeys' && primaryKeyExpr.includes(',')) {
       throw new Error(`${tableName}: appendMode 'newKeys' needs a single-column primary key`);
     }
 
-    let recordTimestampExpr: string;
-    if (tableConfig.timeType === 'micros') {
-      recordTimestampExpr = `TIMESTAMP_MICROS(staging.${colName})`;
-    } else if (tableConfig.timeType === 'datastream_metadata') {
-      recordTimestampExpr = `TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)`;
-    } else {
-      const unreachable: never = tableConfig.timeType;
-      throw new Error(`impossible time config: ${unreachable}`);
-    }
-
-    const recordDateExpr = `CAST(${recordTimestampExpr} AS DATE)`;
+    const recordTimestampExpr = recordTimestampExprFor(tableConfig);
+    const recordDateExpr = recordDateExprFor(tableConfig);
 
     const procedureBody = pulumi
-      .all([projectId, prodDataset.datasetId, stagingDataset.datasetId])
-      .apply(([proj, prodDs, stagingDs]) => {
+      .all([
+        projectId,
+        prodDataset.datasetId,
+        stagingDataset.datasetId,
+        checkSchema?.checkRoutineName ?? '',
+      ])
+      .apply(([proj, prodDs, stagingDs, checkRoutineName]) => {
         const prodTable = `\`${proj}.${prodDs}.${tableName}\``;
-        const stagingTable = `\`${proj}.${stagingDs}.${schemaName}_${tableName}\``;
+        const stagingTable = `\`${proj}.${stagingDs}.${stagingTableNameFor(namespace, tableName)}\``;
         const watermarksTable = `\`${proj}.${prodDs}.pipeline_watermarks\``;
         const prodInfoSchema = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.TABLES\``;
+        const checkProdSchema = checkSchema
+          ? `-- 1a. Check that production has every listed column
+CALL ${checkRoutineName}(${prodSchemaRoutineArgs(namespace, tableName, tableConfig.columns)});`
+          : '';
 
         const vars = {
           tableName,
@@ -533,31 +815,38 @@ function installHourlyScheduledQueries(
           stagingTable,
           watermarksTable,
           prodInfoSchema,
+          columns: tableConfig.columns.map(column => `\`${column}\``).join(',\n'),
+          stagingColumns: tableConfig.columns.map(column => `staging.\`${column}\``).join(',\n'),
         };
         return expandSql(appendSqlTemplates[appendMode], {
           ...vars,
           createProdTable: expandSql(createProdTableSqlTemplate, vars),
+          checkProdSchema,
         });
       });
 
     const routineId = `sp_append_${tableName}`;
 
-    const appendRoutine = new gcp.bigquery.Routine(`${tableName}-append-routine`, {
-      datasetId: prodDataset.datasetId,
-      routineId: routineId,
-      routineType: 'PROCEDURE',
-      language: 'SQL',
-      definitionBody: procedureBody,
-    });
+    const appendRoutine = new gcp.bigquery.Routine(
+      `${tableName}-append-routine`,
+      {
+        datasetId: prodDataset.datasetId,
+        routineId: routineId,
+        routineType: 'PROCEDURE',
+        language: 'SQL',
+        definitionBody: procedureBody,
+      },
+      { dependsOn: checkSchema ? [checkSchema.checkRoutine] : [] }
+    );
 
     new gcp.bigquery.DataTransferConfig(
       `${CLUSTER_BASENAME}_${tableName}-hourly-append`,
       {
         displayName: `${CLUSTER_BASENAME}_${tableName} Hourly Append Pipeline`,
         location: cloudsdkComputeRegion(),
-        serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+        serviceAccountName: bigQueryServiceAccountName(projectId),
         dataSourceId: 'scheduled_query',
-        schedule: 'every 1 hours from 00:07 to 23:07',
+        schedule: hourlySchedule(appendMinute),
 
         params: {
           query: pulumi.interpolate`CALL \`${projectId}.${prodDataset.datasetId}.${routineId}\`();`,
@@ -617,7 +906,7 @@ function installDailyPurgeScheduledQueries(
       {
         displayName: `${CLUSTER_BASENAME}_${tableName} Daily Retention Purge`,
         location: cloudsdkComputeRegion(),
-        serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+        serviceAccountName: bigQueryServiceAccountName(projectId),
         dataSourceId: 'scheduled_query',
         schedule: 'every day 05:21', // Runs daily at 05:21 AM
 
@@ -936,7 +1225,7 @@ export async function configureScanBigQuery({
   namespace,
   bigQueryConfig,
   scanReference,
-}: ScanBigQueryArgs): Promise<ScanBigQuery> {
+}: ScanBigQueryArgs): Promise<void> {
   // Use config file to determine which datastreams to enable and their desired states
 
   const {
@@ -1033,12 +1322,20 @@ export async function configureScanBigQuery({
       tablesToReplicate
     );
     const scheduledQueryContext = installBqScheduledQueryContext();
-    installHourlyScheduledQueries(
+    const prodSchemaMigration = installProdSchemaMigrationRoutines(
       namespace,
       stagingDataset,
       prodDataset,
       scheduledQueryContext,
       replicatedTables
+    );
+    installHourlyScheduledQueries(
+      namespace,
+      stagingDataset,
+      prodDataset,
+      scheduledQueryContext,
+      replicatedTables,
+      prodSchemaMigration
     );
     installDailyPurgeScheduledQueries(
       namespace,
@@ -1048,14 +1345,6 @@ export async function configureScanBigQuery({
       replicatedTables
     );
   }
-  // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
-  // but we need to return something to satisfy the ScanBigQuery type.
-  // For now, we return the legacy dataset's ID, as it is always defined.
-  // we should consider removing the return datasetId if it's not needed
-
-  return {
-    datasetId: legacyDataset.id,
-  };
 }
 
 export type ScanBigQueryArgs = {
@@ -1074,10 +1363,6 @@ type ScanReference =
       type: 'external';
       databaseInstanceNamePrefix: string;
     };
-
-export type ScanBigQuery = {
-  datasetId: pulumi.Output<string>;
-};
 
 async function getScanDb(
   instanceNamePrefix: string,

@@ -110,25 +110,23 @@ class SvDevNetReonboardingIntegrationTest extends SvIntegrationTestBase {
       actAndCheck(
         "start sv4 with sv3 onboarding config", {
           sv4Nodes.foreach(_.start())
-          if (ConfigTransforms.IsTheCantonSequencerBFTEnabled) {
-            // we don't offboard the old sv3 sequencer to not break the network for other tests so we just manually connect it
-            eventuallySucceeds(5.minutes) {
-              noException should be thrownBy {
-                sv3Backend.sequencerClient.bft.add_peer_endpoint(
-                  P2PEndpointConfig(
-                    "localhost",
-                    RequireTypes.Port.tryCreate(5410),
-                    None,
-                  )
+          // we don't offboard the old sv3 sequencer to not break the network for other tests so we just manually connect it
+          eventuallySucceeds(5.minutes) {
+            noException should be thrownBy {
+              sv3Backend.sequencerClient.bft.add_peer_endpoint(
+                P2PEndpointConfig(
+                  "localhost",
+                  RequireTypes.Port.tryCreate(5410),
+                  None,
                 )
-                sv4Backend.sequencerClient.bft.add_peer_endpoint(
-                  P2PEndpointConfig(
-                    "localhost",
-                    RequireTypes.Port.tryCreate(5310),
-                    None,
-                  )
+              )
+              sv4Backend.sequencerClient.bft.add_peer_endpoint(
+                P2PEndpointConfig(
+                  "localhost",
+                  RequireTypes.Port.tryCreate(5310),
+                  None,
                 )
-              }
+              )
             }
           }
           sv4Nodes.foreach(_.waitForInitialization())

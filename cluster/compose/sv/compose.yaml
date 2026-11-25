@@ -83,6 +83,7 @@ services:
       - ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER=canton.participants.participant.monitoring.http-health-server.port=5071
       # Scan serves ACS snapshots for validator recovery through the participant's repair service
       - ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS=canton.features.enable-repair-commands = yes
+      - CANTON_PARTICIPANT_IDENTIFIER=sv
     depends_on:
       postgres-splice-sv:
         condition: service_healthy
@@ -236,6 +237,9 @@ services:
               }
             }
       - SPLICE_APP_SV_PARTICIPANT_ADDRESS=participant
+      - |
+        ADDITIONAL_CONFIG_ONBOARDING_SNAPSHOTS=
+            canton.sv-apps.sv.onboarding-snapshots.directory = "/tmp/onboarding-snapshots"
       - SPLICE_APP_SV_IS_DEV_NET=${SPLICE_SV_IS_DEVNET}
       - SPLICE_APP_SV_ONBOARDING_TYPE=found-dso
       - SPLICE_APP_SV_ONBOARDING_NAME=sv
@@ -261,7 +265,6 @@ services:
                     }
                   }
                 }
-      - SPLICE_APP_SV_COMETBFT_ENABLED=false
       - SPLICE_APP_UI_NETWORK_NAME=${SPLICE_APP_UI_NETWORK_NAME}
       - SPLICE_APP_UI_NETWORK_FAVICON_URL=${SPLICE_APP_UI_NETWORK_FAVICON_URL}
       - SPLICE_APP_UI_AMULET_NAME=${SPLICE_APP_UI_AMULET_NAME}

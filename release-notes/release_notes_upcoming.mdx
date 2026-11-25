@@ -2,8 +2,73 @@
 
 {/* Add all release notes in this section */}
 
+  - Participant
+
+    - **Breaking** The participant's repair service (`canton.features.enable-repair-commands`) is now disabled by default.
+      This was originally announced for 0.10.0, but the default change was blocked by a bug.
+      **SVs must enable the repair service**, as Scan's `/v0/acs/{party}` endpoint, which validators use to restore from an identities dump,
+      exports the ACS through it. To enable it, set `enableRepairCommands: true` in the `splice-participant` Helm chart
+      (see updated example `participant-values.yaml` for SVs).
+      Validators only need the repair service while restoring from an identities dump (`migrateValidatorParty`) or while running
+      repair commands such as `participant.repair.import_acs`.
+      The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
+
+  - Scan App
+
+    - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true` (Helm
+      value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
+      per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
+      releases extend this setting to the daily snapshots once they are in bulk storage.
+      ACS snapshot queries with `record_time_match=exact` for a time whose snapshot was pruned then return not found.
+
+  - SV App
+
+    - Joining SVs now download the DSO party ACS and sequencer onboarding state from their sponsor as files
+      instead of keeping the responses in the SV app's memory, reducing SV app memory usage for large
+      snapshots. SVs that restrict SV app ingress must allow other SVs to reach the new
+      `/v0/onboard/sv/party-migration/prepare`, `/v0/onboard/sv/sequencer/prepare` and
+      `/v0/onboard/sv/download/{id}` endpoints, which are tagged `x-external-audience: svs`.
+      Interrupted downloads resume where they stopped. Proxies between SVs must pass through the
+      `Repr-Digest` response header, which the joining SV uses to verify the snapshot. They should also
+      pass through the `Range` and `Content-Range` headers; otherwise interrupted downloads start again
+      from the beginning.
+
+  - Deployment
+
+    - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
+      that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
+      `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
+    - The Postgres images used by the Docker Compose deployments and by the Helm `pg-init` init containers are bumped
+      to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
+      Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
+
+  - Scan App
+
+    - Add the `ledger_api_json` option to the `DamlValueEncoding` enum, used by the `daml_value_encoding`
+      parameter of the update history and event history endpoints.
+      It encodes Daml values like the JSON Ledger API (v2) does. The encoding is identical to the existing
+      `compact_json`, with two differences: numeric values are encoded differently ("0E-10" vs "0.0000000000"),
+      and it omits trailing `null` fields of Daml records. The latter is important: with `compact_json`,
+      a daml upgrade that added new optional fields to templates caused old values to be returned with those
+      fields included in the JSON object (as `null`), so the returned JSON depends on the Scan version.
+      The new `ledger_api_json` encoding returns the same JSON regardless of the Scan version.
+      `compact_json` remains the default for now. Clients that compare responses across Scan instances should switch to
+      the new encoding.
+
+
 
 ## Upcoming for next minor release (template):
+
+  - Helm charts and Docker images
+
+    - `splice-participant`: new required value `nodeIdentifier`. Canton now initializes the
+      participant's identity itself, so the chart must be given the same node identifier that
+      the controlling SV or validator app expects, i.e. the previous `nodeIdentifier` of `splice-sv-node`
+      or `splice-validator`. Set it in `participant-values.yaml`.
+
+    - `splice-participant`: new value `enableAutoInit`, default `true`. Set it to `false` when the
+      participant's identity comes from elsewhere, e.g. while restoring from an identities dump or
+      when using an offline root namespace key.
 
 {/* If you introduce any breaking changes in the next minor release,
     then in addition to the release notes as above,
@@ -22,6 +87,36 @@
 
     - Breaking Deployment Changes:
 
+      - the `splice-participant` helm chart now requires `nodeIdentifier`. copy the value that you previously set on the sv app or validator app helm charts.
+
     - Protocol Changes:
 
     - Daml Model Changes:
+
+      - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
+        that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
+        SV apps pass the node states once this version is vetted.
+
+      - Security hardening: add extra assertions to the `WalletAppInstall` choices.
+
+      - `splice-wallet` now depends on `splice-util-batched-markers` and `splice-util-token-standard-wallet`.
+        The versions of these packages that validators vet now follow the voted `splice-wallet` version.
+
+      - All Canton Coin transactions now emit token standard V2 transaction-history events, i.e.,
+        `EventLog_HoldingsChange` events reported by the DSO party. Clients can rely on these events
+        to parse the history of all Canton Coin holdings.
+
+      - To guarantee this, the minimum supported Daml package versions are raised to the ones introduced
+        in Splice 0.6.11, which are the first to implement the token standard V2:
+
+          | name | version |
+          | :--- | :--- |
+          | amulet | 0.1.21 |
+          | amuletNameService | 0.1.22 |
+          | dsoGovernance | 0.1.27 |
+          | validatorLifecycle | 0.1.8 |
+          | wallet | 0.1.22 |
+          | walletPayments | 0.1.21 |
+
+        Nodes no longer upload or vet older versions of these packages, and downgrading the Daml models
+        below these versions is no longer supported.

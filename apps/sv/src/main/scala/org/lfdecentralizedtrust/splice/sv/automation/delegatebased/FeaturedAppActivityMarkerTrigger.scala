@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
+import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,

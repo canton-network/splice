@@ -60,7 +60,6 @@ class SvReconcileBftSequencingParametersIntegrationTest
       ),
       logSuffix = "bft-sequencing-parameters",
       sv4 = false,
-      enableBftSequencer = true,
     )() {
       sv1Backend.startSync()
       sv1Backend.stop()

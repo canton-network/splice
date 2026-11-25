@@ -200,12 +200,15 @@ If you need to add an optional field to any type in the update history schema:
 
 1. **Prefer making the field required** with a sensible default — this avoids the problem entirely
    (though you still need a gate for the new key itself).
-2. If the field must be optional, use `Option[OmitNullString]` (via `x-scala-type` in the OpenAPI
-   spec) and wire it into `ScanJsonSupport` using the `omitWhenNone` helper so the key is omitted
-   from JSON when `None`.
+2. If the field must be optional, use a sanctioned marker type and wire it into `ScanJsonSupport`
+   using the `omitWhenNone` helper so the key is omitted from JSON when `None`:
+   - For scalar fields: `Option[OmitNullString]` (via `x-scala-type` in the OpenAPI spec).
+   - For array fields: `Option[OmitNullArray[T]]` (via `x-scala-array-type` in the OpenAPI spec,
+     with the element type declared as `items: $ref: ...`).
 3. Add the new type (if it is a new leaf type) to the compliance check in
    `UpdateHistoryOmitNullStringComplianceTest` — this test verifies that no `Option[_]` fields
-   exist on BFT-consensus types unless they are `Option[OmitNullString]`.
+   exist on BFT-consensus types unless they are an `Option[OmitNullString]` or
+   `Option[OmitNullArray[_]]`.
 
 See `ScanJsonSupport.scala` for the full set of custom encoders and their documentation.
 

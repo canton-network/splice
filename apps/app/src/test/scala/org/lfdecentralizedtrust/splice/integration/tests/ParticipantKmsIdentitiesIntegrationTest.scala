@@ -131,7 +131,6 @@ class ParticipantKmsIdentitiesIntegrationTest
         // better.files.File(aliceParticipantDumpFile).write(dumpFromValidator.toJson.spaces2)
 
         // uncomment all of this to write out new dumps for KmsMigrationDumpImportIntegrationTest
-        // TODO(DACH-NY/canton-network-node#16277): Add KmsMigrationDumpImportIntegrationTest and/or remove this
         // import io.circe.syntax.EncoderOps
         // val someTimestamp = java.time.Instant.now()
         // // sv1
@@ -169,6 +168,9 @@ class ParticipantKmsIdentitiesIntegrationTest
         extraParticipantsConfigFileNames = Seq(
           "standalone-participant-sv2-enable-kms.conf"
         ),
+        // sv2 restores its identity from a dump, so Canton must not give its
+        // participant a fresh one first.
+        manualInitParticipants = Set(2),
       )(
         "KMS_TYPE" -> "gcp",
         "KMS_LOCATION_ID" -> "us-central1",

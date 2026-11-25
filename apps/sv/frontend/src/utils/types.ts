@@ -27,6 +27,8 @@ export interface OffBoardMemberProposal {
 export interface FeatureAppProposal {
   provider: string;
   activityWeight: string;
+  appKind?: string;
+  opsParties?: string[];
 }
 
 export interface UnfeatureAppProposal {
@@ -36,6 +38,23 @@ export interface UnfeatureAppProposal {
 export interface UpdateFeatureAppProposal {
   rightContractId: string;
   newActivityWeight: string;
+}
+
+/**
+ * One provider's config amendment within a
+ * SRARC_CreateFeaturedAppConfigUpdateInstruction proposal. Scalar field changes
+ * (appKind, activityWeight) are rendered via ConfigValuesChanges; opsParties is a
+ * list, so its change is expressed as added/removed party ids.
+ */
+export interface FeatureAppConfigUpdateEntry {
+  provider: string;
+  scalarChanges: ConfigChange[];
+  opsAdded: string[];
+  opsRemoved: string[];
+}
+
+export interface FeatureAppConfigUpdateProposal {
+  updates: FeatureAppConfigUpdateEntry[];
 }
 
 export interface UnclaimedActivityRecordProposal {
@@ -121,6 +140,7 @@ export type Proposal =
   | AmuletRulesConfigProposal
   | DsoRulesConfigProposal
   | UpdateFeatureAppProposal
+  | FeatureAppConfigUpdateProposal
   | undefined;
 
 export type ProposalActionMap = {
@@ -134,7 +154,9 @@ export type ProposalActionMap = {
   SRARC_CreateUnallocatedUnclaimedActivityRecord: UnclaimedActivityRecordProposal;
   CRARC_SetConfig: AmuletRulesConfigProposal;
   SRARC_SetConfig: DsoRulesConfigProposal;
+  // TODO(#8058): remove with the legacy SRARC_UpdateFeaturedAppRight form in Splice 0.11.0
   SRARC_UpdateFeaturedAppRight: UpdateFeatureAppProposal;
+  SRARC_CreateFeaturedAppConfigUpdateInstruction: FeatureAppConfigUpdateProposal;
   // If no proposal type is defined, can use unknown or a specific type:
   CRARC_AddFutureAmuletConfigSchedule: unknown;
 };
@@ -177,7 +199,8 @@ export type SupportedActionTag =
   | 'SRARC_ArchiveSynchronizerRegistration'
   | 'SRARC_UpdateSynchronizerRegistration'
   | 'SRARC_CreateUnallocatedUnclaimedActivityRecord'
-  | 'SRARC_UpdateFeaturedAppRight';
+  | 'SRARC_UpdateFeaturedAppRight'
+  | 'SRARC_CreateFeaturedAppConfigUpdateInstruction';
 
 export type ProposalListingStatus =
   'Accepted' | 'In Progress' | 'Implemented' | 'Rejected' | 'Expired' | 'Unknown';
@@ -244,6 +267,14 @@ export interface UpdateFeatureAppFormData extends CommonProposalFormData {
   newActivityWeight: string;
 }
 
+export interface CreateFeaturedAppConfigUpdateFormData extends CommonProposalFormData {
+  partyId: string;
+  rightCid: string;
+  appKind: string;
+  activityWeight: string;
+  opsParties: string[];
+}
+
 export type NonConfigProposalFormData =
   | UpdateSvRewardWeightFormData
   | RegisterSynchronizerFormData
@@ -252,7 +283,9 @@ export type NonConfigProposalFormData =
   | OffboardSvFormData
   | GrantRevokeFeaturedAppFormData
   | CreateUnallocatedUnclaimedActivityRecordFormData
-  | UpdateFeatureAppFormData;
+  // TODO(#8058): remove with the legacy SRARC_UpdateFeaturedAppRight form in Splice 0.11.0
+  | UpdateFeatureAppFormData
+  | CreateFeaturedAppConfigUpdateFormData;
 
 export type ConfigProposalFormData = SetDsoConfigCompleteFormData | SetAmuletConfigCompleteFormData;
 

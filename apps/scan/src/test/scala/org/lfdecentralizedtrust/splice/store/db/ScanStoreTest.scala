@@ -53,6 +53,8 @@ import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.damlDecimal
 import org.lfdecentralizedtrust.splice.util.*
 
+import io.circe.{Json, yaml}
+import java.nio.file.{Files, Paths}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
@@ -60,6 +62,7 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
@@ -215,13 +218,34 @@ abstract class ScanStoreTest
             .futureValue should be(expectedResult)
         }
       }
+
+      "return the newest FeaturedAppRight, breaking ties by contract id" in {
+        val t1 = Instant.parse("2024-03-01T10:00:00Z")
+        val t2 = t1.plusSeconds(1)
+        val older = featuredAppRight(userParty(1), validContractId(1)).copy(createdAt = t1)
+        val newerHighCid =
+          featuredAppRight(userParty(1), validContractId(3)).copy(createdAt = t2)
+        val newerLowCid =
+          featuredAppRight(userParty(1), validContractId(2)).copy(createdAt = t2)
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(newerHighCid, older, newerLowCid))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.lookupFeaturedAppRight(userParty(1))
+        } yield result.map(_.contract) shouldBe Some(newerLowCid)
+      }
     }
 
     "listFeaturedAppRightsByProvider" should {
 
-      "return the FeaturedAppRights of the wanted provider in creation order, up to the limit" in {
-        val wanted = (1 to 3).map(_ => featuredAppRight(userParty(1)))
-        val unwanted = featuredAppRight(userParty(2))
+      "return the FeaturedAppRights of the wanted provider newest first, up to the limit" in {
+        val base = Instant.parse("2024-03-01T10:00:00Z")
+        val wanted = (1 to 3).map(i =>
+          featuredAppRight(userParty(1)).copy(createdAt = base.plusSeconds(i.toLong))
+        )
+        val unwanted = featuredAppRight(userParty(2)).copy(createdAt = base.plusSeconds(10))
+        val expected = wanted.reverse
         for {
           store <- mkStore()
           _ <- MonadUtil.sequentialTraverse(wanted :+ unwanted)(
@@ -236,9 +260,53 @@ abstract class ScanStoreTest
             ).and(include("Result size: 3. Limit: 2")),
           )
         } yield {
-          all.map(_.contract) shouldBe wanted
-          page.map(_.contract) shouldBe wanted.take(2)
-          hard.map(_.contract) shouldBe wanted.take(2)
+          all.map(_.contract) shouldBe expected
+          page.map(_.contract) shouldBe expected.take(2)
+          hard.map(_.contract) shouldBe expected.take(2)
+        }
+      }
+
+      "break ties on creation time by contract id" in {
+        val t1 = Instant.parse("2024-03-01T10:00:00Z")
+        val t2 = t1.plusSeconds(1)
+        val older = featuredAppRight(userParty(1), validContractId(1)).copy(createdAt = t1)
+        val newerHighCid =
+          featuredAppRight(userParty(1), validContractId(3)).copy(createdAt = t2)
+        val newerLowCid =
+          featuredAppRight(userParty(1), validContractId(2)).copy(createdAt = t2)
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(newerHighCid, older, newerLowCid))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          all <- store.listFeaturedAppRightsByProvider(userParty(1), HardLimit.tryCreate(3))
+        } yield all.map(_.contract) shouldBe Seq(newerLowCid, newerHighCid, older)
+      }
+    }
+
+    "RewardCouponV2 ingestion" should {
+
+      "ingest RewardCouponV2 of the DSO and make them retrievable by contract id" in {
+        val coupon1 = rewardCouponV2(round = 1, provider = userParty(1))
+        val coupon2 = rewardCouponV2(round = 2, provider = userParty(2))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(coupon1)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(coupon2)(store.multiDomainAcsStore)
+          found <- store.multiDomainAcsStore.lookupContractsById(
+            amuletCodegen.RewardCouponV2.COMPANION
+          )(
+            Seq(
+              coupon1.contractId,
+              coupon2.contractId,
+              new amuletCodegen.RewardCouponV2.ContractId(nextCid()),
+            )
+          )
+        } yield {
+          found.map(_.contract.contractId.contractId) should contain theSameElementsAs Seq(
+            coupon1.contractId.contractId,
+            coupon2.contractId.contractId,
+          )
         }
       }
     }
@@ -1965,6 +2033,7 @@ class DbScanStoreTest
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         domainMigrationId,
+        synchronizerId = dummyDomain,
         participantId = mkParticipantId("ScanStoreTest"),
         IngestionConfig(),
         new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
@@ -1979,14 +2048,10 @@ class DbScanStoreTest
           store.multiDomainAcsStore.testIngestionSink.ingestAcs(
             nextOffset(),
             Seq.empty,
-            Seq.empty,
-            Seq.empty,
           )
         case InitializeAcsAtOffset(_) =>
           store.multiDomainAcsStore.testIngestionSink.ingestAcs(
             nextOffset(),
-            Seq.empty,
-            Seq.empty,
             Seq.empty,
           )
       }
@@ -2024,6 +2089,57 @@ class DbScanStoreTest
     for {
       _ <- resetAllAppTables(storage)
     } yield ()
+
+  "bigquery-replicated-tables.yaml" should {
+
+    // Datastream adds a new Postgres column to staging, but the hourly
+    // appends copy only the listed columns to production. Listed
+    // columns that Postgres has dropped are allowed.
+    "list every column of the tables replicated to BigQuery" in {
+      val file = Paths.get(
+        sys.env("SPLICE_ROOT"),
+        "cluster/pulumi/common-sv/src/bigquery-replicated-tables.yaml",
+      )
+      val tables = yaml.parser
+        .parse(Files.readString(file))
+        .flatMap(_.as[Map[String, Json]])
+        .fold(e => fail(s"$file: $e"), identity)
+      // a column is a name or an object with a name and a since
+      val listedColumns = tables.view.mapValues { table =>
+        table.hcursor
+          .downField("columns")
+          .as[Seq[Json]]
+          .fold(e => fail(s"$file: $e"), identity)
+          .map(column =>
+            column.asString
+              .orElse(column.hcursor.downField("name").as[String].toOption)
+              .getOrElse(fail(s"$file: not a column: $column"))
+          )
+          .toSet
+      }.toMap
+      for {
+        dbColumns <- MonadUtil.sequentialTraverse(listedColumns.keys.toSeq.sorted) { table =>
+          storage
+            .query(
+              sql"""
+                select column_name
+                from information_schema.columns
+                where table_schema = current_schema and table_name = $table
+              """.as[String],
+              "bigQueryReplicatedTables.columns",
+            )
+            .failOnShutdownToAbortException("bigQueryReplicatedTables.columns")
+            .map(table -> _.toSet)
+        }
+      } yield {
+        forEvery(dbColumns) { case (table, columns) =>
+          columns should not be empty withClue s"$table in scan's database"
+          listedColumns(table) should contain allElementsOf columns withClue
+            s"$table's columns in $file"
+        }
+      }
+    }
+  }
 
   "getTopValidatorLicenses" should {
 

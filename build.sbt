@@ -1028,6 +1028,8 @@ lazy val `splice-wallet-daml` =
           (`splice-wallet-payments-daml` / Compile / damlBuild).value ++
           (`splice-amulet-name-service-daml` / Compile / damlBuild).value ++
           (`splice-util-daml` / Compile / damlBuild).value ++
+          (`splice-util-batched-markers-daml` / Compile / damlBuild).value ++
+          (`splice-util-token-standard-wallet-daml` / Compile / damlBuild).value ++
           (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-transfer-instruction-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-allocation-instruction-v2-daml` / Compile / damlBuild).value ++
@@ -1301,6 +1303,8 @@ lazy val `apps-common` =
         aws_s3,
         s3mock_testcontainers,
       ),
+      // Needed to use transcode, which is written in Scala 3
+      scalacOptions += "-Ytasty-reader",
       BuildCommon.sharedAppSettings,
       buildInfoKeys := Seq[BuildInfoKey](
         BuildInfoKey(
@@ -1414,8 +1418,6 @@ lazy val `apps-sv` =
         pekko_http_cors,
         scalapb_runtime,
       ),
-      Compile / unmanagedJars := Attributed
-        .blankSeq(Seq(file(s"${sys.env("COMETBFT_PROTO")}/canton-drivers-proto.jar"))),
       BuildCommon.sharedAppSettings,
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,
       BuildCommon.TS.openApiSettings(
@@ -1455,6 +1457,7 @@ lazy val `apps-scan` =
         pekko_http_cors,
         scalapb_runtime_grpc,
         scalapb_runtime,
+        circe_yaml % Test,
       ),
       BuildCommon.sharedAppSettings,
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,
@@ -2334,7 +2337,7 @@ checkErrors := {
     import better.files.File
     val logSpecificIgnores =
       if (File(ignorePatternsFilename(logName)).exists()) Seq(logName) else Seq.empty
-    // ideally we would add them only if dabft is enabled but it's too much of a pain to wire it in the github actions
+    // TODO (#8263): merge canton_log_bft into canton_log, DA BFT is always enabled now
     val bftIgnore = Seq("canton_log_bft")
 
     val simtimeIgnorePatterns = if (usesSimtime) Seq("canton_log_simtime_extra") else Seq.empty

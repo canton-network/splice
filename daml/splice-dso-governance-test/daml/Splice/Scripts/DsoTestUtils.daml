@@ -479,16 +479,30 @@ getSvNodeState app sv = do
   [result] <- queryFilter @SvNodeState app.dso (\state -> state.sv == sv)
   pure result
 
+-- | The node states of all current SVs other than the given one, as expected by DsoRules_SetSynchronizerNodeConfig.
+getOtherSvNodeStateCids : AmuletApp -> Party -> Script (Map.Map Party (ContractId SvNodeState))
+getOtherSvNodeStateCids app sv = do
+  [(_, dsoRules)] <- query @DsoRules app.dso
+  otherStates <- queryFilter @SvNodeState app.dso (\state -> state.sv /= sv && state.sv `Map.member` dsoRules.svs)
+  pure $ Map.fromList [(state.sv, stateCid) | (stateCid, state) <- otherStates]
+
 setSynchronizerNodeConfig : AmuletApp -> Party -> Text -> SynchronizerNodeConfig -> Script (ContractId SvNodeState)
 setSynchronizerNodeConfig app sv synchronizerId newNodeConfig = do
+  otherSvNodeStateCids <- getOtherSvNodeStateCids app sv
+  result <- submit (actAs sv <> readAs app.dso) =<< setSynchronizerNodeConfigCmd app sv synchronizerId newNodeConfig (Some otherSvNodeStateCids)
+  pure result.svNodeState
+
+-- | The command to set the node config of an SV, with the node states of the other SVs passed explicitly.
+setSynchronizerNodeConfigCmd : AmuletApp -> Party -> Text -> SynchronizerNodeConfig -> Optional (Map.Map Party (ContractId SvNodeState)) -> Script (Commands DsoRules_SetSynchronizerNodeConfigResult)
+setSynchronizerNodeConfigCmd app sv synchronizerId newNodeConfig otherSvNodeStateCids = do
   (nodeStateCid, _) <- getSvNodeState app sv
   [(dsoRulesCid, _)] <- query @DsoRules app.dso
-  result <- submit (actAs sv <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules_SetSynchronizerNodeConfig with
+  pure $ exerciseCmd dsoRulesCid DsoRules_SetSynchronizerNodeConfig with
     sv
     synchronizerId
     nodeStateCid
     newNodeConfig
-  pure result.svNodeState
+    otherSvNodeStateCids
 
 -- Pure utility functions
 -------------------------

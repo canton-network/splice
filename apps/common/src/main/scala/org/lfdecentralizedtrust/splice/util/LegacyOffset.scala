@@ -47,11 +47,9 @@ object LegacyOffset {
 
     def assertFromString(s: String): LegacyOffset = tryFromString(s).fold(throw _, identity)
 
-    // TODO(DACH-NY/canton-network-node#18685) remove converter as it should be unused
     def assertFromStringToLongO(s: String): Option[Long] =
       Option.unless(s.isEmpty)(assertFromString(s).toLong)
 
-    // TODO(DACH-NY/canton-network-node#18685) remove converter as it should be unused
     def assertFromStringToLong(s: String): Long =
       assertFromStringToLongO(s).getOrElse(0L)
 

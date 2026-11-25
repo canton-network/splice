@@ -72,12 +72,6 @@ abstract class LsuTransferTriggerBase[T <: SynchronizerNode & LsuSynchronizerNod
       announcements: Seq[LsuAnnouncement],
   )(implicit tc: TraceContext): Future[Boolean] = Future.successful(false)
 
-  /** Runs before the successor is initialized from the current node's state. */
-  @nowarn("cat=unused-params")
-  protected def beforeInitialize(task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask])(implicit
-      tc: TraceContext
-  ): Future[Unit] = Future.unit
-
   /** Runs once the successor is initialized. */
   @nowarn("cat=unused-params")
   protected def afterInitialize(task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask])(implicit
@@ -112,7 +106,6 @@ abstract class LsuTransferTriggerBase[T <: SynchronizerNode & LsuSynchronizerNod
       implicit tc: TraceContext
   ): Future[TaskOutcome] =
     for {
-      _ <- beforeInitialize(task)
       state <- exporter.exportLSUState(topologyExportTime = None)
       parameters <- initializer.initializeSynchronizer(
         state,

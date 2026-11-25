@@ -108,7 +108,6 @@ object MetricsDocs {
     // sv
     new DbSvDsoStoreMetrics(generator)
     new SequencerPruningMetrics(generator)
-    new ReportSvStatusMetricsExportTrigger.SvCometBftMetrics(generator)
     new ReportSvStatusMetricsExportTrigger.SvStatusMetrics(
       ReportSvStatusMetricsExportTrigger.SvId(svParty.toProtoPrimitive, "svName"),
       generator,

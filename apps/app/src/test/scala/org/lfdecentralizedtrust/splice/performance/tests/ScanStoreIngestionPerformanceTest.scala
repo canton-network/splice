@@ -8,7 +8,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.NoReportingTracerProvider
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
@@ -27,6 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class ScanStoreIngestionPerformanceTest(
     dsoParty: PartyId,
     migrationId: Long,
+    synchronizerId: SynchronizerId,
     updateHistoryDumpPath: Path,
     storageConfig: StorageConfig,
     timeouts: ProcessingTimeout,
@@ -64,6 +65,7 @@ class ScanStoreIngestionPerformanceTest(
           NoReportingTracerProvider.tracer
         ),
         migrationId,
+        synchronizerId,
         participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
         IngestionConfig(),
         new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
@@ -79,6 +81,7 @@ object ScanStoreIngestionPerformanceTest {
   case class ScanStoreIngestionPerformanceTestConfig(
       dsoParty: String,
       migrationId: Long,
+      synchronizerId: String,
   )
   private implicit val configReader: ConfigReader[ScanStoreIngestionPerformanceTestConfig] =
     deriveReader[ScanStoreIngestionPerformanceTestConfig]
@@ -105,6 +108,7 @@ object ScanStoreIngestionPerformanceTest {
           new ScanStoreIngestionPerformanceTest(
             PartyId.tryFromProtoPrimitive(cfg.dsoParty),
             cfg.migrationId,
+            SynchronizerId.tryFromString(cfg.synchronizerId),
             updateHistoryDumpPath,
             sv1Config.storage,
             spliceConfig.parameters.timeouts.processing,
