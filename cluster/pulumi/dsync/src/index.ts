@@ -7,11 +7,11 @@ import { installNode } from './installNode';
 const dsyncNode = config.requireEnv('SPLICE_DSYNC_NODE');
 
 async function auth0CacheAndInstallNode(auth0Fetch: Auth0Fetch) {
-  await auth0Fetch.loadAuth0Cache();
+  await auth0Fetch.loadFixedTokensCache();
 
   await installNode(auth0Fetch, dsyncNode);
 
-  await auth0Fetch.saveAuth0Cache();
+  await auth0Fetch.persistFixedTokensCache();
 }
 
 async function main() {

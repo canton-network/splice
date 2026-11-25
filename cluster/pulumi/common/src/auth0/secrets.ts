@@ -5,6 +5,7 @@ import * as k8s from '@pulumi/kubernetes';
 import { isMainNet } from '../config';
 import { ExactNamespace, fixedTokens } from '../utils';
 import { getClientId, getNamespaceConfig } from './auth0';
+import { getParticipantAdminApiAudience } from './audiences';
 import { Auth0Client, Auth0ClientSecret, Auth0SecretMap } from './auth0types';
 
 function lookupClientSecrets(
@@ -326,7 +327,7 @@ async function participantAdminApiSecretContent(
   const clientId = getClientId(auth0Client, clientName, namespace);
 
   const clientSecrets = lookupClientSecrets(allSecrets, auth0Client, namespace, clientName);
-  const audience = cfg.namespacedConfigs[namespace]!.audiences.participantAdminApi;
+  const audience = getParticipantAdminApiAudience(cfg, namespace);
 
   const clientSecret = clientSecrets.client_secret;
 

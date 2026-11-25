@@ -149,8 +149,6 @@ export const SyncNodeSchema = z
         // Falls back to `apiRequestLogLevel` when not specified
         cantonApiRequestLogLevel: LogLevelSchema.optional(),
         cantonAsync: z.boolean().default(false),
-        cometbftLogLevel: CometbftLogLevelSchema.optional(),
-        cometbftExtraLogLevelFlags: z.string().optional(),
       })
       .optional(),
   })
