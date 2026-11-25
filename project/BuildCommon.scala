@@ -230,8 +230,12 @@ object BuildCommon {
           s"; format ; scalafixAll ; apps-frontends/npmFix ; pulumi/npmFix ; load-tester/npmFix ; headerCreate",
         ) ++
         addCommandAlias(
+          "lintStaticFormat",
+          "; scalafmtCheck ; Test / scalafmtCheck ; scalafmtSbtCheck",
+        ) ++
+        addCommandAlias(
           "lintStatic",
-          "; scalafmtCheck ; Test / scalafmtCheck ; scalafmtSbtCheck ; runShellcheck ; syncpackCheck ; illegalDamlReferencesCheck ; headerCheck",
+          "; lintStaticFormat ; runShellcheck ; syncpackCheck ; illegalDamlReferencesCheck ; headerCheck",
         ) ++
         addCommandAlias(
           "lintCompiled",
