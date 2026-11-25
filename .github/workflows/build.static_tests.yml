@@ -146,6 +146,27 @@ jobs:
         with:
           cmd: ./scripts/check-npm-package-names.py
 
+      - name: Debug sbt load, first start
+        uses: ./.github/actions/sbt/execute_sbt_command
+        with:
+          cmd: "exit"
+          extra_parameters: "-debug"
+          fail_on_error_in_output: "false"
+
+      - name: Debug sbt load, second start
+        uses: ./.github/actions/sbt/execute_sbt_command
+        with:
+          cmd: "exit"
+          fail_on_error_in_output: "false"
+
+      - name: Debug sbt load, local coursier cache copy
+        uses: ./.github/actions/sbt/execute_sbt_command
+        with:
+          pre_sbt_cmd: "mkdir -p /tmp/coursier-local && cp -a /cache/coursier/. /tmp/coursier-local/ && du -sh /tmp/coursier-local"
+          extra_env_vars: "COURSIER_CACHE=/tmp/coursier-local"
+          cmd: "exit"
+          fail_on_error_in_output: "false"
+
       - name: SBT-based static checks
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
