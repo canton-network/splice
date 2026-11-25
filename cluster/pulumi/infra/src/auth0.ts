@@ -149,7 +149,7 @@ function createParticipantAdminApiAudience(
       .map(s => _.capitalize(s))
       .join('')}`,
     {
-      name: `Participant Admin API for SV ${namespace} on ${clusterBasename} (Pulumi managed)`,
+      name: `Participant Admin API for node ${namespace} on ${clusterBasename} (Pulumi managed)`,
       identifier,
       tokenLifetime: tokenLifetime(),
     },
@@ -164,7 +164,7 @@ function newM2MApp(
   description: string,
   clusterBasename: string,
   ledgerApiAud: ResolvedOutput<string>,
-  participantAdminApiAud: ResolvedOutput<string> | undefined, // undefined for dSync, which has no admin API yet
+  participantAdminApiAud: ResolvedOutput<string>,
   appAud: ResolvedOutput<string>,
   auth0DomainProvider: auth0.Provider,
   supportLegacyLedgerApiAudience: boolean = true // TODO(DACH-NY/canton-network-internal#2873): drop the manually-created legacy audience, always create via pulumi
@@ -191,19 +191,17 @@ function newM2MApp(
     }
   );
 
-  if (participantAdminApiAud) {
-    new auth0.ClientGrant(
-      `${resourceName}ParticipantAdminGrant`,
-      {
-        clientId: client.id,
-        audience: participantAdminApiAud.output,
-        allowAllScopes: true,
-      },
-      {
-        provider: auth0DomainProvider,
-      }
-    );
-  }
+  new auth0.ClientGrant(
+    `${resourceName}ParticipantAdminGrant`,
+    {
+      clientId: client.id,
+      audience: participantAdminApiAud.output,
+      allowAllScopes: true,
+    },
+    {
+      provider: auth0DomainProvider,
+    }
+  );
 
   // TODO(DACH-NY/canton-network-internal#2873): Of course on MainNet we use a different default audience...
   const legacyLedgerApiAud = isMainNet
@@ -647,27 +645,35 @@ function auth0ForDSyncNamespace(
     provider,
     true // We create the audience also for non-prod clusters, as we did not create it manually and don't want to (as opposed to other tenants where we're still using hand-created legacy stuff).
   );
+  const participantAdminAud = createParticipantAdminApiAudience(
+    namespace,
+    clusterBasename,
+    provider
+  );
   const opApp = newM2MApp(
     `${id}DsyncOpApp`,
     `${id.toUpperCase()} dSync Operator`,
     `Used for the dSync operator app for ${namespace} on ${clusterBasename}`,
     clusterBasename,
     aud,
-    undefined, // dSync has no participant admin API audience yet
+    participantAdminAud,
     aud, // For now, no need for a separate audience for the app, as it doesn't have an admin API yet
     provider,
     false // We don't want to support the legacy audience for dSync, as its tenant does not have the manually created audience, and we'd rather not create it manually.
   );
-  return pulumi.all([aud.output, opApp.id]).apply(([audValue, opAppValue]) => {
-    return {
-      audiences: {
-        ledgerApi: audValue,
-      },
-      backendClientIds: {
-        dSync: opAppValue,
-      },
-    };
-  });
+  return pulumi
+    .all([aud.output, participantAdminAud.output, opApp.id])
+    .apply(([audValue, adminAudValue, opAppValue]) => {
+      return {
+        audiences: {
+          ledgerApi: audValue,
+          participantAdminApi: adminAudValue,
+        },
+        backendClientIds: {
+          dSync: opAppValue,
+        },
+      };
+    });
 }
 
 function dsyncAuth0(clusterBasename: string): pulumi.Output<Auth0Config> | undefined {

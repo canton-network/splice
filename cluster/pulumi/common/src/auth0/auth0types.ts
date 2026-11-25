@@ -9,7 +9,7 @@ export type Auth0SecretMap = Map<string, Auth0ClientSecret>;
 
 export type Auth0NamespaceAudiences = {
   ledgerApi: string;
-  participantAdminApi?: string; // Empty for dSync namespaces
+  participantAdminApi: string;
   validatorApi?: string; // Empty for dSync namespaces
   svAppApi?: string; // Empty for validator-only namespaces
 };
