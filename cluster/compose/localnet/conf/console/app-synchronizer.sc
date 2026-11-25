@@ -1,10 +1,17 @@
+val appSynchronizerProtocolVersion =
+  sys.env
+    .get("CANTON_PROTOCOL_VERSION")
+    .filter(_.nonEmpty)
+    .fold[ProtocolVersion](ProtocolVersion.v37)(ProtocolVersion.tryCreate)
+
 val appSynchronizerId = bootstrap.synchronizer(
   synchronizerName = "app-synchronizer",
   sequencers = Seq(`app-sequencer`),
   mediators = Seq(`app-mediator`),
   synchronizerOwners = Seq(`app-sequencer`),
   synchronizerThreshold = 1,
-  staticSynchronizerParameters = StaticSynchronizerParameters.defaultsWithoutKMS(ProtocolVersion.latest),
+  staticSynchronizerParameters =
+    StaticSynchronizerParameters.defaultsWithoutKMS(appSynchronizerProtocolVersion),
 )
 
 `app-provider`.synchronizers.connect_local(`app-sequencer`, "app-synchronizer")
@@ -12,7 +19,7 @@ val appSynchronizerId = bootstrap.synchronizer(
 
 utils.retry_until_true {
   `app-provider`.synchronizers.active("app-synchronizer") &&
-    `app-user`.synchronizers.active("app-synchronizer")
+  `app-user`.synchronizers.active("app-synchronizer")
 }
 
 // Enable the multi-synchronizer topology feature flag on every synchronizer each
