@@ -166,3 +166,5 @@ to `log/ci-triage-export/<ref>/`.
 - The suite list of a checkErrors shard is not the culprit: the WARN's suite is the one running at the flagged
   timestamp, and commitment or ack WARNs often land minutes after the causing step.
 - A packet without the commands that produced its conclusions is not accepted.
+- Every quoted log line names the file it comes from (artifact file name, or job log and step), in the packet and in the
+  comment, so that anyone can verify it by hand.

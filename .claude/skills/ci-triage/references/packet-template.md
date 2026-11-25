@@ -5,6 +5,8 @@
 File: `<D>/evidence/<ref>-<short-slug>.md`. Title line first, then one paragraph of verdict, then numbered
 sections. Every section is: one sentence of what the command shows, the command in a fence, the verbatim
 output in a fence (long hashes trimmed by the sed/cut in the command itself, e.g. `s/1220[0-9a-f]{60}/../g`).
+The command names the log file it reads (the path under `log/<ref>/`, e.g. `log/11742/logs-wall-clock-time-4/canton.clog.gz`);
+the comment then names the same file as the artifact shows it (see `issue-comment.md`).
 
 ```
 # <ref> - <one-line failure description> (run <run id>)

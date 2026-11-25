@@ -12,7 +12,11 @@ Shape (Markdown, short paragraphs of one to three sentences; as short as the fac
 2. What failed, by plain job or test name (`docker-compose`, `key-download`, the test name), without run ids, shas,
    shard numbers or which duplicate belongs to which job: the issue and the linked duplicates show those.
 3. The decisive log lines verbatim in a fenced code block (two to six lines, timestamps kept, secrets and long JSON
-   trimmed with `...`), then one or two sentences interpreting them.
+   trimmed with `...`), then one or two sentences interpreting them. Name the log file each block comes from, in
+   the sentence before the block or in a comment line above it, so that a reader can verify it by hand: the file
+   as it is named in the job's artifact (`canton_network_test.clog.gz`, `canton-simtime.clog.gz`, `canton.clog.gz`)
+   or, for the console log, the job log and its step ("job log, step Build Docker images"). A block that mixes
+   files is split per file. Never quote a line without saying where it is.
 4. Only the facts that settle the verdict, one sentence each (a check that passed, the last good run). No timeline
    of the investigation, no list of runs checked.
 5. Resolution only when someone has to act and the action is not obvious from the verdict: the fix in one sentence
