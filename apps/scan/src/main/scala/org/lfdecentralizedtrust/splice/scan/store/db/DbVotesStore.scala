@@ -148,6 +148,21 @@ class DbVotesStore private (
       limit: Limit,
       after: Option[Long],
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] =
+    listVoteResults(filters, limit, after).map(page =>
+      ResultsPage(
+        page.resultsInPage.map(row => DsoRules_CloseVoteRequestResult.fromJson(row.choiceResult)),
+        page.nextPageToken,
+      )
+    )
+
+  /** Like [[listVoteRequestResults]], with the data that identifies each vote result,
+    * and the JSON of each result as stored, without decoding it.
+    */
+  def listVoteResults(
+      filters: VoteResultsFilters,
+      limit: Limit,
+      after: Option[Long],
+  )(implicit tc: TraceContext): Future[ResultsPage[ServedVoteResult]] =
     for {
       // The page token is a row_id, which is only used to look up the position in the sort order.
       where <- Future.fromTry(Try {
@@ -158,17 +173,15 @@ class DbVotesStore private (
       })
       rows <- futureUnlessShutdownToFuture(
         storage.query(
-          (sql"select row_id, choice_result from #$table where " ++ where ++
+          (sql"""select row_id, record_time, synchronizer_id, update_id, event_number, contract_id, choice_result
+                 from #$table where """ ++ where ++
             sql" order by #$sortKey desc, record_time desc, event_number desc limit ${sqlLimit(limit)}").toActionBuilder
-            .as[(Long, String)],
-          "DbVotesStore.listVoteRequestResults",
+            .as[(Long, ServedVoteResult)],
+          "DbVotesStore.listVoteResults",
         )
       )
-      limited = applyLimit("listVoteRequestResults", limit, rows)
-    } yield ResultsPage(
-      limited.map { case (_, json) => DsoRules_CloseVoteRequestResult.fromJson(json) },
-      limited.lastOption.map(_._1),
-    )
+      limited = applyLimit("listVoteResults", limit, rows)
+    } yield ResultsPage(limited.map(_._2), limited.lastOption.map(_._1))
 
   override def countVoteRequestResults(filters: VoteResultsFilters)(implicit
       tc: TraceContext
@@ -299,7 +312,7 @@ object DbVotesStore {
     */
   final case class VotesBackfillCursor(recordTime: CantonTimestamp, eventNumber: Int)
 
-  /** A vote result as served to a peer: what identifies it, and the JSON of its result as stored.
+  /** A vote result as served to a peer or to API users: what identifies it, and the JSON of its result as stored.
     * Everything else in `votes_store_results` is derived from the result by the receiver, see
     * [[PeerVoteResult]]. The JSON is passed on as stored, without decoding it.
     */

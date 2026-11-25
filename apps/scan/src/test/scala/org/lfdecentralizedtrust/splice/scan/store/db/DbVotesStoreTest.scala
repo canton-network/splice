@@ -70,7 +70,8 @@ import org.lfdecentralizedtrust.splice.store.{
   StoreTestBase,
   VoteResultsFilters,
 }
-import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Contract, ResourceTemplateDecoder, TemplateJsonDecoder}
+import com.digitalasset.canton.daml.lf.value.json.ApiCodecCompressed
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import org.slf4j.event.Level
 import slick.dbio.DBIO
@@ -208,6 +209,68 @@ class DbVotesStoreTest
         } yield {
           contractIds should have size voteFixtures.flatMap(_.votes).size.toLong
           all(contractIds.map(_._2)) shouldBe Some(dsoRulesCid)
+        }
+      }
+    }
+
+    "listVoteResults" should {
+      "return the same vote results as listVoteRequestResults, with the data that identifies them" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          page <- stores.votesStore.listVoteResults(VoteResultsFilters(), PageLimit.Max, None)
+          resultsPage <- stores.votesStore.listVoteRequestResults(
+            VoteResultsFilters(),
+            PageLimit.Max,
+            None,
+          )
+          rows <- listAllRows(stores.votesStore)
+        } yield {
+          page.resultsInPage should have size voteFixtures.flatMap(_.votes).size.toLong
+          page.resultsInPage.map(r =>
+            DsoRules_CloseVoteRequestResult.fromJson(r.choiceResult)
+          ) shouldBe resultsPage.resultsInPage
+          page.nextPageToken shouldBe resultsPage.nextPageToken
+          page.resultsInPage.map(r =>
+            (
+              r.recordTime,
+              r.synchronizerId,
+              r.updateId,
+              r.eventNumber,
+              r.contractId,
+              r.choiceResult,
+            )
+          ) should contain theSameElementsAs rows.map(r =>
+            (
+              CantonTimestamp.ofEpochMicro(r.recordTime),
+              r.synchronizerId,
+              r.updateId,
+              r.eventNumber,
+              r.contractId,
+              r.choiceResult,
+            )
+          )
+        }
+      }
+
+      // /v1/admin/sv/voteresults serves the stored JSON, /v0/admin/sv/voteresults re-encodes the decoded result
+      "store the JSON in the same format as /v0/admin/sv/voteresults encodes it" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          page <- stores.votesStore.listVoteResults(VoteResultsFilters(), PageLimit.Max, None)
+        } yield {
+          page.resultsInPage should have size voteFixtures.flatMap(_.votes).size.toLong
+          forAll(page.resultsInPage) { row =>
+            val v0Encoding = ApiCodecCompressed
+              .apiValueToJsValue(
+                Contract.javaValueToLfValue(
+                  DsoRules_CloseVoteRequestResult.fromJson(row.choiceResult).toValue
+                )
+              )
+              .compactPrint
+            io.circe.parser.parse(row.choiceResult) shouldBe io.circe.parser.parse(v0Encoding)
+          }
         }
       }
     }

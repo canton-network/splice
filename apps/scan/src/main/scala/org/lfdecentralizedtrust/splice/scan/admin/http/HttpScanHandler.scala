@@ -35,6 +35,7 @@ import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCodegen}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_CloseVoteRequestResult
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
@@ -2119,22 +2120,124 @@ class HttpScanHandler(
       } yield {
         ScanResource.ListVoteRequestResultsResponse.OK(
           definitions.ListDsoRulesVoteResultsResponse(
-            page.resultsInPage
-              .map(voteResult => {
-                io.circe.parser
-                  .parse(
-                    ApiCodecCompressed
-                      .apiValueToJsValue(Contract.javaValueToLfValue(voteResult.toValue))
-                      .compactPrint
-                  )
-                  .valueOr(err =>
-                    ErrorUtil.invalidState(s"Failed to convert from spray to circe: $err")
-                  )
-              })
-              .toVector,
+            page.resultsInPage.map(encodeVoteResult).toVector,
             page.nextPageToken.map(BigInt(_)),
           )
         )
+      }
+    }
+  }
+
+  private def encodeVoteResult(voteResult: DsoRules_CloseVoteRequestResult)(implicit
+      tc: TraceContext
+  ): io.circe.Json =
+    io.circe.parser
+      .parse(
+        ApiCodecCompressed
+          .apiValueToJsValue(Contract.javaValueToLfValue(voteResult.toValue))
+          .compactPrint
+      )
+      .valueOr(err => ErrorUtil.invalidState(s"Failed to convert from spray to circe: $err"))
+
+  private def voteResultsFiltersV1(
+      filters: definitions.VoteResultsFiltersV1
+  ): VoteResultsFilters =
+    VoteResultsFilters(
+      actionName = filters.actionName,
+      accepted = filters.accepted,
+      requester = filters.requester,
+      effectiveFrom = filters.effectiveFrom.map(_.toInstant.toString),
+      effectiveTo = filters.effectiveTo.map(_.toInstant.toString),
+    )
+
+  /** Unlike `/v0/admin/sv/voteresults`, which serves the txlog, the endpoints served from the votes
+    * store return nothing until it holds every vote result since the start of the network.
+    */
+  private def confirmVotesBackfillingIsCompleteThen[T](
+      body: => Future[T]
+  )(implicit tc: TraceContext): Future[T] =
+    votesStore.isBackfillingComplete().flatMap {
+      case true => body
+      case false =>
+        Future.failed(
+          Status.UNAVAILABLE
+            .withDescription(
+              "This scan instance has not yet replicated all vote results. " +
+                "Wait until replication is complete, or connect to a different scan instance."
+            )
+            .asRuntimeException()
+        )
+    }
+
+  override def listVoteRequestResultsV1(
+      respond: ScanResource.ListVoteRequestResultsV1Response.type
+  )(
+      body: definitions.ListVoteResultsRequestV1
+  )(extracted: TraceContext): Future[ScanResource.ListVoteRequestResultsV1Response] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.listVoteRequestResultsV1") { _ => _ =>
+      confirmVotesBackfillingIsCompleteThen {
+        votesStore
+          .listVoteResults(
+            body.filters.fold(VoteResultsFilters())(voteResultsFiltersV1),
+            PageLimit.tryCreate(body.pageSize),
+            body.pageToken,
+          )
+          .map { page =>
+            ScanResource.ListVoteRequestResultsV1Response.OK(
+              definitions.ListVoteResultsResponseV1(
+                page.resultsInPage.map(encodeVoteResultV1).toVector,
+                page.nextPageToken,
+              )
+            )
+          }
+      }
+    }
+  }
+
+  private def encodeVoteResultV1(row: DbVotesStore.ServedVoteResult): definitions.VoteResultV1 =
+    definitions.VoteResultV1(
+      recordTime = row.recordTime.toInstant.atOffset(ZoneOffset.UTC),
+      synchronizerId = row.synchronizerId,
+      updateId = row.updateId,
+      eventNumber = row.eventNumber,
+      // Same as for backfilling: every vote result of a complete votes store is expected to have one.
+      dsoRulesContractId = row.contractId.getOrElse(
+        throw Status.INTERNAL
+          .withDescription(
+            s"The stored vote result in update ${row.updateId} at ${row.recordTime} has no DsoRules contract id"
+          )
+          .asRuntimeException()
+      ),
+      // Passed on as stored, without decoding it with the codegen of this app.
+      voteResult = io.circe.parser
+        .parse(row.choiceResult)
+        .valueOr(err =>
+          throw Status.INTERNAL
+            .withDescription(
+              s"The stored vote result in update ${row.updateId} at ${row.recordTime} is not valid JSON: $err"
+            )
+            .asRuntimeException()
+        ),
+      // TODO(#8080): include the DsoRules at the time of the vote
+      dsoRules = None,
+    )
+
+  override def countVoteRequestResultsV1(
+      respond: ScanResource.CountVoteRequestResultsV1Response.type
+  )(
+      body: definitions.VoteResultsFiltersV1
+  )(extracted: TraceContext): Future[ScanResource.CountVoteRequestResultsV1Response] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.countVoteRequestResultsV1") { _ => _ =>
+      confirmVotesBackfillingIsCompleteThen {
+        votesStore
+          .countVoteRequestResults(voteResultsFiltersV1(body))
+          .map(count =>
+            ScanResource.CountVoteRequestResultsV1Response.OK(
+              definitions.CountVoteResultsResponseV1(count)
+            )
+          )
       }
     }
   }
