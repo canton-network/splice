@@ -30,7 +30,7 @@ import scala.concurrent.Future
   * for each v1 ACS snapshot, using an example snapshot. This test lives in the Scan module because that
   * DDL is part of Scan's [[AcsSnapshotDDL]].
   * Partitions of the update history tables are not included: they have the columns, constraints and indexes
-  * of their parent table. Neither are the indexes managed by SqlIndexInitializationTrigger.
+  * of their parent table.
   */
 class DbSchemaSnapshotTest extends StoreTestBase with SplicePostgresTest {
   import DbSchemaSnapshotTest.*
