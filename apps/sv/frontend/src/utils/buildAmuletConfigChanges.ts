@@ -544,7 +544,7 @@ function buildCredentialRegistryConfigChanges(
       label: 'Credential registry: free period (microseconds)',
       currentValue: before?.freePeriod?.microseconds || '',
       newValue: after?.freePeriod?.microseconds || '',
-      description: 'Free registry lease added on issuance and extension (default: 90 days)',
+      description: 'Free registry lease of a newly published credential (default: 90 days)',
     },
     {
       fieldName: 'credentialRegistryConfigExtensionUsdPerYear',

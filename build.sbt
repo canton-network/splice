@@ -353,7 +353,6 @@ lazy val `splice-api-credential-registry-publication-v1-daml` =
       BuildCommon.damlSettings,
       Compile / damlDependencies :=
         (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-credential-record-v1-daml` / Compile / damlBuild).value,
     )
 

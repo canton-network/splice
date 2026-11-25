@@ -105,7 +105,7 @@ data RewardConfig = RewardConfig with
 -- Read them with `credentialRegistryFreePeriod` and `credentialRegistryExtensionUsdPerYear`.
 data CredentialRegistryConfig = CredentialRegistryConfig with
     freePeriod : Optional RelTime
-      -- ^ Free registry lease added when a credential is issued or extended. Default: 90 days.
+      -- ^ Free registry lease of a newly published credential record. Default: 90 days.
     extensionUsdPerYear : Optional Decimal
       -- ^ USD price of one extra year of registry lease. Default: 1.0 USD.
   deriving (Eq, Show, Serializable)
