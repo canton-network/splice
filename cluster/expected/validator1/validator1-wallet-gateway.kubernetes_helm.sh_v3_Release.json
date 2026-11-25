@@ -108,6 +108,9 @@
           }
         }
       },
+      "containerSecurityContext": {
+        "runAsUser": 1001
+      },
       "extraEnv": [
         {
           "name": "WG_STORE_PASSWORD",
@@ -135,7 +138,7 @@
         }
       ]
     },
-    "version": "1.13.0"
+    "version": "1.15.0"
   },
   "name": "validator1-wallet-gateway",
   "provider": "",

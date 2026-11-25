@@ -233,8 +233,8 @@ pulumiStacks:
 splitwell:
   walletGateway:
     enabled: false
-    portfolioVersion: '1.14.0'
-    version: '1.13.0'
+    portfolioVersion: '1.16.0'
+    version: '1.15.0'
 sv:
   scan:
     externalRateLimits:
@@ -1516,8 +1516,8 @@ validator1:
     retention: '1h'
   walletGateway:
     enabled: true
-    portfolioVersion: '1.14.0'
-    version: '1.13.0'
+    portfolioVersion: '1.16.0'
+    version: '1.15.0'
 validators:
   validator-runbook:
     namespace: 'validator'
@@ -1528,5 +1528,5 @@ validators:
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
       enabled: true
-      portfolioVersion: '1.14.0'
-      version: '1.13.0'
+      portfolioVersion: '1.16.0'
+      version: '1.15.0'

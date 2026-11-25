@@ -59,6 +59,9 @@ export async function installWalletGateway(
       maxHistory: HELM_MAX_HISTORY_SIZE,
       values: {
         ...appsKubernetesScheduling,
+        // Since chart 1.14.0 the default containerSecurityContext sets runAsNonRoot, which Kubernetes can
+        // only verify against a numeric UID, while the image declares its user by name (nonroot, UID 1001).
+        containerSecurityContext: { runAsUser: 1001 },
         oauthSecrets: {
           OAUTH2_ADMIN_CLIENT_SECRET: {
             secretRef: { name: adminSecret.metadata.name, key: 'client-secret' },
