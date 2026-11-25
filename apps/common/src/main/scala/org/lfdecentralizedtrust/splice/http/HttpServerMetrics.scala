@@ -65,19 +65,8 @@ class HttpServerMetrics(
         val c = MetricsContext(Operation -> operation, HttpService -> service)
         implicit val mc: MetricsContext = req.headers
           .find(_.is(customSourceUiHeader)) // custom header added by the UI
-          .map { header =>
-            val sourceUi = header.value
-            logger.debug(
-              s"HTTP Request from UI($customSourceUiHeader: $sourceUi): service = $service, operation= $operation"
-            )
-            c.withExtraLabels(SourceUi -> sourceUi)
-          }
-          .getOrElse {
-            logger.debug(
-              s"HTTP Request no source UI header: service = $service, operation= $operation"
-            )
-            c
-          }
+          .map(header => c.withExtraLabels(SourceUi -> header.value))
+          .getOrElse(c)
 
         inFlightRequests.inc()
         val timing = requestTiming.startAsync()
