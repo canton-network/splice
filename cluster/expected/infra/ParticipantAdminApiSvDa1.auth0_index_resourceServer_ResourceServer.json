@@ -3,7 +3,7 @@
   "id": "",
   "inputs": {
     "identifier": "https://participant_admin_api.sv-da-1.test-stack.canton.network",
-    "name": "Participant Admin API for SV sv-da-1 on test-stack (Pulumi managed)",
+    "name": "Participant Admin API for node sv-da-1 on test-stack (Pulumi managed)",
     "tokenLifetime": 86400
   },
   "name": "ParticipantAdminApiSvDa1",
