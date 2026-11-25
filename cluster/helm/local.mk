@@ -9,7 +9,6 @@ app_charts := \
 	splice-load-tester \
 	splice-participant \
 	splice-party-allocator \
-	splice-postgres \
 	splice-scan \
 	splice-splitwell-app \
 	splice-splitwell-web-ui \

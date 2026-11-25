@@ -1,0 +1,27 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+      "name": "grafana-postgres-helmless",
+      "namespace": "observability"
+    },
+    "spec": {
+      "ports": [
+        {
+          "name": "postgresdb",
+          "port": 5432,
+          "protocol": "TCP"
+        }
+      ],
+      "selector": {
+        "app": "grafana-postgres-helmless"
+      }
+    }
+  },
+  "name": "observability-grafana-postgres-helmless-svc",
+  "provider": "",
+  "type": "kubernetes:core/v1:Service"
+}

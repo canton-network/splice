@@ -40,6 +40,9 @@
 
   - Helm charts and Docker images
 
+    - **Breaking** The deprecated `splice-postgres` Helm chart has been removed. Run Splice against a PostgreSQL
+      instance that you provision yourself; see the [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration).
+
     - `splice-participant`: new required value `nodeIdentifier`. Canton now initializes the
       participant's identity itself, so the chart must be given the same node identifier that
       the controlling SV or validator app expects, i.e. the previous `nodeIdentifier` of `splice-sv-node`
@@ -103,3 +106,6 @@
       - Added a new template `ActivityRecorder` in `splice-amulet` to support extra activity reporting
         by dedicated synchronizers, as specified by the
         [CIP-0104 App Activity Recording Extension Hook](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md#app-activity-recording-extension-hook).
+
+    - The deprecated `splice-postgres` Helm chart has been removed. Run Splice against a PostgreSQL
+      instance that you provision yourself; see the [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration).

@@ -2,7 +2,7 @@
   "custom": false,
   "id": "",
   "inputs": {},
-  "name": "observability-grafana-postgres",
+  "name": "multi-validator-postgres-2-helmless",
   "provider": "",
   "type": "canton:network:postgres"
 }
