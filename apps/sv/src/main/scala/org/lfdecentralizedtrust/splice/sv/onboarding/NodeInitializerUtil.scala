@@ -218,6 +218,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
             party = dsoStore.key.dsoParty,
             participant = participantId,
             key = Map("svParty" -> dsoStore.key.svParty.toProtoPrimitive),
+            userVersion = config.unavailablePartiesStoreDescriptorUserVersion,
           ),
           storage,
           config.unavailablePartiesBackoffParameters.baseIgnoreDuration,
