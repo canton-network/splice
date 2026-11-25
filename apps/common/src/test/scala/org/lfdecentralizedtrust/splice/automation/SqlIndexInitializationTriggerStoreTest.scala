@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.store.db.{
   SplicePostgresTest,
   SqlIndexInitializer,
 }
-import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.IndexAction
+import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.{IndexAction, IndexStatus}
 import org.slf4j.event.Level
 import slick.dbio.DBIOAction
 import slick.jdbc.{GetResult, PositionedResult}
@@ -179,55 +179,7 @@ class SqlIndexInitializationTriggerStoreTest
         ),
       )
       for {
-        _ <- Future.unit
-        _ <- storage.underlying
-          .update(
-            DBIOAction
-              .seq(
-                sqlu"""
-                  insert into active_parties (store_id, party, closed_round)
-                  values (1, 'test_party', 1)
-                """,
-                sqlu"""
-                  insert into active_parties (store_id, party, closed_round)
-                  values (2, 'test_party2', 1)
-                """,
-              ),
-            "insert test data",
-          )
-          .failOnShutdown
-        _ <- storage.underlying
-          .update(
-            sqlu"""
-              create or replace function slow_function(text) returns text as $$$$
-              begin
-                  perform pg_sleep(5); -- simulate a long-running operation
-                  return $$1;
-              end;
-              $$$$ language plpgsql immutable;
-              """,
-            "create slow_function",
-          )
-          .failOnShutdown
-        _ <- storage.underlying
-          .update(
-            DBIOAction
-              .seq(
-                sqlu"set statement_timeout to '1s'",
-                // This statement will be aborted, because slow_function() takes 5 seconds to execute per row,
-                // and the statement timeout is set to 1 second above.
-                // 'create index concurrently' internally consists of 3 transactions: one to register the index as invalid,
-                // and two table scans to build the index. Aborting the statement will leave the index in an invalid state.
-                sqlu"create index concurrently if not exists test_index on active_parties (slow_function(party))",
-                // `set statement_timeout` lasts for the whole session, and we are using connection pools,
-                // so reset it to default to avoid affecting later statements.
-                sqlu"set statement_timeout to default",
-              )
-              .asTry,
-            "insert test data",
-          )
-          .failOnShutdown
-
+        _ <- createInvalidTestIndex()
         indexNamesBefore <- listIndexNames()
         _ = indexNamesBefore should contain("test_index")
 
@@ -386,6 +338,122 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
   }
+
+  "SqlIndexInitializer" should {
+
+    "create and drop the default indexes" in {
+      val actions = SqlIndexInitializer.defaultIndexActions
+      for {
+        _ <- applyAll(actions)
+        statuses <- MonadUtil.sequentialTraverse(actions)(action =>
+          indexStatus(action.indexName).map(action -> _)
+        )
+      } yield {
+        val wrong = statuses.collect {
+          case (IndexAction.Create(name, _), status) if status != IndexStatus.Valid =>
+            s"$name should be valid but is $status"
+          case (IndexAction.Drop(name), status) if status != IndexStatus.DoesNotExist =>
+            s"$name should not exist but is $status"
+        }
+        wrong shouldBe empty
+      }
+    }
+
+    "run no DDL when the indexes are already in place" in {
+      val actions = SqlIndexInitializer.defaultIndexActions
+      for {
+        _ <- applyAll(actions)
+        _ <- loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          within = applyAll(actions),
+          assertion = { entries =>
+            val ddl = entries
+              .map(_.message)
+              .filter(m => m.startsWith("Creating index") || m.startsWith("Dropping index"))
+            ddl shouldBe empty
+          },
+        )
+      } yield succeed
+    }
+
+    "fail on an invalid index" in {
+      val action = IndexAction.Create(
+        "test_index",
+        sqlu"create index concurrently if not exists test_index on active_parties (closed_round)",
+      )
+      for {
+        _ <- createInvalidTestIndex()
+        error <- loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          within = applyAll(List(action)).failed,
+          assertion = { entries =>
+            forExactly(1, entries) {
+              _.message should include(
+                "Index test_index should be created and is invalid, dropping it"
+              )
+            }
+          },
+        )
+      } yield error.getMessage should include("Index test_index is invalid")
+    }
+  }
+
+  private def applyAll(actions: List[IndexAction]): Future[Unit] =
+    new SqlIndexInitializer(storage, loggerFactory).applyAll(actions).failOnShutdown
+
+  private def indexStatus(indexName: String): Future[IndexStatus] =
+    storage.underlying
+      .query(SqlIndexInitializer.getIndexStatusAction(indexName), "getIndexStatus")
+      .failOnShutdown
+
+  private def createInvalidTestIndex(): Future[Unit] =
+    for {
+      _ <- storage.underlying
+        .update(
+          DBIOAction
+            .seq(
+              sqlu"""
+                insert into active_parties (store_id, party, closed_round)
+                values (1, 'test_party', 1)
+              """,
+              sqlu"""
+                insert into active_parties (store_id, party, closed_round)
+                values (2, 'test_party2', 1)
+              """,
+            ),
+          "insert test data",
+        )
+        .failOnShutdown
+      _ <- storage.underlying
+        .update(
+          sqlu"""
+            create or replace function slow_function(text) returns text as $$$$
+            begin
+                perform pg_sleep(5); -- simulate a long-running operation
+                return $$1;
+            end;
+            $$$$ language plpgsql immutable;
+            """,
+          "create slow_function",
+        )
+        .failOnShutdown
+      _ <- storage.underlying
+        .update(
+          DBIOAction
+            .seq(
+              sqlu"set statement_timeout to '1s'",
+              // This statement will be aborted, because slow_function() takes 5 seconds to execute per row,
+              // and the statement timeout is set to 1 second above.
+              // 'create index concurrently' internally consists of 3 transactions: one to register the index as invalid,
+              // and two table scans to build the index. Aborting the statement will leave the index in an invalid state.
+              sqlu"create index concurrently if not exists test_index on active_parties (slow_function(party))",
+              // `set statement_timeout` lasts for the whole session, and we are using connection pools,
+              // so reset it to default to avoid affecting later statements.
+              sqlu"set statement_timeout to default",
+            )
+            .asTry,
+          "insert test data",
+        )
+        .failOnShutdown
+    } yield ()
 
   private def listIndexNames(): Future[Seq[String]] = {
     storage.underlying

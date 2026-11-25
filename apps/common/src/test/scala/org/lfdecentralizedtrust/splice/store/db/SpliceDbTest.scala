@@ -26,6 +26,7 @@ import java.net.ServerSocket
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
+import scala.util.control.NonFatal
 
 trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
 
@@ -204,13 +205,19 @@ trait SplicePostgresTest extends SpliceDbTest { this: Suite =>
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    TraceContext.withNewTraceContext("create_sql_indexes") { implicit tc =>
-      Await.result(
-        new SqlIndexInitializer(storage, loggerFactory)
-          .applyAll(SqlIndexInitializer.defaultIndexActions)
-          .failOnShutdownToAbortException("create_sql_indexes"),
-        120.seconds,
-      )
+    try {
+      TraceContext.withNewTraceContext("create_sql_indexes") { implicit tc =>
+        Await.result(
+          new SqlIndexInitializer(storage, loggerFactory)
+            .applyAll(SqlIndexInitializer.defaultIndexActions)
+            .failOnShutdownToAbortException("create_sql_indexes"),
+          120.seconds,
+        )
+      }
+    } catch {
+      case NonFatal(e) =>
+        afterAll()
+        throw e
     }
   }
 
