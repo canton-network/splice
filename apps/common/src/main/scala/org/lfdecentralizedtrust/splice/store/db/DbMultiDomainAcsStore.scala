@@ -411,16 +411,23 @@ final class DbMultiDomainAcsStore[TXE] private[db] (
       companionClass: ContractCompanion[C, TCid, T]
   ): ListExpiredContracts[TCid, T] = { (now, limit) => implicit traceContext =>
     for {
-      ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
-      ignoredPartiesFilter: SQLActionBuilder =
-        if (ignoredParties.isEmpty || ignoredPartyFields.isEmpty) sql""
-        else
-          ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
-            (acc ++ sql" and " ++ notInClause(
-              s"acs.create_arguments->>'$field'",
-              ignoredParties,
-            )).toActionBuilder
+      ignoredPartiesFilter: SQLActionBuilder <- unavailablePartiesStore match {
+        case Some(db: DbUnavailablePartiesStore) =>
+          Future.successful(
+            db.excludeUnavailableClause(ignoredPartyFields.map(f => s"acs.create_arguments->>'$f'"))
+          )
+        case _ =>
+          UnavailablePartiesStore.listParties(unavailablePartiesStore).map { ignoredParties =>
+            if (ignoredParties.isEmpty) sql""
+            else
+              ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
+                (acc ++ sql" and " ++ notInClause(
+                  s"acs.create_arguments->>'$field'",
+                  ignoredParties,
+                )).toActionBuilder
+              }
           }
+      }
       _ <- waitUntilAcsIngested()
       result <- storage
         .query( // index: acs_store_template_sid_mid_tid_ce

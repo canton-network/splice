@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.crypto.Fingerprint
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
@@ -80,6 +81,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
 import scala.concurrent.Future
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
 
@@ -1867,7 +1869,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             domain = dummyDomain,
             batchSize = PageLimit.tryCreate(1000),
             numBatches = PageLimit.tryCreate(1000),
-            ignoredParties = Set.empty,
+            unavailablePartiesStore = None,
           )
         } yield {
           result should have size 2
@@ -1915,7 +1917,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             domain = dummyDomain,
             batchSize = PageLimit.tryCreate(1000),
             numBatches = PageLimit.tryCreate(1000),
-            ignoredParties = Set.empty,
+            unavailablePartiesStore = None,
           )
         } yield {
           result should have size 2
@@ -1965,7 +1967,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             domain = dummyDomain,
             batchSize = PageLimit.tryCreate(1000),
             numBatches = PageLimit.tryCreate(1000),
-            ignoredParties = Set.empty,
+            unavailablePartiesStore = None,
           )
         } yield {
           result should have size 2
@@ -2018,7 +2020,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             domain = dummyDomain,
             batchSize = PageLimit.tryCreate(1000),
             numBatches = PageLimit.tryCreate(1000),
-            ignoredParties = Set.empty,
+            unavailablePartiesStore = None,
           )
         } yield {
           result should have size 2
@@ -2809,7 +2811,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )
   }
 
-  private def createMiningRoundsTriple(store: SvDsoStore, startRound: Long = 1L): Future[
+  protected def createMiningRoundsTriple(store: SvDsoStore, startRound: Long = 1L): Future[
     (
         Contract[OpenMiningRound.ContractId, OpenMiningRound],
         Contract[OpenMiningRound.ContractId, OpenMiningRound],
@@ -3096,6 +3098,225 @@ class DbSvDsoStoreTest
         Map(SynchronizerAlias.tryCreate(domain) -> dummyDomain)
       )
     } yield store
+  }
+
+  private def mkUnavailablePartiesStore(): Future[DbUnavailablePartiesStore] =
+    DbUnavailablePartiesStore(
+      StoreDescriptor(
+        version = 1,
+        name = s"SvDsoStoreTestUnavailableParties-${java.util.UUID.randomUUID()}",
+        party = dsoParty,
+        participant = mkParticipantId("SvDsoStoreTest"),
+        key = Map(),
+      ),
+      storage,
+      NonNegativeFiniteDuration(1.hour),
+      NonNegativeFiniteDuration(24.hours),
+      wallClock,
+      Set.empty,
+      loggerFactory,
+    )
+
+  "queries with a DB-backed unavailable parties store" should {
+
+    "exclude locked amulets by owner and by lock holder" in {
+      val ownerIgnored = lockedAmulet(userParty(1), 1.0, 1, 1.0, holders = Seq(userParty(4)))
+      val holderIgnored = lockedAmulet(userParty(2), 1.0, 1, 1.0, holders = Seq(userParty(1)))
+      val healthy = lockedAmulet(userParty(3), 1.0, 1, 1.0, holders = Seq(userParty(3)))
+      val noHolders = lockedAmulet(userParty(3), 1.0, 1, 1.0)
+      for {
+        store <- mkStore()
+        unavailable <- mkUnavailablePartiesStore()
+        inMemory = new InMemoryUnavailablePartiesStore(Set(userParty(1)))
+        _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+        _ <- createMiningRoundsTriple(store, startRound = 3L)
+        _ <- MonadUtil.sequentialTraverse(Seq(ownerIgnored, holderIgnored, healthy, noHolders))(
+          dummyDomain.create(_)(store.multiDomainAcsStore)
+        )
+        _ <- unavailable.addParties(Seq(userParty(1)))
+        withDb <- store.listLockedExpiredAmulets(Some(unavailable))(
+          CantonTimestamp.now(),
+          PageLimit.tryCreate(100),
+        )(traceContext)
+        withInMemory <- store.listLockedExpiredAmulets(Some(inMemory))(
+          CantonTimestamp.now(),
+          PageLimit.tryCreate(100),
+        )(traceContext)
+      } yield {
+        withDb.map(_.contract) should contain theSameElementsAs Seq(healthy, noHolders)
+        withInMemory.map(_.contract) should contain theSameElementsAs Seq(healthy, noHolders)
+      }
+    }
+
+    "return the same expired coupons as the in-memory store" in {
+      val closedRound = closedMiningRound(dsoParty, 2)
+      val faucets = (1 to 3).map(n => validatorFaucetCoupon(userParty(n), round = 2))
+      val validators = (1 to 3).map(n => validatorRewardCoupon(round = 2, userParty(n)))
+      val apps = (1 to 3).map(n => appRewardCoupon(round = 2, userParty(n)))
+      val svs = (1 to 3).flatMap(n =>
+        Seq(
+          svRewardCoupon(round = 2, userParty(4), userParty(n), 1000),
+          svRewardCoupon(round = 2, userParty(n), userParty(4), 1000),
+        )
+      )
+      def summarize(
+          batches: Seq[org.lfdecentralizedtrust.splice.sv.store.ExpiredRewardCouponsBatch]
+      ) =
+        batches
+          .map(b =>
+            (
+              b.closedRoundNumber,
+              b.validatorCoupons.map(_.contractId.contractId).toSet,
+              b.appCoupons.map(_.contractId.contractId).toSet,
+              b.svRewardCoupons.map(_.contractId.contractId).toSet,
+              b.validatorFaucets.map(_.contractId.contractId).toSet,
+            )
+          )
+          .toSet
+      for {
+        store <- mkStore()
+        unavailable <- mkUnavailablePartiesStore()
+        inMemory = new InMemoryUnavailablePartiesStore(Set(userParty(1)))
+        _ <- dummyDomain.create(closedRound)(store.multiDomainAcsStore)
+        _ <- MonadUtil.sequentialTraverse(faucets)(dummyDomain.create(_)(store.multiDomainAcsStore))
+        _ <- MonadUtil.sequentialTraverse(validators)(
+          dummyDomain.create(_)(store.multiDomainAcsStore)
+        )
+        _ <- MonadUtil.sequentialTraverse(apps)(dummyDomain.create(_)(store.multiDomainAcsStore))
+        _ <- MonadUtil.sequentialTraverse(svs)(dummyDomain.create(_)(store.multiDomainAcsStore))
+        _ <- unavailable.addParties(Seq(userParty(1)))
+        unfiltered <- store.getExpiredCouponsInBatchesPerRoundAndCouponType(
+          domain = dummyDomain,
+          enableExpireValidatorFaucet = true,
+          batchSize = PageLimit.tryCreate(1000),
+        )
+        withDb <- store.getExpiredCouponsInBatchesPerRoundAndCouponType(
+          domain = dummyDomain,
+          enableExpireValidatorFaucet = true,
+          unavailablePartiesStore = Some(unavailable),
+          batchSize = PageLimit.tryCreate(1000),
+        )
+        withInMemory <- store.getExpiredCouponsInBatchesPerRoundAndCouponType(
+          domain = dummyDomain,
+          enableExpireValidatorFaucet = true,
+          unavailablePartiesStore = Some(inMemory),
+          batchSize = PageLimit.tryCreate(1000),
+        )
+      } yield {
+        summarize(withDb) should not be summarize(unfiltered)
+        summarize(withDb) shouldBe summarize(withInMemory)
+        // sv coupons are dropped when either the sv or the beneficiary is unavailable
+        withDb.flatMap(_.svRewardCoupons) should have size 4
+      }
+    }
+
+    "return the same featured app activity markers as the in-memory store" in {
+      val markers = (1 to 3).map(n => appActivityMarker(provider = providerParty(n))) ++
+        (1 to 3).map(n =>
+          appActivityMarker(provider = providerParty(n), beneficiary = Some(providerParty(1)))
+        )
+      for {
+        store <- mkStore()
+        unavailable <- mkUnavailablePartiesStore()
+        inMemory = new InMemoryUnavailablePartiesStore(Set(providerParty(1)))
+        _ <- MonadUtil.sequentialTraverse(markers)(
+          dummyDomain.create(_)(store.multiDomainAcsStore)
+        )
+        _ <- unavailable.addParties(Seq(providerParty(1)))
+        countsDb <- MonadUtil.sequentialTraverse(Seq.range(0, 5))(t =>
+          store.featuredAppActivityMarkerCountAboveOrEqualTo(t, Some(unavailable))
+        )
+        countsInMemory <- MonadUtil.sequentialTraverse(Seq.range(0, 5))(t =>
+          store.featuredAppActivityMarkerCountAboveOrEqualTo(t, Some(inMemory))
+        )
+        listedDb <- store.listFeaturedAppActivityMarkersByContractIdHash(
+          Int.MinValue,
+          Int.MaxValue,
+          100,
+          Some(unavailable),
+        )
+        listedInMemory <- store.listFeaturedAppActivityMarkersByContractIdHash(
+          Int.MinValue,
+          Int.MaxValue,
+          100,
+          Some(inMemory),
+        )
+      } yield {
+        // only the markers of providers 2 and 3 with their own beneficiary remain
+        listedDb.map(_.contractId) should contain theSameElementsAs
+          markers
+            .filter(m =>
+              m.payload.provider != providerParty(1).toProtoPrimitive &&
+                m.payload.beneficiary != providerParty(1).toProtoPrimitive
+            )
+            .map(_.contractId)
+        listedDb.map(_.contractId) should contain theSameElementsAs listedInMemory.map(
+          _.contractId
+        )
+        countsDb shouldBe countsInMemory
+      }
+    }
+
+    "scope unavailable parties by store id" in {
+      val ofOtherStore = amulet(userParty(1), 1.0, 2, 1.0)
+      for {
+        store <- mkStore()
+        unavailable <- mkUnavailablePartiesStore()
+        other <- mkUnavailablePartiesStore()
+        _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+        _ <- createMiningRoundsTriple(store, startRound = 4L)
+        _ <- dummyDomain.create(ofOtherStore)(store.multiDomainAcsStore)
+        _ <- other.addParties(Seq(userParty(1)))
+        ignoredByOther <- store.listExpiredAmulets(Some(other))(
+          CantonTimestamp.now(),
+          PageLimit.tryCreate(100),
+        )(traceContext)
+        ignoredByNeither <- store.listExpiredAmulets(Some(unavailable))(
+          CantonTimestamp.now(),
+          PageLimit.tryCreate(100),
+        )(traceContext)
+      } yield {
+        ignoredByOther shouldBe empty
+        ignoredByNeither.map(_.contract) should contain theSameElementsAs Seq(ofOtherStore)
+      }
+    }
+  }
+
+  "listExpiredAmulets with a DB-backed unavailable parties store" should {
+
+    "exclude only parties inside their ignore window" in {
+      val active = userParty(1)
+      val lapsed = userParty(2)
+      val healthy = userParty(3)
+      val activeAmulet = amulet(active, 1.0, 2, 1.0)
+      val lapsedAmulet = amulet(lapsed, 1.0, 2, 1.0)
+      val healthyAmulet = amulet(healthy, 1.0, 2, 1.0)
+      val oneHourMicros = 3600L * 1_000_000L
+      val nowMicros = wallClock.now.toMicros
+      for {
+        store <- mkStore()
+        unavailable <- mkUnavailablePartiesStore()
+        _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+        _ <- createMiningRoundsTriple(store, startRound = 4L)
+        _ <- MonadUtil.sequentialTraverse(Seq(activeAmulet, lapsedAmulet, healthyAmulet))(
+          dummyDomain.create(_)(store.multiDomainAcsStore)
+        )
+        list = store.listExpiredAmulets(Some(unavailable))
+        before <- list(CantonTimestamp.now(), PageLimit.tryCreate(100))(traceContext)
+        // lapsed: ignored 2h ago for 1h; active: ignored just now for 1h
+        _ <- unavailable.addPartiesAt(Seq(lapsed), nowMicros - 2 * oneHourMicros)
+        _ <- unavailable.addParties(Seq(active))
+        after <- list(CantonTimestamp.now(), PageLimit.tryCreate(100))(traceContext)
+        _ <- unavailable.removeParties(Seq(active))
+        restored <- list(CantonTimestamp.now(), PageLimit.tryCreate(100))(traceContext)
+      } yield {
+        before.map(_.contract) should contain theSameElementsAs
+          Seq(activeAmulet, lapsedAmulet, healthyAmulet)
+        after.map(_.contract) should contain theSameElementsAs Seq(lapsedAmulet, healthyAmulet)
+        restored.map(_.contract) should contain theSameElementsAs
+          Seq(activeAmulet, lapsedAmulet, healthyAmulet)
+      }
+    }
   }
 
   "listProvisionalGovernanceLocksWithFeaturedAppRightSample" should {

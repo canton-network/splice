@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice.sv.store.db
 
 import com.digitalasset.canton.tracing.TraceContext
 
-import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
+import org.lfdecentralizedtrust.splice.store.db.{DbMultiDomainAcsStore, DbUnavailablePartiesStore}
 
 import cats.data.OptionT
 import cats.implicits.*
@@ -615,7 +615,7 @@ class DbSvDsoStore private (
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[RoundBatch[Contract[AppRewardCoupon.ContractId, AppRewardCoupon]]]] =
@@ -623,14 +623,14 @@ class DbSvDsoStore private (
       AppRewardCoupon.COMPANION,
       batchSize,
       numBatches,
-      ignoredParties,
+      unavailablePartiesStore,
     )
 
   override def listValidatorRewardCouponsGroupedByRound(
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[RoundBatch[Contract[ValidatorRewardCoupon.ContractId, ValidatorRewardCoupon]]]] =
@@ -638,14 +638,14 @@ class DbSvDsoStore private (
       ValidatorRewardCoupon.COMPANION,
       batchSize,
       numBatches,
-      ignoredParties,
+      unavailablePartiesStore,
     )
 
   override def listValidatorFaucetCouponsGroupedByRound(
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[RoundBatch[Contract[ValidatorFaucetCoupon.ContractId, ValidatorFaucetCoupon]]]] =
@@ -653,14 +653,14 @@ class DbSvDsoStore private (
       ValidatorFaucetCoupon.COMPANION,
       batchSize,
       numBatches,
-      ignoredParties,
+      unavailablePartiesStore,
     )
 
   override def listValidatorLivenessActivityRecordsGroupedByRound(
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[RoundBatch[
@@ -670,14 +670,14 @@ class DbSvDsoStore private (
       ValidatorLivenessActivityRecord.COMPANION,
       batchSize,
       numBatches,
-      ignoredParties,
+      unavailablePartiesStore,
     )
 
   override def listSvRewardCouponsGroupedByRound(
       domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Seq[RoundBatch[Contract[SvRewardCoupon.ContractId, SvRewardCoupon]]]] =
@@ -685,14 +685,14 @@ class DbSvDsoStore private (
       SvRewardCoupon.COMPANION,
       batchSize,
       numBatches,
-      ignoredParties,
+      unavailablePartiesStore,
     )
 
   private def listCouponsGroupedByRound[C, TCId <: ContractId[?], T](
       companion: C,
       batchSize: Limit,
       numBatches: Limit,
-      ignoredParties: Set[PartyId],
+      unavailablePartiesStore: Option[UnavailablePartiesStore],
   )(implicit
       companionClass: ContractCompanion[C, TCId, T],
       tc: TraceContext,
@@ -700,22 +700,15 @@ class DbSvDsoStore private (
     val packageQualifiedName = companionClass.packageQualifiedName(companion)
     val templateId = companionClass.typeId(companion)
     val opName = s"list${templateId.getEntityName}GroupedByRound"
-    val partyFilter =
-      if (ignoredParties.nonEmpty)
-        companion match {
-          case SvRewardCoupon.COMPANION =>
-            // only SV reward coupons have a beneficiary field
-            (sql"and " ++ notInClause("reward_party", ignoredParties) ++
-              sql" and " ++ notInClause(
-                "create_arguments ->> 'beneficiary'",
-                ignoredParties,
-              )).toActionBuilder
-          case _ =>
-            (sql"and " ++ notInClause("reward_party", ignoredParties)).toActionBuilder
-        }
-      else sql""
+    val partyFields = companion match {
+      case SvRewardCoupon.COMPANION =>
+        // only SV reward coupons have a beneficiary field
+        Seq("reward_party", "create_arguments ->> 'beneficiary'")
+      case _ => Seq("reward_party")
+    }
     waitUntilAcsIngested {
       for {
+        partyFilter <- unavailablePartiesClause(unavailablePartiesStore, partyFields)
         result <- storage
           .query(
             (sql"""
@@ -1295,30 +1288,41 @@ class DbSvDsoStore private (
       unavailablePartiesStore: Option[UnavailablePartiesStore] = None
   ): ListExpiredContracts[splice.amulet.Amulet.ContractId, splice.amulet.Amulet] = {
     val filterClause: TraceContext => Future[SQLActionBuilder] = implicit tc =>
-      UnavailablePartiesStore.listParties(unavailablePartiesStore).map { ignoredParties =>
-        if (ignoredParties.nonEmpty) {
-          (sql" and " ++ notInClause("create_arguments->>'owner'", ignoredParties)).toActionBuilder
-        } else {
-          sql""
-        }
-      }
+      unavailablePartiesClause(unavailablePartiesStore, Seq("create_arguments->>'owner'"))
     listExpiredRoundBased(splice.amulet.Amulet.COMPANION, filterClause)
   }
+
+  private def unavailablePartiesClause(
+      store: Option[UnavailablePartiesStore],
+      partyFields: Seq[String],
+      partyArrayFields: Seq[String] = Seq.empty,
+  )(implicit tc: TraceContext): Future[SQLActionBuilder] =
+    store match {
+      case Some(db: DbUnavailablePartiesStore) =>
+        Future.successful(db.excludeUnavailableClause(partyFields, partyArrayFields))
+      case _ =>
+        UnavailablePartiesStore.listParties(store).map { ignoredParties =>
+          if (ignoredParties.isEmpty) sql""
+          else {
+            val holders =
+              ignoredParties.map(p => lengthLimited(p.toProtoPrimitive)).toArray: Array[String2066]
+            val scalar =
+              partyFields.map(f => (sql" and " ++ notInClause(f, ignoredParties)).toActionBuilder)
+            val arrays = partyArrayFields.map(f => sql" and not (#$f ??| $holders)")
+            (scalar ++ arrays).foldLeft(sql"")((acc, p) => (acc ++ p).toActionBuilder)
+          }
+        }
+    }
 
   override def listLockedExpiredAmulets(
       unavailablePartiesStore: Option[UnavailablePartiesStore] = None
   ): ListExpiredContracts[splice.amulet.LockedAmulet.ContractId, splice.amulet.LockedAmulet] = {
     val filterClause: TraceContext => Future[SQLActionBuilder] = implicit tc =>
-      UnavailablePartiesStore.listParties(unavailablePartiesStore).map { ignoredParties =>
-        if (ignoredParties.nonEmpty) {
-          (sql" and " ++ notInClause("create_arguments->'amulet'->>'owner'", ignoredParties) ++
-            sql" and not (create_arguments->'lock'->'holders' ??| ${ignoredParties
-                .map(p => lengthLimited(p.toProtoPrimitive))
-                .toArray: Array[String2066]})").toActionBuilder
-        } else {
-          sql""
-        }
-      }
+      unavailablePartiesClause(
+        unavailablePartiesStore,
+        Seq("create_arguments->'amulet'->>'owner'"),
+        Seq("create_arguments->'lock'->'holders'"),
+      )
     listExpiredRoundBased(splice.amulet.LockedAmulet.COMPANION, filterClause)
   }
 
@@ -1331,19 +1335,13 @@ class DbSvDsoStore private (
     implicit tc => {
       waitUntilAcsIngested {
         for {
-          ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
-          filterClause =
-            if (ignoredParties.nonEmpty) {
-              (sql" and " ++ notInClause(
-                "create_arguments->'allocation'->'transferLeg'->>'sender'",
-                ignoredParties,
-              ) ++ sql" and " ++ notInClause(
-                "create_arguments->'allocation'->'transferLeg'->>'receiver'",
-                ignoredParties,
-              )).toActionBuilder
-            } else {
-              sql""
-            }
+          filterClause <- unavailablePartiesClause(
+            unavailablePartiesStore,
+            Seq(
+              "create_arguments->'allocation'->'transferLeg'->>'sender'",
+              "create_arguments->'allocation'->'transferLeg'->>'receiver'",
+            ),
+          )
           synchronizerId <- getDsoRules().map(_.domain)
           rows <- storage.query(
             selectFromAcsTableWithState(
@@ -1513,19 +1511,13 @@ class DbSvDsoStore private (
     implicit tc => {
       waitUntilAcsIngested {
         for {
-          ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
-          filterClause =
-            if (ignoredParties.nonEmpty) {
-              (sql" and " ++ notInClause(
-                "create_arguments->'transfer'->>'sender'",
-                ignoredParties,
-              ) ++ sql" and " ++ notInClause(
-                "create_arguments->'transfer'->>'receiver'",
-                ignoredParties,
-              )).toActionBuilder
-            } else {
-              sql""
-            }
+          filterClause <- unavailablePartiesClause(
+            unavailablePartiesStore,
+            Seq(
+              "create_arguments->'transfer'->>'sender'",
+              "create_arguments->'transfer'->>'receiver'",
+            ),
+          )
           synchronizerId <- getDsoRules().map(_.domain)
           rows <- storage.query(
             selectFromAcsTableWithState(
@@ -2447,17 +2439,10 @@ class DbSvDsoStore private (
   ): Future[Boolean] = {
     waitUntilAcsIngested {
       for {
-        ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
-        filterClause: SQLActionBuilder =
-          if (ignoredParties.nonEmpty) {
-            (sql" and " ++ notInClause("create_arguments->>'provider'", ignoredParties) ++
-              sql" and " ++ notInClause(
-                "create_arguments->>'beneficiary'",
-                ignoredParties,
-              )).toActionBuilder
-          } else {
-            sql""
-          }
+        filterClause <- unavailablePartiesClause(
+          unavailablePartiesStore,
+          Seq("create_arguments->>'provider'", "create_arguments->>'beneficiary'"),
+        )
         results <- futureUnlessShutdownToFuture(
           storage
             .query(
@@ -2494,17 +2479,10 @@ class DbSvDsoStore private (
     splice.amulet.FeaturedAppActivityMarker,
   ]]] = {
     for {
-      ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
-      filterClause =
-        if (ignoredParties.nonEmpty) {
-          (sql" and " ++ notInClause("create_arguments->>'provider'", ignoredParties) ++
-            sql" and " ++ notInClause(
-              "create_arguments->>'beneficiary'",
-              ignoredParties,
-            )).toActionBuilder
-        } else {
-          sql""
-        }
+      filterClause <- unavailablePartiesClause(
+        unavailablePartiesStore,
+        Seq("create_arguments->>'provider'", "create_arguments->>'beneficiary'"),
+      )
       result <- storage
         .query(
           selectFromAcsTable(
