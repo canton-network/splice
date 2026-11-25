@@ -55,7 +55,7 @@
               "env": [
                 {
                   "name": "CANTON_PARTICIPANT_POSTGRES_SERVER",
-                  "value": "postgres-0.multi-validator.svc.cluster.local"
+                  "value": "postgres-0-helmless.multi-validator.svc.cluster.local"
                 },
                 {
                   "name": "CANTON_PARTICIPANT_POSTGRES_DB",
@@ -255,7 +255,7 @@
               "command": [
                 "bash",
                 "-c",
-                "\n                        function createDb() {\n                          local dbname=\"$1\"\n\n                          until errmsg=$(psql -h postgres-0.multi-validator.svc.cluster.local --username=cnadmin --dbname=cantonnet -c \"create database $dbname\" 2>&1); do\n                          if [[ $errmsg == *\"already exists\"* ]]; then\n                              echo \"Database $dbname already exists. Done.\"\n                              break\n                          fi\n\n                          echo \"trying to create postgres database $dbname, last error: $errmsg\";\n                          sleep 2;\n                          done\n                        }\n\n                        createDb participant_2_00\ncreateDb participant_2_01\ncreateDb participant_2_02\ncreateDb participant_2_03\ncreateDb participant_2_04\ncreateDb participant_2_05\ncreateDb participant_2_06\ncreateDb participant_2_07\ncreateDb participant_2_08\ncreateDb participant_2_09\n                      "
+                "\n                        function createDb() {\n                          local dbname=\"$1\"\n\n                          until errmsg=$(psql -h postgres-0-helmless.multi-validator.svc.cluster.local --username=cnadmin --dbname=cantonnet -c \"create database $dbname\" 2>&1); do\n                          if [[ $errmsg == *\"already exists\"* ]]; then\n                              echo \"Database $dbname already exists. Done.\"\n                              break\n                          fi\n\n                          echo \"trying to create postgres database $dbname, last error: $errmsg\";\n                          sleep 2;\n                          done\n                        }\n\n                        createDb participant_2_00\ncreateDb participant_2_01\ncreateDb participant_2_02\ncreateDb participant_2_03\ncreateDb participant_2_04\ncreateDb participant_2_05\ncreateDb participant_2_06\ncreateDb participant_2_07\ncreateDb participant_2_08\ncreateDb participant_2_09\n                      "
               ],
               "env": [
                 {

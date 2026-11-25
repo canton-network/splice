@@ -13,6 +13,13 @@
       repair commands such as `participant.repair.import_acs`.
       The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
 
+  - Helm charts and Docker images
+
+    - **Breaking** The deprecated `splice-postgres` Helm chart has been removed, as PostgreSQL 14 is end-of-life
+      and the chart was no longer maintained. Run Splice against a PostgreSQL instance that you provision yourself;
+      see the [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration)
+      for moving the data of an existing `splice-postgres` deployment.
+
   - Scan App
 
     - Removed the internal `/v0/transfer-command-counter/{party}` and `/v0/transfer-command/status` endpoints.
@@ -39,6 +46,10 @@
 ## Upcoming for next minor release (template):
 
   - Helm charts and Docker images
+
+    - **Breaking** The deprecated `splice-postgres` Helm chart has been removed. Run Splice against a PostgreSQL
+      instance that you provision yourself; see the
+      [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration).
 
     - `splice-participant`: new required value `nodeIdentifier`. Canton now initializes the
       participant's identity itself, so the chart must be given the same node identifier that
