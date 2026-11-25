@@ -41,13 +41,20 @@ TEST_LISTS = re.compile(r"^test-.*\.log$")
 ROOT_JS_OR_JSON = re.compile(r"^[^/]+\.(json|js|cjs|mjs)$")
 NPM_LINT_SOURCES = {
     "apps-frontends": re.compile(
-        r"^apps/.*\.(ts|tsx|js|jsx|cjs|mjs|json|yaml|yml|css|scss|html)$"
-        r"|^apps/[^/]+$|^daml/|^token-standard/"
+        r"^apps/(.+/)?frontend/|^apps/[^/]+$|^apps/.*\.ya?ml$|^daml/|^token-standard/"
     ),
     "pulumi": re.compile(r"^cluster/"),
     "load-tester": re.compile(r"^load-tester/"),
     "party-allocator": re.compile(r"^party-allocator/|^daml/"),
 }
+KNOWN = re.compile(
+    r"\.(scala|sbt|java|py|daml|sh|md|mdx|rst|txt)$"
+    r"|(^|/)(daml\.yaml|Dockerfile|package\.json|\.envrc[^/]*|\.gitignore|\.gitattributes|LICENSE)$"
+    r"|^\.(scalafmt\.conf|pre-commit-config\.yaml)$|^test-.*\.log$"
+    r"|^(\.github|gha-scripts|cluster|daml|token-standard|docs|release-notes)/"
+    r"|^(load-tester|party-allocator)/"
+    r"|^apps/(.+/)?frontend/|^apps/[^/]+$|^apps/.*\.ya?ml$|/src/(main|test)/resources/"
+)
 
 
 @dataclass(frozen=True)
@@ -136,10 +143,23 @@ def select_build(changes: list[Change]) -> dict[str, str]:
     return {"test_config": "true" if test_config else "false", "npm_lint": npm_lint_command(lints)}
 
 
+def unknown_files(
+    changes: list[Change], first_line: Callable[[str], Optional[str]]
+) -> list[str]:
+    return [
+        c.path
+        for c in changes
+        if not KNOWN.search(c.path) and not is_shell_script(c.path, first_line)
+    ]
+
+
 def select(
     mode: str, changes: list[Change], first_line: Callable[[str], Optional[str]]
 ) -> dict[str, str]:
-    if any_matches(RUN_ALL, changes):
+    unknown = unknown_files(changes, first_line)
+    if any_matches(RUN_ALL, changes) or unknown:
+        for path in unknown:
+            print(f"No check selection rule for {path}: running all checks", file=sys.stderr)
         return all_static() if mode == "static" else all_build()
     return select_static(changes, first_line) if mode == "static" else select_build(changes)
 

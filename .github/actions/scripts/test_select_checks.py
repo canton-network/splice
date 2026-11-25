@@ -87,5 +87,49 @@ class BuildTest(unittest.TestCase):
         )
 
 
+ALL_LINTS = " apps-frontends/npmLint pulumi/npmLint load-tester/npmLint party-allocator/npmLint"
+
+
+class UnknownAndDirectoryTest(unittest.TestCase):
+    def test_lint_config_without_suffix_in_frontend_runs_its_lint(self) -> None:
+        out = select("build", modified("apps/sv/frontend/.prettierrc"), no_file)
+        self.assertEqual(out["npm_lint"], " apps-frontends/npmLint")
+
+    def test_new_file_type_in_frontend_runs_its_lint(self) -> None:
+        out = select("build", modified("apps/wallet/frontend/src/Widget.vue"), no_file)
+        self.assertEqual(out["npm_lint"], " apps-frontends/npmLint")
+
+    def test_frontend_config_is_known_for_static(self) -> None:
+        out = select("static", modified("apps/sv/frontend/.prettierrc"), no_file)
+        self.assertEqual(out["sbt_cmd"], "")
+
+    def test_unknown_file_runs_all_static(self) -> None:
+        out = select("static", modified("apps/scan/weird.foo"), no_file)
+        self.assertEqual(out["sbt_cmd"], "lintStatic")
+        self.assertEqual(out["python"], "true")
+
+    def test_unknown_root_file_runs_all_build(self) -> None:
+        out = select("build", modified("rust-toolchain.toml"), no_file)
+        self.assertEqual(out["npm_lint"], ALL_LINTS)
+        self.assertEqual(out["test_config"], "true")
+
+    def test_unknown_file_next_to_known_files_runs_all(self) -> None:
+        changes = modified("apps/scan/src/main/scala/A.scala", "proto/x.proto")
+        out = select("build", changes, no_file)
+        self.assertEqual(out["npm_lint"], ALL_LINTS)
+
+    def test_sql_migration_is_known(self) -> None:
+        path = (
+            "apps/common/src/main/resources/db/migration/canton-network/postgres/stable/V086__x.sql"
+        )
+        static = select("static", modified(path), no_file)
+        build = select("build", modified(path), no_file)
+        self.assertEqual((static["sbt_cmd"], build["npm_lint"]), ("", ""))
+
+    def test_helm_values_run_pulumi_lint(self) -> None:
+        out = select("build", modified("cluster/helm/splice-scan/values.yaml"), no_file)
+        self.assertEqual(out["npm_lint"], " pulumi/npmLint")
+
+
 if __name__ == "__main__":
     unittest.main()
