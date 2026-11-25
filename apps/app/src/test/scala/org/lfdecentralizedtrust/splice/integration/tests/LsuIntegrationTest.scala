@@ -914,11 +914,13 @@ class LsuIntegrationTest
       Seq(
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
+        testResourcesPath / "standalone-participant-extra-auto-init.conf",
       ),
       Seq(),
       s"lsu-bob-validator-$hint",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> bobValidatorLocal.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> s"participant_extra_$dbsSuffix",
+      "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(bobValidatorLocal),
       ProcessTestUtil.javaToolOptionsKey -> "-Xms3g -Xmx3g",
     ) {
       bobValidatorLocal.startSync()

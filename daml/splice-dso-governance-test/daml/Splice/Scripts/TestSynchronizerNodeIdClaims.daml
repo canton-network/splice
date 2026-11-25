@@ -1,0 +1,168 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Tests that an SV cannot claim the sequencer or mediator id of another SV's node.
+module Splice.Scripts.TestSynchronizerNodeIdClaims where
+
+import DA.Action (void)
+import DA.Assert
+import DA.Foldable (forA_)
+import qualified DA.Map as Map
+import Daml.Script
+
+import Splice.CometBft
+import qualified Splice.DsoRules as DsoRules
+import Splice.DSO.DecentralizedSynchronizer
+
+import Splice.Scripts.DsoTestUtils
+import Splice.Scripts.TestSynchronizerMigration (executeDsoRulesConfigChange)
+
+synchronizerId : Text
+synchronizerId = "synchronizer-id"
+
+nodeConfig : Party -> Text -> Text -> Text -> Time -> SynchronizerNodeConfig
+nodeConfig sv sequencerId mediatorId url now = SynchronizerNodeConfig with
+  cometBft = CometBftConfig with
+    nodes = Map.fromList [("nodeId-1-" <> partyToText sv, CometBftNodeConfig ("pubKey-" <> partyToText sv) 1)]
+    sequencingKeys = []
+    governanceKeys = []
+  sequencer = None
+  sequencerIdentity = Some SequencerIdentityConfig with
+    sequencerId
+    availableAfter = Some now
+  mediator = Some MediatorConfig with
+    mediatorId
+  scan = None
+  legacySequencerConfig = None
+  physicalSynchronizers = Some (Map.fromList
+    [ (0, PhysicalSynchronizerNodeConfig with
+        sequencer = Some SequencerConnectionConfig with url
+      )
+    ])
+
+ownNodeConfig : Party -> Time -> SynchronizerNodeConfig
+ownNodeConfig sv now =
+  nodeConfig sv ("sequencer-id-" <> partyToText sv) ("mediator-id-" <> partyToText sv) ("sequencer-" <> partyToText sv <> ".address:1234") now
+
+testCannotClaimNodeIdsOfOtherSvs : Script ()
+testCannotClaimNodeIdsOfOtherSvs = do
+  (app, _, (sv1, sv2, sv3, sv4)) <- initMainNet
+  now <- getTime
+  forA_ [sv1, sv2, sv3, sv4] $ \sv -> setSynchronizerNodeConfig app sv synchronizerId (ownNodeConfig sv now)
+
+  sv2OtherStates <- getOtherSvNodeStateCids app sv2
+  let claimFromSv2 config otherStates =
+        submitMustFail (actAs sv2 <> readAs app.dso) =<< setSynchronizerNodeConfigCmd app sv2 synchronizerId config otherStates
+
+  -- sv2 cannot claim the sequencer id of sv1
+  claimFromSv2
+    (nodeConfig sv2 ("sequencer-id-" <> partyToText sv1) ("mediator-id-" <> partyToText sv2) "attacker.address:1234" now)
+    (Some sv2OtherStates)
+  -- sv2 cannot claim the mediator id of sv1
+  claimFromSv2
+    (nodeConfig sv2 ("sequencer-id-" <> partyToText sv2) ("mediator-id-" <> partyToText sv1) "sequencer-sv2.address:1234" now)
+    (Some sv2OtherStates)
+  -- the other node states must be provided
+  claimFromSv2 (ownNodeConfig sv2 now) None
+  -- leaving out the node state of the SV that claims the id is rejected
+  claimFromSv2
+    (nodeConfig sv2 ("sequencer-id-" <> partyToText sv1) ("mediator-id-" <> partyToText sv2) "attacker.address:1234" now)
+    (Some (Map.delete sv1 sv2OtherStates))
+  -- passing the node state of another SV in place of the one of the SV that claims the id is rejected
+  let Some sv3StateCid = Map.lookup sv3 sv2OtherStates
+  claimFromSv2
+    (nodeConfig sv2 ("sequencer-id-" <> partyToText sv1) ("mediator-id-" <> partyToText sv2) "attacker.address:1234" now)
+    (Some (Map.insert sv1 sv3StateCid sv2OtherStates))
+
+  -- sv1's config is unchanged
+  (_, sv1State) <- getSvNodeState app sv1
+  Map.lookup synchronizerId sv1State.state.synchronizerNodes === Some (ownNodeConfig sv1 now)
+
+  -- sv2 can still update its own config, e.g., to a new url, and move to a new unclaimed sequencer id
+  void $ setSynchronizerNodeConfig app sv2 synchronizerId
+    (nodeConfig sv2 ("sequencer-id-" <> partyToText sv2) ("mediator-id-" <> partyToText sv2) "new-sequencer-sv2.address:1234" now)
+  void $ setSynchronizerNodeConfig app sv2 synchronizerId
+    (nodeConfig sv2 ("new-sequencer-id-" <> partyToText sv2) ("new-mediator-id-" <> partyToText sv2) "new-sequencer-sv2.address:1234" now)
+
+-- | Node ids are only claimed per synchronizer, so the same ids can be used on another synchronizer.
+testNodeIdsAreClaimedPerSynchronizer : Script ()
+testNodeIdsAreClaimedPerSynchronizer = do
+  (app, _, (sv1, sv2, sv3, sv4)) <- initMainNet
+  now <- getTime
+  forA_ [sv1, sv2, sv3, sv4] $ \sv -> setSynchronizerNodeConfig app sv synchronizerId (ownNodeConfig sv now)
+
+  let otherSynchronizerId = "other-synchronizer-id"
+  executeDsoRulesConfigChange app $ \config ->
+    let decentralizedSynchronizer = config.decentralizedSynchronizer
+        otherSynchronizerConfig = SynchronizerConfig with
+          state = DS_Bootstrapping
+          cometBftGenesisJson = "<genesis-json>"
+          acsCommitmentReconciliationInterval = Some 1800
+    in config with
+         decentralizedSynchronizer = decentralizedSynchronizer with
+           synchronizers = Map.insert otherSynchronizerId otherSynchronizerConfig decentralizedSynchronizer.synchronizers
+
+  -- sv2 can use sv1's ids on another synchronizer
+  let sv1Ids = nodeConfig sv2 ("sequencer-id-" <> partyToText sv1) ("mediator-id-" <> partyToText sv1) "sequencer-sv2.address:1234" now
+  void $ setSynchronizerNodeConfig app sv2 otherSynchronizerId sv1Ids
+
+  -- sv1 cannot claim them back on the other synchronizer, as sv2 now claims them there
+  sv1OtherStates <- getOtherSvNodeStateCids app sv1
+  submitMustFail (actAs sv1 <> readAs app.dso) =<< setSynchronizerNodeConfigCmd app sv1 otherSynchronizerId
+    (ownNodeConfig sv1 now)
+    (Some sv1OtherStates)
+
+-- | The node states of the other SVs must be passed as exactly one current state per other SV,
+-- even if the new config does not claim any id of another SV.
+testOtherSvNodeStatesMustBeValid : Script ()
+testOtherSvNodeStatesMustBeValid = do
+  (app, _, (sv1, sv2, sv3, sv4)) <- initMainNet
+  now <- getTime
+  forA_ [sv1, sv2, sv3, sv4] $ \sv -> setSynchronizerNodeConfig app sv synchronizerId (ownNodeConfig sv now)
+
+  let newConfig = nodeConfig sv2 ("sequencer-id-" <> partyToText sv2) ("mediator-id-" <> partyToText sv2) "new-sequencer-sv2.address:1234" now
+      setFromSv2 otherStates =
+        submitMustFail (actAs sv2 <> readAs app.dso) =<< setSynchronizerNodeConfigCmd app sv2 synchronizerId newConfig (Some otherStates)
+  sv2OtherStates <- getOtherSvNodeStateCids app sv2
+  (sv2StateCid, _) <- getSvNodeState app sv2
+  let Some sv1StateCid = Map.lookup sv1 sv2OtherStates
+      Some sv3StateCid = Map.lookup sv3 sv2OtherStates
+
+  -- skipping an existing SV is rejected
+  setFromSv2 (Map.delete sv1 sv2OtherStates)
+  setFromSv2 (Map.delete sv4 sv2OtherStates)
+  -- including the submitting SV itself is rejected
+  setFromSv2 (Map.insert sv2 sv2StateCid sv2OtherStates)
+  -- including a party that is not an SV is rejected
+  nonSv <- allocateParty "non-sv"
+  setFromSv2 (Map.insert nonSv sv3StateCid sv2OtherStates)
+  -- passing the node state of another SV for an SV is rejected
+  setFromSv2 (Map.insert sv1 sv3StateCid sv2OtherStates)
+  setFromSv2 (Map.insert sv1 sv3StateCid (Map.insert sv3 sv1StateCid sv2OtherStates))
+  -- passing the submitting SV's own node state for another SV is rejected
+  setFromSv2 (Map.insert sv1 sv2StateCid sv2OtherStates)
+
+  -- passing an archived node state is rejected
+  void $ setSynchronizerNodeConfig app sv1 synchronizerId
+    (nodeConfig sv1 ("sequencer-id-" <> partyToText sv1) ("mediator-id-" <> partyToText sv1) "new-sequencer-sv1.address:1234" now)
+  setFromSv2 sv2OtherStates
+
+  -- passing the node state of another SV as the submitting SV's own node state is rejected
+  [(dsoRulesCid, _)] <- query @DsoRules.DsoRules app.dso
+  currentSv2OtherStates <- getOtherSvNodeStateCids app sv2
+  let Some currentSv1StateCid = Map.lookup sv1 currentSv2OtherStates
+  submitMustFail (actAs sv2 <> readAs app.dso) $ exerciseCmd dsoRulesCid DsoRules.DsoRules_SetSynchronizerNodeConfig with
+    sv = sv2
+    synchronizerId = synchronizerId
+    nodeStateCid = currentSv1StateCid
+    newNodeConfig = newConfig
+    otherSvNodeStateCids = Some currentSv2OtherStates
+
+  -- sv2's config is unchanged
+  (_, sv2State) <- getSvNodeState app sv2
+  Map.lookup synchronizerId sv2State.state.synchronizerNodes === Some (ownNodeConfig sv2 now)
+
+  -- with the current node states of exactly all other SVs, the update succeeds
+  void $ setSynchronizerNodeConfig app sv2 synchronizerId newConfig
+  (_, sv2State) <- getSvNodeState app sv2
+  Map.lookup synchronizerId sv2State.state.synchronizerNodes === Some newConfig

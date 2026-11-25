@@ -450,3 +450,9 @@ mkTransferOutput reason receiver amount =
 
 instance HasCheckedFetch SubscriptionIdleState ForDso where
   contractGroupId SubscriptionIdleState{..} = ForDso with dso = subscriptionData.dso
+
+instance HasCheckedFetch SubscriptionIdleState ForOwner where
+  contractGroupId SubscriptionIdleState{subscriptionData} = ForOwner with dso = subscriptionData.dso; owner = subscriptionData.sender
+
+instance HasCheckedFetch SubscriptionRequest ForOwner where
+  contractGroupId SubscriptionRequest{subscriptionData} = ForOwner with dso = subscriptionData.dso; owner = subscriptionData.sender

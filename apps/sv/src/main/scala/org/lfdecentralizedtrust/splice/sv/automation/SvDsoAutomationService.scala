@@ -91,7 +91,7 @@ class SvDsoAutomationService(
     spliceInstanceNamesConfig: SpliceInstanceNamesConfig,
     override protected val loggerFactory: NamedLoggerFactory,
     grpcClientMetrics: GrpcClientMetrics,
-    packageVersionSupport: PackageVersionSupport,
+    val packageVersionSupport: PackageVersionSupport,
     synchronizerId: SynchronizerId,
     enabledFeatures: EnabledFeaturesConfig,
     val synchronizerNodeReconciler: SynchronizerNodeReconciler,
@@ -616,6 +616,7 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.Low),
         config.scan,
         upgradesConfig,
+        packageVersionSupport,
       )
     )
 

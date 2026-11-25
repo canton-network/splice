@@ -13,7 +13,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice as daml
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.environment.{PackageVersionSupport, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
@@ -41,6 +41,7 @@ class PublishScanConfigTrigger(
     connection: SpliceLedgerConnection,
     scanConfig: SvScanConfig,
     upgradesConfig: UpgradesConfig,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     override val ec: ExecutionContextExecutor,
     override val tracer: Tracer,
@@ -120,6 +121,8 @@ class PublishScanConfigTrigger(
         task.damlSvNodeConfig,
         store,
         connection,
+        packageVersionSupport,
+        context.clock.now,
       )
     } yield TaskSuccess(show"Updated DSO-wide scan node configuration for ${store.key.svParty}")
   }

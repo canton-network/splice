@@ -23,6 +23,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingUnlimitedTrafficTrigger
+import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeConfigClient
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
 
 import java.util.Optional
@@ -247,6 +248,14 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
       val currentNodeStateCid = info.svNodeStates
         .getOrElse(dummySvParty, fail("SvNodeState not found for dummy SV"))
         .contractId
+      val otherSvNodeStateCids = SynchronizerNodeConfigClient
+        .otherSvNodeStateCids(
+          sv1Backend.appState.dsoStore,
+          dummySvParty,
+          sv1Backend.appState.dsoAutomation.packageVersionSupport,
+          env.environment.clock.now,
+        )
+        .futureValue
       sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
         .submitJava(
           actAs = Seq(dummySvParty),
@@ -257,6 +266,7 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
               synchronizerId,
               nodeConfig,
               currentNodeStateCid,
+              otherSvNodeStateCids,
             )
             .commands()
             .asScala

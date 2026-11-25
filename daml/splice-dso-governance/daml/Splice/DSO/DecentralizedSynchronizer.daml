@@ -4,7 +4,10 @@
 -- | Data structures and contracts related managing the decentralized synchronizer.
 module Splice.DSO.DecentralizedSynchronizer where
 
+import DA.Foldable (forA_)
 import qualified DA.Map as Map
+import DA.Optional (mapOptional, optionalToList)
+import qualified DA.Set as Set
 
 import Splice.CometBft
 import Splice.Util
@@ -174,6 +177,35 @@ emptySynchronizerNodeConfig = SynchronizerNodeConfig emptyCometBftConfig None No
 validSynchronizerNodeConfig : SynchronizerNodeConfigLimits -> SynchronizerNodeConfig -> Bool
 validSynchronizerNodeConfig limits config =
   validCometBftConfig limits.cometBft config.cometBft
+
+-- | The sequencer ids an SV claims for its own nodes in its node config for a synchronizer.
+claimedSequencerIds : SynchronizerNodeConfig -> Set.Set Text
+claimedSequencerIds config =
+  Set.fromList $ map (.sequencerId) (optionalToList config.sequencerIdentity)
+
+-- | The mediator ids an SV claims for its own nodes in its node config for a synchronizer.
+claimedMediatorIds : SynchronizerNodeConfig -> Set.Set Text
+claimedMediatorIds config =
+  Set.fromList $ map (\mediatorConfig -> mediatorConfig.mediatorId) (optionalToList config.mediator)
+
+-- | Check that a new node config of an SV for a synchronizer does not claim a sequencer or mediator id
+-- that another SV already claims for that synchronizer.
+--
+-- Only ids that the SV does not already claim in its current config are checked, so that a duplicate
+-- that was published before this check existed does not prevent the SV that actually operates the node
+-- from updating its config.
+requireNoNodeIdsClaimedByOtherSvs : Text -> Optional SynchronizerNodeConfig -> SynchronizerNodeConfig -> [SynchronizerNodeConfigMap] -> Update ()
+requireNoNodeIdsClaimedByOtherSvs synchronizerId currentConfig newConfig otherSvsSynchronizerNodes = do
+  let newlyClaimed claimedIds =
+        claimedIds newConfig `Set.difference` optional Set.empty claimedIds currentConfig
+      newSequencerIds = newlyClaimed claimedSequencerIds
+      newMediatorIds = newlyClaimed claimedMediatorIds
+      otherConfigs = mapOptional (Map.lookup synchronizerId) otherSvsSynchronizerNodes
+  forA_ otherConfigs $ \otherConfig -> do
+    require "Sequencer id is not claimed by another SV"
+      (Set.null (newSequencerIds `Set.intersection` claimedSequencerIds otherConfig))
+    require "Mediator id is not claimed by another SV"
+      (Set.null (newMediatorIds `Set.intersection` claimedMediatorIds otherConfig))
 
 defaultSynchronizerNodeConfigLimits : SynchronizerNodeConfigLimits
 defaultSynchronizerNodeConfigLimits = SynchronizerNodeConfigLimits with cometBft = defaultCometBftConfigLimits

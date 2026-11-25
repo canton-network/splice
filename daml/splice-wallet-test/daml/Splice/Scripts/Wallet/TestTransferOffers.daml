@@ -47,7 +47,6 @@ testTransferOffers = script do
                   trackingId = trackingId
       return createResult.transferOffer
 
--- TODO(#2957): remove read-as DSO party.
   let completeTransfer accepted amulet transferContext =
         submit (actAs aliceValidator.primaryParty <> readAs alice.primaryParty <> readAs app.dso) $ exerciseCmd aliceInstall WalletAppInstall_ExecuteBatch with
           inputs = [InputAmulet amulet]

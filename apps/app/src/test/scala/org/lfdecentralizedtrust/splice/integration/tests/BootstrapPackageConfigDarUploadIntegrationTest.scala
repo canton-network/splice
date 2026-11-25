@@ -83,10 +83,14 @@ class BootstrapPackageConfigDarUploadIntegrationTest
         ),
         "boostrap-package-config-dar-upload",
         sv4 = false,
-        extraParticipantsConfigFileNames =
-          Seq("standalone-participant-extra.conf", "standalone-participant-extra-no-auth.conf"),
+        extraParticipantsConfigFileNames = Seq(
+          "standalone-participant-extra.conf",
+          "standalone-participant-extra-no-auth.conf",
+          "standalone-participant-extra-auto-init.conf",
+        ),
         extraParticipantsEnvMap = Map(
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorBackend.config.ledgerApiUser,
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorBackend),
           "EXTRA_PARTICIPANT_DB" -> ("participant_extra_" + dbsSuffix),
         ),
       )() {
@@ -172,9 +176,22 @@ class BootstrapPackageConfigDarUploadIntegrationTest
       uploadedPackages.diff(
         vettedDarNameAndVersions
       ) should have size 0 withClue "uploaded not in vetted"
-      vettedDarNameAndVersions.diff(
+      // Packages such as `splice-token-standard-utils` are not uploaded as DARs of their own,
+      // but get vetted as dependencies of uploaded DARs.
+      val dependenciesOfUploadedPackages: Set[(PackageName, PackageVersion)] =
         uploadedPackages
-      ) should have size 0 withClue "vetted not in uploaded"
+          .flatMap { case (name, version) =>
+            DarResourcesUtil.lookupPackageMetadata(PackageName.assertFromString(name), version)
+          }
+          .flatMap(_.dependencyPackageIds)
+          .flatMap(DarResourcesUtil.lookupPackageId)
+          .map(dar => dar.metadata.name -> dar.metadata.version)
+          .toSet
+      vettedDarNameAndVersions
+        .diff(uploadedPackages)
+        .filterNot(
+          dependenciesOfUploadedPackages.contains
+        ) should have size 0 withClue "vetted not in uploaded"
       darsToCheck.foreach { case (packageResource, upToVersion) =>
         withClue(
           s"${participantAdminConnection.getParticipantId().futureValue} should have all required dars"

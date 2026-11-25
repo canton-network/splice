@@ -95,7 +95,6 @@ class DsoDelegateBasedAutomationService(
     registerTrigger(
       new ExpiredAmuletAllocationV2Trigger(
         config,
-        clock,
         triggerContext,
         svTaskContext,
         unavailablePartiesStore,
