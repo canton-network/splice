@@ -62,7 +62,14 @@ class SyncOperatorBftIntegrationTest extends IntegrationTest with StandaloneCant
         ),
         this.getClass.getSimpleName,
       )
-      .withOnlyAliceValidatorConnectingToSplitwell
+      // The test runs on its own synchronizer. Splitwell has a zero base traffic rate under
+      // start-canton.sh -t, so a participant connected to it cannot vet the admin workflow
+      // packages there, and the participant's later synchronizer connections wait on that.
+      .withValidatorsDisconnectedFromSplitwell(
+        "aliceValidator",
+        "bobValidator",
+        "splitwellValidator",
+      )
       .withStandardSetup
       // The operators can only start once their synchronizer is bootstrapped.
       .withManualStart
