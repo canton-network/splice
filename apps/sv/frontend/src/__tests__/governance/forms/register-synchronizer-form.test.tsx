@@ -88,7 +88,7 @@ describe('Register Dedicated Synchronizer Form', () => {
     // the weights are prefilled, so they never block submission
     await user.click(screen.getByTestId('register-synchronizer-action'));
 
-    expect(submitButton.getAttribute('disabled')).toBeNull();
+    await waitFor(() => expect(submitButton.getAttribute('disabled')).toBeNull());
   });
 
   test('rejects a synchronizer id that is not name::fingerprint', async () => {
