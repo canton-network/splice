@@ -3,7 +3,7 @@
   "id": "",
   "inputs": {
     "alertStrategy": {
-      "autoClose": "1800s",
+      "autoClose": "7200s",
       "notificationRateLimit": {
         "period": "14400s"
       }

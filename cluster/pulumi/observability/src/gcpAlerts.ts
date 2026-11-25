@@ -705,9 +705,11 @@ export function installLegacyBqMaxStalenessAlert(
     ...getAlertPolicyBaseArgs(notificationChannel),
     // log-match conditions need a rate limit, and do not support
     // notificationChannelStrategies; this re-notifies at most every 4
-    // hours while the hourly check keeps failing
+    // hours while the hourly check keeps failing. autoClose spans two
+    // check runs, so incidents don't churn hourly into the limit of 20
+    // incidents a day per log-based policy.
     alertStrategy: {
-      autoClose: '1800s',
+      autoClose: `${2 * 60 * 60}s`,
       notificationRateLimit: { period: `${4 * 60 * 60}s` },
     },
     displayName,
