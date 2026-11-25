@@ -106,6 +106,10 @@ Splice unsafe shutdown future
 # The portfolio UI warns about the plain-HTTP validator URL used by the docker compose deployment
 Using a non-TLS validator endpoint\. This is acceptable only in trusted environments
 
+# DO NOT MERGE (test only): the Portfolio UI 1.16.0 rejects the Wallet Gateway's popup handshake ACK,
+# which lacks the `origin` field required since @canton-network/core-types 2.4.0, and logs this after 10s
+Connection timed out waiting for child window\.
+
 Failed to connect to scan of Digital-Asset-Eng-3.*AppUpgradeIntegrationTest
 
 # Ignore scan issues in disaster recovery tests as we don't start scan there
