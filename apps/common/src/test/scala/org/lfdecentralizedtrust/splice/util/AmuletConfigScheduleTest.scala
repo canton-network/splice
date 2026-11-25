@@ -39,7 +39,7 @@ class AmuletConfigScheduleTest extends AnyWordSpec with BaseTest {
   }
 
   "AmuletConfigSchedule.getConfigAsOf" should {
-    "work with no future-dated values" in {
+    "work without future-dated values" in {
       testCase(schedule1, -100, 0)
       testCase(schedule1, 0, 0)
       testCase(schedule1, 100000, 0)
