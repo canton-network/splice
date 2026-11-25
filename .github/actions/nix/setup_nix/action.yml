@@ -148,6 +148,25 @@ runs:
           nix develop "path:${NIX_PATH}#${TARGET}" -v --profile "$HOME/.nix-shell" --command echo "Done loading packages"
         fi
 
+    - name: Write the nix dev env
+      shell: bash
+      env:
+        NIX_PATH: ${{ inputs.nix_path }}
+        TARGET: ${{ inputs.target }}
+      run: |
+        set -euo pipefail
+        export USER=$(whoami)
+        . ~/.nix-profile/etc/profile.d/nix.sh
+        for i in 1 2 3 4 5; do
+          if nix print-dev-env "path:${NIX_PATH}#${TARGET}" > /tmp/nix_dev_env.sh.tmp; then
+            mv /tmp/nix_dev_env.sh.tmp /tmp/nix_dev_env.sh
+            exit 0
+          fi
+          sleep $((i*2))
+        done
+        rm -f /tmp/nix_dev_env.sh.tmp
+        echo "Could not print the nix dev env, nix/run uses nix develop instead"
+
     - name: Invoke nix before saving cache
       if: ${{ github.repository == 'canton-network/splice' }}
       uses: ./.github/actions/nix/run
