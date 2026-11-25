@@ -87,7 +87,7 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-        run: ./.github/actions/scripts/select-checks.sh static >> "$GITHUB_OUTPUT"
+        run: python3 ./.github/actions/scripts/select_checks.py static >> "$GITHUB_OUTPUT"
 
       - name: Check Grafana Dashboards
         if: steps.changes.outputs.grafana == 'true'

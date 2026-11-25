@@ -67,7 +67,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: ./.github/actions/scripts/select-checks.sh build >> "$GITHUB_OUTPUT"
+        run: python3 ./.github/actions/scripts/select_checks.py build >> "$GITHUB_OUTPUT"
 
       - name: Checks that need the build
         uses: ./.github/actions/sbt/execute_sbt_command
