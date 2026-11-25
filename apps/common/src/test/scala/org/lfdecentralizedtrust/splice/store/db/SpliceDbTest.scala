@@ -23,7 +23,7 @@ import slick.dbio.SuccessAction
 import slick.lifted.{Rep, TableQuery}
 
 import java.net.ServerSocket
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
@@ -201,6 +201,18 @@ trait SplicePostgresTest extends SpliceDbTest { this: Suite =>
         maxConnections = Some(PositiveInt.tryCreate(30)),
       ),
     )
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    TraceContext.withNewTraceContext("create_sql_indexes") { implicit tc =>
+      Await.result(
+        new SqlIndexInitializer(storage, loggerFactory)
+          .applyAll(SqlIndexInitializer.defaultIndexActions)
+          .failOnShutdownToAbortException("create_sql_indexes"),
+        120.seconds,
+      )
+    }
+  }
 
   // Adapted from Canton's DbStorageSetup.postgres, which hardcodes pg17 for the testcontainers setup,
   // but we want to use pg18 instead.
