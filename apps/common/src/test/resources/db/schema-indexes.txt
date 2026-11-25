@@ -76,13 +76,16 @@ dso_acs_store
   dso_acs_contract_id_hash_idx (store_id integer, migration_id bigint, stable_int32_hash(contract_id) integer) where package_name = 'splice-amulet'::text AND template_id_qualified_name = 'Splice.Amulet:FeaturedAppActivityMarker'::text
   dso_acs_store_coupons (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, reward_round bigint, reward_party text, app_reward_is_featured boolean) where reward_round IS NOT NULL AND reward_party IS NOT NULL
   primary key dso_acs_store_pkey (event_number bigint)
+  dso_acs_store_sid_mid_glt_gls (store_id integer, migration_id bigint, governance_lock_type text, governance_lock_subject text) where governance_lock_type IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_acecc (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, action_ans_entry_context_cid text) where action_ans_entry_context_cid IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_ah_r (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, action_requiring_confirmation jsonb, requester text) where action_requiring_confirmation IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_cen_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, ans_entry_name text, contract_expires_at bigint) where ans_entry_name IS NOT NULL AND contract_expires_at IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_en (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, event_number bigint)
   dso_acs_store_sid_mid_pn_tid_ere_r (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, election_request_epoch bigint, requester text) where election_request_epoch IS NOT NULL AND requester IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
+  dso_acs_store_sid_mid_pn_tid_farp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, featured_app_right_provider text) where featured_app_right_provider IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_mtm_mtd (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, member_traffic_member text, member_traffic_domain text) where member_traffic_member IS NOT NULL
+  dso_acs_store_sid_mid_pn_tid_rbio (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, reward_party text) where reward_beneficiary_is_observer = false
   dso_acs_store_sid_mid_pn_tid_sccid (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, subscription_reference_contract_id text) where subscription_reference_contract_id IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_scn (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, sv_candidate_name text) where sv_candidate_name IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_scp_scn (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, sv_candidate_party text, sv_candidate_name text) where sv_candidate_party IS NOT NULL
@@ -111,6 +114,7 @@ external_party_wallet_acs_store
   external_party_wallet_acs_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
   unique external_party_wallet_acs_sto_store_id_migration_id_contrac_idx (store_id integer, migration_id bigint, contract_id text)
   primary key external_party_wallet_acs_store_pkey (event_number bigint)
+  external_party_wallet_acs_store_sid_mid_glt_gls (store_id integer, migration_id bigint, governance_lock_type text, governance_lock_subject text) where governance_lock_type IS NOT NULL
   external_party_wallet_acs_store_sid_mid_pn_tid_en (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, event_number bigint)
   external_party_wallet_acs_store_sid_mid_pn_tid_rcr (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, reward_coupon_round bigint) where reward_coupon_round IS NOT NULL
 
@@ -138,6 +142,7 @@ round_totals
 scan_acs_store
   primary key scan_acs_store_pkey (event_number bigint)
   scan_acs_store_sid_mid_deo_den_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, ans_entry_owner text, ans_entry_name text, contract_expires_at bigint) where ans_entry_owner IS NOT NULL AND ans_entry_name IS NOT NULL AND contract_expires_at IS NOT NULL
+  scan_acs_store_sid_mid_glt_gls (store_id integer, migration_id bigint, governance_lock_type text, governance_lock_subject text) where governance_lock_type IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_aen_tpo_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, ans_entry_name text text_pattern_ops, contract_expires_at bigint) where ans_entry_name IS NOT NULL AND contract_expires_at IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_en (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, event_number bigint)
   scan_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
@@ -162,6 +167,7 @@ scan_rewards_reference_store_archived
 
 scan_txlog_store
   primary key scan_txlog_store_pkey (entry_number bigint)
+  scan_txlog_store_sid_effat_en_vot (store_id integer, COALESCE(vote_effective_at, (entry_data -> 'result'::text) ->> 'completedAt'::text) text desc, entry_number bigint desc) where entry_type = 'vot'::text
   scan_txlog_store_sid_et_ei (store_id integer, entry_type text, event_id text)
   scan_txlog_store_sid_irt_r_en (store_id integer, entry_type text, round bigint, entry_number bigint desc) where round IS NOT NULL
   scan_txlog_store_sid_mid_did_rt (store_id integer, migration_id integer, domain_id text, record_time bigint)
@@ -287,6 +293,7 @@ user_wallet_acs_interface_views
 
 user_wallet_acs_store
   primary key user_wallet_acs_store_pkey (event_number bigint)
+  user_wallet_acs_store_sid_mid_glt_gls (store_id integer, migration_id bigint, governance_lock_type text, governance_lock_subject text) where governance_lock_type IS NOT NULL
   user_wallet_acs_store_sid_mid_pn_tid_en (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, event_number bigint)
   user_wallet_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
   user_wallet_acs_store_sid_mid_pn_tid_rcr (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, reward_coupon_round bigint) where reward_coupon_round IS NOT NULL
