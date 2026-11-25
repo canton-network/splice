@@ -9,6 +9,7 @@ import type {
   VoteRequest,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import type { ConfigFieldState } from '../components/form-components/ConfigField';
+import type { CreateUnclaimedRewardsBurnFormData } from '../components/forms/CreateUnclaimedRewardsBurnForm';
 import type { CreateUnallocatedUnclaimedActivityRecordFormData } from '../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
 import type { GrantRevokeFeaturedAppFormData } from '../components/forms/GrantRevokeFeaturedAppForm';
 import type { OffboardSvFormData } from '../components/forms/OffboardSvForm';
@@ -51,6 +52,10 @@ export interface FeatureAppConfigUpdateEntry {
 
 export interface FeatureAppConfigUpdateProposal {
   updates: FeatureAppConfigUpdateEntry[];
+}
+
+export interface UnclaimedRewardsBurnProposal {
+  amount: string;
 }
 
 export interface UnclaimedActivityRecordProposal {
@@ -116,6 +121,7 @@ export type Proposal =
   | UnfeatureAppProposal
   | UpdateSvRewardWeightProposal
   | UnclaimedActivityRecordProposal
+  | UnclaimedRewardsBurnProposal
   | AmuletRulesConfigProposal
   | DsoRulesConfigProposal
   | UpdateFeatureAppProposal
@@ -128,6 +134,7 @@ export type ProposalActionMap = {
   SRARC_RevokeFeaturedAppRight: UnfeatureAppProposal;
   SRARC_UpdateSvRewardWeight: UpdateSvRewardWeightProposal;
   SRARC_CreateUnallocatedUnclaimedActivityRecord: UnclaimedActivityRecordProposal;
+  SRARC_CreateUnclaimedRewardsBurnInstruction: UnclaimedRewardsBurnProposal;
   CRARC_SetConfig: AmuletRulesConfigProposal;
   SRARC_SetConfig: DsoRulesConfigProposal;
   SRARC_UpdateFeaturedAppRight: UpdateFeatureAppProposal;
@@ -172,7 +179,8 @@ export type SupportedActionTag =
   | 'SRARC_UpdateSvRewardWeight'
   | 'SRARC_CreateUnallocatedUnclaimedActivityRecord'
   | 'SRARC_UpdateFeaturedAppRight'
-  | 'SRARC_CreateFeaturedAppConfigUpdateInstruction';
+  | 'SRARC_CreateFeaturedAppConfigUpdateInstruction'
+  | 'SRARC_CreateUnclaimedRewardsBurnInstruction';
 
 export type ProposalListingStatus =
   'Accepted' | 'In Progress' | 'Implemented' | 'Rejected' | 'Expired' | 'Unknown';
@@ -246,7 +254,8 @@ export type NonConfigProposalFormData =
   | OffboardSvFormData
   | GrantRevokeFeaturedAppFormData
   | CreateUnallocatedUnclaimedActivityRecordFormData
-  | CreateFeaturedAppConfigUpdateFormData;
+  | CreateFeaturedAppConfigUpdateFormData
+  | CreateUnclaimedRewardsBurnFormData;
 
 export type ConfigProposalFormData = SetDsoConfigCompleteFormData | SetAmuletConfigCompleteFormData;
 

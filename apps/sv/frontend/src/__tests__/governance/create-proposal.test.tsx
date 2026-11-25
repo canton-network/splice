@@ -166,6 +166,14 @@ describe('Create Proposal', () => {
     );
   });
 
+  test('Burn Unclaimed Rewards Form is rendered after action selection', async () => {
+    await checkActionSelection(
+      'Burn Unclaimed Rewards',
+      'SRARC_CreateUnclaimedRewardsBurnInstruction',
+      'create-unclaimed-rewards-burn-action'
+    );
+  });
+
   test('Display cancel and next buttons', () => {
     render(
       <MemoryRouter>

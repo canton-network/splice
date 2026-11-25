@@ -90,6 +90,15 @@ export const validateWeight = (value: string): string | false => {
   return result.success ? false : result.error.issues[0].message;
 };
 
+const burnAmountSchema = rewardAmountSchema.refine(v => /[1-9]/.test(v), {
+  message: 'Amount must be greater than zero',
+});
+
+export const validateBurnAmount = (value: string): string | false => {
+  const result = burnAmountSchema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
 export const validateRewardAmount = (value: string): string | false => {
   const result = rewardAmountSchema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;

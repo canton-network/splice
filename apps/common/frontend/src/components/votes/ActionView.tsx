@@ -269,6 +269,21 @@ export const ActionView: React.FC<{
           </>
         );
       }
+      case 'SRARC_CreateUnclaimedRewardsBurnInstruction': {
+        return (
+          <>
+            <ActionValueTable
+              actionType={actionType}
+              actionName={dsoAction.tag}
+              valuesMap={{
+                Amount: <Typography>{dsoAction.value.amount}</Typography>,
+                Reason: <Typography>{dsoAction.value.reason}</Typography>,
+              }}
+            />
+            {getConfirmationDialog(confirmationDialogProps, expiresAt)}
+          </>
+        );
+      }
       case 'SRARC_CreateUnallocatedUnclaimedActivityRecord': {
         return (
           <>

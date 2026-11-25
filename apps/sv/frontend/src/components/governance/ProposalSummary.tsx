@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Box, Typography } from '@mui/material';
+import { Alert, Box, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { MemberIdentifier } from '../ui';
 import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../ui/identifierStyles';
@@ -71,6 +71,10 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         configFormData: ConfigChange[];
         /** Rendered under Proposed Configuration Changes (e.g. Show JSON). */
         jsonDiff?: ReactNode;
+      }
+    | {
+        formType: 'create-unclaimed-rewards-burn';
+        amount: string;
       }
     | {
         formType: 'create-unallocated-unclaimed-activity-record';
@@ -300,6 +304,16 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               <ReviewPartyId partyId={props.offboardMember} data-testid="offboardMember-party-id" />
             }
           />
+        )}
+
+        {formType === 'create-unclaimed-rewards-burn' && (
+          <>
+            <ProposalReviewField id="amount" label="Amount" value={props.amount} />
+            <Alert severity="warning" data-testid="unclaimed-rewards-burn-warning">
+              If this proposal is accepted, this amount will be permanently burned from the
+              unclaimed rewards pool.
+            </Alert>
+          </>
         )}
 
         {formType === 'create-unallocated-unclaimed-activity-record' && (
