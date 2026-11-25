@@ -372,19 +372,21 @@ class DbScanVerdictStore(
   }
 
   // Keep each multi-row insert below Postgres' limit of 65535 bind parameters
-  // (14 per verdict row, 5 per view row).
-  private val MaxVerdictsPerInsert = 1000
-  private val MaxViewsPerInsert = 10000
+  // (14 per verdict row, 5 per view row), with headroom for new columns.
+  private[store] val MaxVerdictsPerInsert = 1000
+  private[store] val MaxViewsPerInsert = 5000
 
   /** Inserts the verdicts with one multi-row insert.
     * Returns (row_id, update_id) pairs. Postgres does not guarantee that
     * `returning` keeps the order of `values`, so match the rows by update_id.
     */
-  private def batchInsertVerdictsReturningIds(rows: Seq[VerdictT]) = {
-    val values = sqlCommaSeparated(
-      rows.map { rowT =>
-        val envelopesO = rowT.trafficSummaryO.map(_.envelopeTrafficSummarys)
-        sql"""(
+  private def batchInsertVerdictsReturningIds(rows: Seq[VerdictT]): DBIO[Seq[(Long, String)]] =
+    if (rows.isEmpty) DBIO.successful(Seq.empty)
+    else {
+      val values = sqlCommaSeparated(
+        rows.map { rowT =>
+          val envelopesO = rowT.trafficSummaryO.map(_.envelopeTrafficSummarys)
+          sql"""(
           $historyId,
           ${rowT.migrationId},
           ${rowT.domainId},
@@ -400,9 +402,9 @@ class DbScanVerdictStore(
           ${envelopesO.map(seq => DbScanVerdictStore.EnvelopeT.toJson(seq))}::jsonb,
           ${rowT.roundNumber}
         )"""
-      }
-    )
-    (sql"""
+        }
+      )
+      (sql"""
       insert into #${Tables.verdicts}(
         history_id,
         migration_id,
@@ -419,23 +421,25 @@ class DbScanVerdictStore(
         envelope_traffic_costs,
         round_number
       ) values """ ++ values ++ sql" returning row_id, update_id").toActionBuilder
-      .as[(Long, String)]
-  }
+        .as[(Long, String)]
+    }
 
   /** Inserts the transaction views with one multi-row insert. */
-  private def batchInsertViews(rows: Seq[TransactionViewT]) = {
-    val values = sqlCommaSeparated(
-      rows.map { row =>
-        sql"""(
+  private def batchInsertViews(rows: Seq[TransactionViewT]): DBIO[Int] =
+    if (rows.isEmpty) DBIO.successful(0)
+    else {
+      val values = sqlCommaSeparated(
+        rows.map { row =>
+          sql"""(
           ${row.verdictRowId},
           ${row.viewId},
           ${row.informees.map(lengthLimited).toSeq},
           ${row.confirmingParties},
           ${row.subViews.toSeq}
         )"""
-      }
-    )
-    (sql"""
+        }
+      )
+      (sql"""
       insert into #${Tables.views}(
         verdict_row_id,
         view_id,
@@ -443,7 +447,7 @@ class DbScanVerdictStore(
         confirming_parties,
         sub_views
       ) values """ ++ values).toActionBuilder.asUpdate
-  }
+    }
 
   /** Returns a DBIO action for inserting verdicts and their transaction views.
     *
@@ -516,18 +520,17 @@ class DbScanVerdictStore(
                     rowIdByUpdateId = inserted.map { case (rowId, updateId) =>
                       updateId -> rowId
                     }.toMap
-                    withRowIds = nonExisting.flatMap { case (verdict, mkViews) =>
-                      rowIdByUpdateId.get(verdict.updateId).map(rowId => (verdict, rowId, mkViews))
+                    (missing, withRowIds) = nonExisting.partitionMap { case (verdict, mkViews) =>
+                      rowIdByUpdateId
+                        .get(verdict.updateId)
+                        .toRight(verdict.updateId)
+                        .map(rowId => (verdict, rowId, mkViews))
                     }
                     _ <-
-                      if (withRowIds.size == nonExisting.size) DBIO.successful(())
+                      if (missing.isEmpty) DBIO.successful(())
                       else
                         DBIO.failed(
-                          new RuntimeException(
-                            s"insertVerdict did not return row_id for: ${nonExisting
-                                .map(_._1.updateId)
-                                .filterNot(rowIdByUpdateId.contains)}"
-                          )
+                          new RuntimeException(s"insertVerdict did not return row_id for: $missing")
                         )
                     _ <- DBIO.sequence(
                       withRowIds

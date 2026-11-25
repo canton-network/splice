@@ -1063,6 +1063,44 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         }
       } yield stored shouldBe viewIdsByUpdateId
     }
+
+    "attach views to the right rows when the batch spans several insert chunks" in {
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        numVerdicts = verdictStore.MaxVerdictsPerInsert + 1
+        viewIds = 0 to verdictStore.MaxViewsPerInsert / verdictStore.MaxVerdictsPerInsert
+        updateIds = (1 to numVerdicts).map(i => s"chunked-update$i")
+        _ <- verdictStore.insertVerdictAndTransactionViews(
+          updateIds.zipWithIndex.map { case (updateId, i) =>
+            mkVerdict(
+              verdictStore,
+              updateId,
+              CantonTimestamp.MinValue.plusSeconds(i.toLong + 1),
+            ) -> { (rowId: Long) =>
+              viewIds.map(viewId =>
+                new verdictStore.TransactionViewT(
+                  verdictRowId = rowId,
+                  viewId = viewId,
+                  informees = Seq(dsoParty.toProtoPrimitive),
+                  confirmingParties = Json.arr(),
+                  subViews = Seq.empty,
+                )
+              )
+            }
+          }
+        )
+        stored <- Future.traverse(updateIds) { updateId =>
+          for {
+            verdict <- verdictStore.getVerdictByUpdateId(updateId)
+            views <- verdictStore.listTransactionViews(verdict.value.rowId)
+          } yield views.map(_.viewId)
+        }
+      } yield {
+        viewIds.size * numVerdicts should be > verdictStore.MaxViewsPerInsert
+        stored.distinct shouldBe Seq(viewIds)
+      }
+    }
   }
 
   /** @return the row ID of the inserted verdict */
