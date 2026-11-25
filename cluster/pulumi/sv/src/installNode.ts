@@ -43,9 +43,11 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   }
   const backupConfig = await readBackupConfig();
   const version = config.versionOverride ?? activeVersion;
-  const secrets = config.topologyKeyMonitor?.enable
-    ? installTopologyKeyMonitorAdminApiTokenSecrets(xns)
-    : undefined;
+  const secrets =
+    !(config.participant?.disableParticipantAdminApiAuth ?? false) &&
+    config.topologyKeyMonitor?.enable
+      ? installTopologyKeyMonitorAdminApiTokenSecrets(xns)
+      : undefined;
   const participant = await installParticipant(
     {
       xns,

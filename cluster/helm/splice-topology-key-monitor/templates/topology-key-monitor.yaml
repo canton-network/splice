@@ -73,7 +73,7 @@ spec:
               value: {{ .Values.missingSynchronizerGracePeriodSeconds | quote }}
             {{- if not .Values.participant.disableAdminApiAuth }}
             - name: TOPOLOGY_KEY_MONITOR_ADMIN_API_TOKEN
-            {{ include "splice-util-lib.secret" (dict "secretName" "topology-key-monitor-admin-api-token" "secretKey" "token" "optional" false) | indent 12 }}
+{{ include "splice-util-lib.secret" (dict "secretName" "topology-key-monitor-admin-api-token" "secretKey" "token" "optional" false) | indent 14 }}
             {{- end }}
           volumeMounts:
             - name: topology-key-monitor-config

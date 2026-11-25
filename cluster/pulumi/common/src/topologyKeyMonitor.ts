@@ -70,6 +70,7 @@ export function installTopologyKeyMonitorAdminApiTokenSecrets(
       privateKeyPem: signingKey.privateKeyPem,
       subject: { commonName: 'splice-topology-key-monitor' },
       validityPeriodHours: 24 * 365, // surely no one will keep this working without rotating for more than a year
+      earlyRenewalHours: 24 * 90, // renew 90 days before expiration
       allowedUses: ['digital_signature'],
     }
   );
@@ -81,7 +82,7 @@ export function installTopologyKeyMonitorAdminApiTokenSecrets(
   return [
     new k8s.core.v1.Secret(`${xns.logicalName}-topology-key-monitor-admin-api-token`, {
       metadata: {
-        namespace: xns.logicalName,
+        namespace: xns.ns.metadata.name,
         name: `topology-key-monitor-admin-api-token`,
       },
       stringData: {
@@ -90,7 +91,7 @@ export function installTopologyKeyMonitorAdminApiTokenSecrets(
     }),
     new k8s.core.v1.ConfigMap(`${xns.logicalName}-topology-key-monitor-admin-api-public-key`, {
       metadata: {
-        namespace: xns.logicalName,
+        namespace: xns.ns.metadata.name,
         name: `topology-key-monitor-admin-api-token-public-key`,
       },
       data: {

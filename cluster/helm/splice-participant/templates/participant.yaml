@@ -157,7 +157,8 @@ spec:
               users = [{
                 user-id = "topology-key-monitor"
                 allowed-services = [
-                  "com.digitalasset.canton.topology.admin.v30.TopologyManagerReadService"
+                  "com.digitalasset.canton.topology.admin.v30.TopologyManagerReadService",
+                  "com.digitalasset.canton.admin.participant.v30.SynchronizerConnectivityService"
                 ]
               }]
             }
