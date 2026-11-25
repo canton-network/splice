@@ -241,6 +241,8 @@ function installLegacyMaxStalenessCheck(
     .map(tableName => `'${legacyTableNameFor(namespace, tableName)}'`)
     .join(', ');
   const errorTag = legacyMaxStalenessErrorTag(CLUSTER_BASENAME);
+  const infoSchema = (view: string) =>
+    pulumi.interpolate`\`${projectId}.${legacyDataset.datasetId}.INFORMATION_SCHEMA.${view}\``;
 
   new gcp.bigquery.DataTransferConfig(
     `${CLUSTER_BASENAME}_legacy-max-staleness-check`,
@@ -252,9 +254,7 @@ function installLegacyMaxStalenessCheck(
       schedule: hourlySchedule(legacyMaxStalenessCheckMinute),
 
       params: {
-        query: pulumi.all([projectId, legacyDataset.datasetId]).apply(([proj, ds]) => {
-          const infoSchema = (view: string) => `\`${proj}.${ds}.INFORMATION_SCHEMA.${view}\``;
-          return `DECLARE below_safe STRING DEFAULT (
+        query: pulumi.interpolate`DECLARE below_safe STRING DEFAULT (
   SELECT STRING_AGG(FORMAT('%s=%s', t.table_name, IFNULL(o.option_value, 'unset')), ', ' ORDER BY t.table_name)
   FROM ${infoSchema('TABLES')} t
   LEFT JOIN ${infoSchema('TABLE_OPTIONS')} o
@@ -265,8 +265,7 @@ function installLegacyMaxStalenessCheck(
 );
 IF below_safe IS NOT NULL THEN
   RAISE USING MESSAGE = CONCAT('${errorTag}: max_staleness below ${minSafeStalenessSeconds}s on ', below_safe);
-END IF;`;
-        }),
+END IF;`,
       },
     },
     { dependsOn: [transferServiceAgentPermission, legacyDataset] }
