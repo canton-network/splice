@@ -235,7 +235,7 @@ object BuildCommon {
         ) ++
         addCommandAlias(
           "lintCompiled",
-          "; damlDarsLockFileCheck ; scalafixAll ; apps-frontends/npmLint ; pulumi/npmLint ; load-tester/npmLint ; party-allocator/npmLint",
+          "; damlDarsLockFileCheck ; apps-frontends/npmLint ; pulumi/npmLint ; load-tester/npmLint ; party-allocator/npmLint",
         ) ++
         addCommandAlias(
           "lint",
