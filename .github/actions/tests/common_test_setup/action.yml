@@ -8,6 +8,10 @@ inputs:
     description: "Whether to set up SBT"
     required: false
     default: "true"
+  restore_build_outputs:
+    description: "Whether to restore the frontend node_modules and the Daml artifacts"
+    required: false
+    default: "true"
   save_nix_cache:
     description: "Whether to save the Nix cache"
     required: false
@@ -84,3 +88,4 @@ runs:
       uses: ./.github/actions/sbt/setup_sbt
       with:
         cache_version: ${{ inputs.cache_version }}
+        restore_build_outputs: ${{ inputs.restore_build_outputs }}
