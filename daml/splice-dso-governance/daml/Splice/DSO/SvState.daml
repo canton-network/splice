@@ -6,6 +6,7 @@ module Splice.DSO.SvState where
 
 import Splice.Types
 
+import Splice.Amulet.SvRightOwner
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.Util
 
@@ -17,6 +18,9 @@ data ForSv = ForSv with
     dso : Party
     svName : Text
   deriving (Eq, Show, Serializable)
+
+instance HasCheckedFetch SvRightOwner ForSv where
+  contractGroupId SvRightOwner{..} = ForSv with dso; svName = name
 
 data ForSvNode = ForSvNode with
     dso : Party
@@ -47,6 +51,23 @@ template SvRewardState with
     state : RewardState
   where
     signatory dso
+
+data SvRightsOwnerRewardStateKey = SvRightsOwnerRewardStateKey with
+    dso : Party
+    svRightsOwnerName : Text
+    svNodeAssignmentId : Text
+  deriving (Eq, Show, Serializable)
+
+-- | State of reward collection for one SV node assignment of an SV rights owner.
+template SvRightsOwnerRewardState with
+    dso : Party
+    svRightsOwnerName : Text
+    svNodeAssignmentId : Text
+    state : RewardState
+  where
+    signatory dso
+    key (SvRightsOwnerRewardStateKey with dso; svRightsOwnerName; svNodeAssignmentId) : SvRightsOwnerRewardStateKey
+    maintainer key.dso
 
 
 -- Node State Management
@@ -115,6 +136,9 @@ template SvStatusReport with
 
 instance HasCheckedFetch SvRewardState ForSv where
   contractGroupId SvRewardState {..} = ForSv with dso; svName
+
+instance HasCheckedFetch SvRightsOwnerRewardState SvRightsOwnerRewardStateKey where
+  contractGroupId SvRightsOwnerRewardState {..} = SvRightsOwnerRewardStateKey with dso; svRightsOwnerName; svNodeAssignmentId
 
 instance HasCheckedFetch SvNodeState ForSvNode where
   contractGroupId SvNodeState {..} = ForSvNode with dso; sv; svName

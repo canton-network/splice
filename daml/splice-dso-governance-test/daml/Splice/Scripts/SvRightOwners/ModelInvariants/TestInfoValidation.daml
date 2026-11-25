@@ -1,0 +1,33 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.ModelInvariants.TestInfoValidation where
+
+import qualified DA.Map as Map
+import Splice.Amulet.SvRightOwner (BeneficiaryInfo(..))
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldRejectAddingAnOwnerWhoseInfoIsInvalid = withOnLedgerWeights $ \net -> do
+  owner <- newSvRightOwner "invalid-owner" net.sv2
+
+  addAs net net.app.dso (owner with beneficiaries = Map.fromList [(net.sv3.party, BeneficiaryInfo 1.1)])
+    >>= shouldBeRejected "Beneficiary reward ratios add up to at most 1.0"
+  addAs net net.app.dso (owner with beneficiaries = Map.fromList [(owner.party, BeneficiaryInfo 0.25)])
+    >>= shouldBeRejected "SV right owner is not a beneficiary"
+
+test_shouldRejectAnInfoUpdateWhoseInfoIsInvalid = withOnLedgerWeights $ \net -> do
+  let info = svRightOwnerInfo net.genesisOwner
+  updateAs net net.app.dso "sv1" info (info with rewardWeight = -1)
+    >>= shouldBeRejected "SV right owner's reward weight is non-negative"
+  updateAs net net.app.dso "sv1" info (info with
+    beneficiaries = Map.fromList [(net.sv2.party, BeneficiaryInfo 1.1)])
+    >>= shouldBeRejected "Beneficiaries cannot be changed through DsoRules_UpdateSvRightOwnerInfo"
+
+test_shouldRejectAnInfoUpdateWhoseMergedBeneficiariesIncludeItsNewRightOwner = withOnLedgerWeights $ \net -> do
+  let current = Map.fromList [(net.sv2.party, BeneficiaryInfo 0.25)]
+      info = svRightOwnerInfo net.genesisOwner
+  instruction <- voteToUpdate net "sv1" info (info with rightOwnerParty = net.sv2.party)
+
+  setBeneficiaries net net.genesisOwner current
+  updateInfo net instruction "sv1" >>= shouldBeRejected "SV right owner is not a beneficiary"

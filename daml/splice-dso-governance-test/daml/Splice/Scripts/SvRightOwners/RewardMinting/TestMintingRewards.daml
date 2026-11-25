@@ -1,0 +1,102 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.RewardMinting.TestMintingRewards where
+
+import DA.Action (replicateA_)
+import DA.Assert ((===))
+import DA.List (last, sort)
+import qualified DA.TextMap as TextMap
+
+import Daml.Script
+
+import Splice.DSO.SvState (RewardState(..))
+
+import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+import Splice.Scripts.SvRightOwners.Util.Rewards
+import Splice.Scripts.Util (getOpenRoundsSorted, runNextIssuance)
+
+test_shouldLetOnlyTheHostMintForAllItsSvRightOwnersInOneBatchWhateverTheirConfiguration = withTwoSvRightOwners $ \net newcomer -> do
+  unpaidOwner <- newSvRightOwner "unpaid" net.sv2
+  let unpaid = unpaidOwner with rewardWeight = 0
+  addSvRightOwner net unpaid
+  [beneficiary, dust] <- forA ["beneficiary", "dust"] allocateParty
+  newcomer.rewardWeight === 30000
+
+  setBeneficiaries net newcomer (sharingWith [(beneficiary, 0.1), (dust, 0.00001)])
+  runNextIssuance net.app
+  (roundCid, openRound) <- last <$> getOpenRoundsSorted net.app
+  let cotenants = [newcomer.name, unpaid.name]
+
+  mint net net.sv3.party roundCid cotenants >>= shouldBeRejected "SV Right Owner mints through this SV Node Operator"
+  mint net newcomer.party roundCid [newcomer.name] >>= shouldBeRejected "Not a sv"
+  mint net net.sv2.party roundCid cotenants >>= shouldSucceed
+
+  couponsMintedFor net newcomer openRound.round `shouldReturn` sort [(beneficiary, 3000), (newcomer.party, 27000)]
+  couponsMintedFor net unpaid openRound.round `shouldReturn` []
+  rewardStateOf net unpaid `shouldReturn` RewardState with
+    lastRoundCollected = openRound.round; numRoundsCollected = 1; numRoundsMissed = 0; numCouponsIssued = 0
+
+test_shouldMintARoundOnlyOnceFromItsOpeningUntilItsArchivalAndCountEveryRound = withTwoSvRightOwners $ \net newcomer -> do
+  latecomer <- newSvRightOwner "latecomer" net.sv2
+  addSvRightOwner net latecomer
+  [(round0Cid, _), (round1Cid, _), (round2Cid, round2)] <- getActiveOpenRoundsSorted net.app.dso
+  let genesis = net.genesisOwner.name
+      alreadyCollected = "is greater than the last round a reward has been received for"
+
+  mint net net.sv1.party round2Cid [genesis] >>= shouldBeRejected "OpenRound is open"
+  -- Open: the host may mint any open round above the last one collected, so minting round 1 first forfeits round 0.
+  mint net net.sv1.party round1Cid [genesis] >>= shouldSucceed
+  mint net net.sv1.party round0Cid [genesis] >>= shouldBeRejected alreadyCollected
+  mint net net.sv1.party round1Cid [genesis] >>= shouldBeRejected alreadyCollected
+  setTime round2.opensAt
+  mint net net.sv1.party round2Cid [genesis] >>= shouldSucceed
+
+  rewardStateOf net net.genesisOwner `shouldReturn` RewardState with
+    lastRoundCollected = round2.round; numRoundsCollected = 2; numRoundsMissed = 1; numCouponsIssued = 2
+
+  replicateA_ 2 (runNextIssuance net.app)
+  mint net net.sv2.party round2Cid [newcomer.name] >>= shouldSucceed
+  runNextIssuance net.app
+  mint net net.sv2.party round2Cid [latecomer.name] >>= shouldNotFind round2Cid
+  (latestCid, latest) <- last <$> getOpenRoundsSorted net.app
+  mint net net.sv2.party latestCid [latecomer.name] >>= shouldSucceed
+
+  rewardStateOf net newcomer `shouldReturn` RewardState with
+    lastRoundCollected = round2.round; numRoundsCollected = 1; numRoundsMissed = 0; numCouponsIssued = 1
+  -- An owner added while round 1 is the newest mintable round starts after it, so minting round 4 misses rounds 2 and 3.
+  rewardStateOf net latecomer `shouldReturn` RewardState with
+    lastRoundCollected = latest.round; numRoundsCollected = 1; numRoundsMissed = 2; numCouponsIssued = 1
+
+test_shouldMoveAnSvRightOwnersRewardStateOnlyByMinting = withTwoSvRightOwners $ \net newcomer -> do
+  beneficiary <- allocateParty "beneficiary"
+  successor <- allocateParty "successor"
+  [_, (round1Cid, _), (round2Cid, round2)] <- getActiveOpenRoundsSorted net.app.dso
+  stateCid <- svRewardStateCidFor net newcomer.name
+  genesisState <- svRewardStateCidFor net net.genesisOwner.name
+  stateBefore <- rewardStateOf net newcomer
+  let split = sharingWith [(beneficiary, 0.2)]
+      moved = newcomer with party = successor; rewardWeight = tier1RewardWeight; hostedBy = net.sv3; beneficiaries = split
+
+  setBeneficiaries net newcomer split
+  voteToUpdate net newcomer.name (svRightOwnerInfo (newcomer with beneficiaries = split)) (svRightOwnerInfo moved)
+    >>= executeUpdate net net.sv1.party >>= shouldSucceed
+  svRightOwners net `shouldReturn` [moved, net.genesisOwner]
+  mintLegacy net net.sv1.party round1Cid net.genesisOwner.name >>= shouldBeRejected "svRightOwners are not tracked on-ledger"
+
+  mergeRewardStates net net.sv1.party newcomer.name [stateCid, genesisState] >>= shouldBeRejected contractNameMismatch
+
+  svRewardStateCidFor net newcomer.name `shouldReturn` stateCid
+  rewardStateOf net moved `shouldReturn` stateBefore
+  setTime round2.opensAt
+  mint net net.sv3.party round2Cid [newcomer.name] >>= shouldSucceed
+  rewardStateOf net moved `shouldReturn` stateBefore with
+    lastRoundCollected = round2.round
+    numRoundsCollected = stateBefore.numRoundsCollected + 1
+    numCouponsIssued = stateBefore.numCouponsIssued + 2
+
+test_shouldRefuseMintingForSvRightOwnersUnderLegacyWeightManagement = withLegacyWeights $ \net -> do
+  [_, (openRoundCid, _)] <- getOpenRoundsSorted net.app
+  mintWith net net.sv1.party openRoundCid TextMap.empty >>= shouldBeRejected "svRightOwners are tracked on-ledger"

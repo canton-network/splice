@@ -1,0 +1,29 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.Migration.TestPostMigrationOnboarding where
+
+import Daml.Script (allocateParty)
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldOnboardAZeroWeightSvNodeOperatorAfterMigration = withLegacyWeights $ \net -> do
+  migrateDefault net
+  candidate <- allocateParty "new-sv"
+  confirmation <- confirmOnboarding net candidate "new-sv" 0
+
+  completeOnboarding net candidate confirmation >>= shouldSucceed
+
+  svNodeOperators net `shouldReturn`
+    [(Operator with name = "new-sv"; party = candidate), net.sv1, net.sv2, net.sv3, net.sv4]
+  svRewardStateNames net `shouldReturn` ["sv1", "sv2", "sv3", "sv4"]
+
+test_shouldRejectAWeightedSvOnboardingAtCompletionAfterMigration = withLegacyWeights $ \net -> do
+  migrateDefault net
+  candidate <- allocateParty "weighted-new-sv"
+  confirmation <- confirmOnboarding net candidate "weighted-new-sv" 1
+
+  completeOnboarding net candidate confirmation >>= shouldBeRejected "SV reward weight is zero when SV right owners are on-ledger"
+  expectActive net confirmation
+  svNodeOperators net `shouldReturn` [net.sv1, net.sv2, net.sv3, net.sv4]

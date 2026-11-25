@@ -1,0 +1,45 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.RewardMinting.TestClaimingCoupons where
+
+import DA.Action (replicateA_)
+import DA.Assert ((===))
+import DA.List (last)
+
+import Daml.Script
+
+import Splice.Amulet (UnclaimedReward(..))
+
+import qualified Splice.Scripts.DsoTestUtils as DsoTestUtils
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+import Splice.Scripts.SvRightOwners.Util.Rewards
+import Splice.Scripts.Util (getOpenRoundsSorted)
+
+test_shouldIssueTheExpectedAmuletToTheOwnerAndItsBeneficiariesAndExpireWhatNobodyClaims = withTwoSvRightOwners $ \net newcomer -> do
+  shared <- allocateParty "shared-beneficiary"
+  idle <- allocateParty "idle-beneficiary"
+  newcomer.rewardWeight === 30000
+  let nextIssuance = DsoTestUtils.runNextIssuanceD net.app 1.0 None
+  setBeneficiaries net newcomer (sharingWith [(shared, 0.25), (idle, 0.1)])
+  nextIssuance
+  (_, openRound) <- last <$> getOpenRoundsSorted net.app
+  mintThrough net net.sv2 newcomer.name >>= shouldSucceed
+  sharedCoupon <- couponOf net newcomer shared openRound.round
+  ownerCoupon <- couponOf net newcomer newcomer.party openRound.round
+  idleCoupon <- couponOf net newcomer idle openRound.round
+
+  replicateA_ 3 nextIssuance
+  issuance <- issuancePerSvRewardCoupon net openRound.round
+  assertMsg "the round issues SV rewards" (issuance > 0.0)
+  claim net newcomer.party sharedCoupon >>= shouldBeRejected contractNameMismatch
+  claimedAmount net shared sharedCoupon `shouldReturn` 7500.0 * issuance
+  claimedAmount net newcomer.party ownerCoupon `shouldReturn` 19500.0 * issuance
+
+  unclaimedBefore <- map fst <$> query @UnclaimedReward net.app.dso
+  replicateA_ 3 nextIssuance
+  expectArchived net idleCoupon
+  unclaimed <- query @UnclaimedReward net.app.dso
+  assertMsg "the idle coupon expires into an unclaimed reward" $
+    (3000.0 * issuance) `elem` [reward.amount | (rewardCid, reward) <- unclaimed, rewardCid `notElem` unclaimedBefore]

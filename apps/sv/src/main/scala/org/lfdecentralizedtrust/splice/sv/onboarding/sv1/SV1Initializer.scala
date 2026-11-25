@@ -741,6 +741,8 @@ class SV1Initializer(
                           .asJava,
                         sv1Config.isDevNet,
                         java.util.Optional.of(initialRound),
+                        // TODO(canton-network/splice#7117): pass sv1's right owner name once new networks bootstrap with on-ledger SV right owners.
+                        java.util.Optional.empty(),
                       ).createAnd.exerciseDsoBootstrap_Bootstrap,
                     )
                     .withDedup(

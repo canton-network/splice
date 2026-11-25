@@ -1,0 +1,45 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.BeneficiariesAndRewardSplitting.TestSplittingRewards where
+
+import DA.Assert ((===))
+import DA.List (last, sort)
+
+import Daml.Script
+
+import Splice.DSO.SvState (RewardState(..))
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+import Splice.Scripts.SvRightOwners.Util.Rewards
+import Splice.Scripts.Util (getOpenRoundsSorted, runNextIssuance)
+
+test_shouldSplitTheWeightExactlyAndMintTheRemainderToTheOwnerInTheSameRound = withTwoSvRightOwners $ \net newcomer -> do
+  [first, second, third] <- forA ["first", "second", "third"] $ \name -> allocateParty (name <> "-beneficiary")
+  newcomer.rewardWeight === 30000
+
+  setBeneficiaries net newcomer (sharingWith [(first, 0.3333333333), (second, 0.3333333333), (third, 0.3333333333)])
+  thirds <- mintNextRound net newcomer
+  couponsMintedFor net newcomer thirds `shouldReturn` sort [(first, 9999), (second, 9999), (third, 9999), (newcomer.party, 3)]
+
+  setBeneficiaries net newcomer (sharingWith [(first, 0.5), (second, 0.5)])
+  halves <- mintNextRound net newcomer
+  couponsMintedFor net newcomer halves `shouldReturn` sort [(first, 15000), (second, 15000)]
+
+  setBeneficiaries net newcomer (sharingWith [(first, 0.00001), (second, 0.25)])
+  quarter <- mintNextRound net newcomer
+  couponsMintedFor net newcomer quarter `shouldReturn` sort [(second, 7500), (newcomer.party, 22500)]
+
+  setBeneficiaries net newcomer (sharingWith [])
+  alone <- mintNextRound net newcomer
+  couponsMintedFor net newcomer alone `shouldReturn` [(newcomer.party, 30000)]
+
+  rewardStateOf net newcomer `shouldReturn` RewardState with
+    lastRoundCollected = alone; numRoundsCollected = 4; numRoundsMissed = 0; numCouponsIssued = 9
+  where
+    mintNextRound net owner = do
+      runNextIssuance net.app
+      (openRoundCid, openRound) <- last <$> getOpenRoundsSorted net.app
+      mint net owner.hostedBy.party openRoundCid [owner.name] >>= shouldSucceed
+      pure openRound.round

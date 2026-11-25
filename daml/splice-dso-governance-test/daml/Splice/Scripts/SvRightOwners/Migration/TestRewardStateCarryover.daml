@@ -1,0 +1,71 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.Migration.TestRewardStateCarryover where
+
+import qualified DA.TextMap as TextMap
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldReuseTheLegacyRewardStateForAnOwnerWithTheSameName = withLegacyWeights $ \net -> do
+  rewardState <- svRewardStateCidFor net "sv1"
+  migrateDefault net
+
+  svRewardStateCidFor net "sv1" `shouldReturn` rewardState
+
+test_shouldArchiveTheLegacyRewardStateForAnOperatorThatDoesNotContinue = withLegacyWeights $ \net -> do
+  owners <- svRightOwnerInfosFromOperators net.app
+  sv2RewardState <- svRewardStateCidFor net "sv2"
+  Some sv2 <- pure $ TextMap.lookup "sv2" owners
+  instruction <- migrationRequestedFor net $ TextMap.insert "sv2-owner" sv2 $ TextMap.delete "sv2" owners
+  rewardStates <- rewardStatesForSvOperators net
+
+  migrate net instruction rewardStates >>= shouldSucceed
+
+  expectArchived net sv2RewardState
+
+test_shouldLeaveNoOrphanedRewardStateAfterMigration = withLegacyWeights $ \net -> do
+  owners <- svRightOwnerInfosFromOperators net.app
+  Some sv2 <- pure $ TextMap.lookup "sv2" owners
+  instruction <- migrationRequestedFor net $ TextMap.insert "sv2-owner" sv2 $ TextMap.delete "sv2" owners
+  rewardStates <- rewardStatesForSvOperators net
+
+  migrate net instruction rewardStates >>= shouldSucceed
+
+  svRewardStateNames net `shouldReturn` ["sv1", "sv2-owner", "sv3", "sv4"]
+
+test_shouldArchiveTheLeftoverRewardStateOfAnSvOffboardedBeforeMigration = withLegacyWeights $ \net -> do
+  sv1RewardState <- svRewardStateCidFor net "sv1"
+  sv3RewardState <- svRewardStateCidFor net "sv3"
+  sv4RewardState <- svRewardStateCidFor net "sv4"
+  offboardSvNodeOperator net net.sv3
+  returningSv3 <- newSvNodeOperator "returning-sv3"
+  onboard net (returningSv3 with name = net.sv3.name) >>= shouldSucceed
+  offboardSvNodeOperator net net.sv4
+  owners <- svRightOwnerInfosFromOperators net.app
+  instruction <- instructionRecordedBy net $ requestMigration net owners >>= shouldSucceed
+  rewardStates <- rewardStatesForSvOperators net
+
+  migratePurgingOffboarded net instruction rewardStates (TextMap.fromList [("sv1", sv1RewardState)]) >>= shouldBeRejected "Leftover SvRewardState of offboarded SV \"sv1\" must belong to an SV in offboardedSvs"
+  migratePurgingOffboarded net instruction rewardStates (TextMap.fromList [("sv3", sv3RewardState)]) >>= shouldBeRejected "Leftover SvRewardState of offboarded SV \"sv3\" must not belong to a current SV node operator"
+  migratePurgingOffboarded net instruction rewardStates (TextMap.fromList [("sv4", sv4RewardState)]) >>= shouldSucceed
+
+  expectArchived net sv4RewardState
+  svRewardStateCidFor net "sv3" `shouldReturn` sv3RewardState
+
+test_shouldArchiveTheLeftoverRewardStateOfAnOffboardedSvReturningAsAnOwner = withLegacyWeights $ \net -> do
+  sv4RewardState <- svRewardStateCidFor net "sv4"
+  offboardSvNodeOperator net net.sv4
+  owners <- svRightOwnerInfosFromOperators net.app
+  Some sv1 <- pure $ TextMap.lookup "sv1" owners
+  let sv4Weight = sv1.rewardWeight / 2
+      ownersWithSv4 = TextMap.insert "sv4" (svRightOwnerInfoFor net.sv4.party sv4Weight "sv1")
+        $ TextMap.insert "sv1" (sv1 with rewardWeight = sv1.rewardWeight - sv4Weight) owners
+  instruction <- instructionRecordedBy net $ requestMigration net ownersWithSv4 >>= shouldSucceed
+  rewardStates <- rewardStatesForSvOperators net
+
+  migratePurgingOffboarded net instruction rewardStates (TextMap.fromList [("sv4", sv4RewardState)]) >>= shouldSucceed
+
+  expectArchived net sv4RewardState
+  svRewardStateNames net `shouldReturn` ["sv1", "sv2", "sv3", "sv4"]

@@ -1,0 +1,292 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.Util.Fixture where
+
+import DA.Action (unless)
+import DA.Assert ((===))
+import DA.Functor (void)
+import DA.List (sort, sortOn)
+import qualified DA.Map as Map
+import qualified DA.NonEmpty as NonEmpty
+import DA.Optional (isNone, isSome)
+import qualified DA.Set as Set
+import DA.Text (isInfixOf)
+import qualified DA.TextMap as TextMap
+
+import Daml.Script
+
+import qualified Splice.Amulet.SvRightOwner as Amulet
+import Splice.AmuletRules (AmuletRules)
+import Splice.DSO.SvState (RewardState, SvRewardState)
+import Splice.DsoRules (DsoRules, DsoRules_AddSv(..))
+import Splice.Types (Round(..))
+
+import qualified Splice.Scripts.DsoTestUtils as DsoTestUtils
+import qualified Splice.Scripts.Util as AmuletScripts
+
+data Operator = Operator with
+    name : Text
+    party : Party
+  deriving (Eq, Ord, Show)
+
+data SvRightOwner = SvRightOwner with
+    name : Text
+    party : Party
+    hostedBy : Operator
+    rewardWeight : Int
+    beneficiaries : Map.Map Party Amulet.BeneficiaryInfo
+  deriving (Eq, Show)
+
+data Network = Network with
+    app : AmuletScripts.AmuletApp
+    sv1 : Operator
+    sv2 : Operator
+    sv3 : Operator
+    sv4 : Operator
+    genesisOwner : SvRightOwner
+
+data Attempt = Attempt with
+    network : Network
+    submittedBy : Party
+    command : Commands ()
+
+svParties : Network -> [Party]
+svParties net = [net.sv1.party, net.sv2.party, net.sv3.party, net.sv4.party]
+
+contractNameMismatch : Text
+contractNameMismatch = "Contract group identifier mismatch"
+
+attempt : Network -> Party -> (ContractId DsoRules -> Commands a) -> Script Attempt
+attempt net submittedBy mkCommand = do
+  dsoRulesCid <- dsoRules net
+  pure Attempt with network = net; submittedBy; command = void (mkCommand dsoRulesCid)
+
+shouldBeRejected : Text -> Attempt -> Script ()
+shouldBeRejected expectedReason (Attempt with network; submittedBy; command) =
+  refusedFor network submittedBy expectedReason command
+
+shouldSucceed : Attempt -> Script ()
+shouldSucceed (Attempt with network; submittedBy; command) = do
+  _ <- submit (actAs submittedBy <> readAs network.app.dso) command
+  pure ()
+
+shouldSucceedDisclosing : [Disclosure] -> Attempt -> Script ()
+shouldSucceedDisclosing disclosures (Attempt with submittedBy; command) = submit (actAs submittedBy <> discloseMany disclosures) command
+
+shouldBeRejectedDisclosing : [Disclosure] -> Text -> Attempt -> Script ()
+shouldBeRejectedDisclosing disclosures expectedReason (Attempt with submittedBy; command) =
+  refusedWith (actAs submittedBy <> discloseMany disclosures) expectedReason command
+
+shouldNotFind : ContractId t -> Attempt -> Script ()
+shouldNotFind cid (Attempt with network; submittedBy; command) = notFoundWith (actAs submittedBy <> readAs network.app.dso) cid command
+
+shouldNotFindDisclosing : [Disclosure] -> ContractId t -> Attempt -> Script ()
+shouldNotFindDisclosing disclosures cid (Attempt with submittedBy; command) =
+  notFoundWith (actAs submittedBy <> discloseMany disclosures) cid command
+
+disclosureOf : (Template t, HasEnsure t) => Network -> ContractId t -> Script Disclosure
+disclosureOf net cid = do
+  Some disclosure <- queryDisclosure net.app.dso cid
+  pure disclosure
+
+servedByScan : Network -> Text -> Script [Disclosure]
+servedByScan net name = do
+  dsoRulesDisclosure <- dsoRules net >>= disclosureOf net
+  ownerDisclosure <- svRightOwnerCidFor net name >>= disclosureOf net
+  pure [dsoRulesDisclosure, ownerDisclosure]
+
+refusedFor : Network -> Party -> Text -> Commands a -> Script ()
+refusedFor net party = refusedWith (actAs party <> readAs net.app.dso)
+
+refusedWith : SubmitOptions -> Text -> Commands a -> Script ()
+refusedWith options refusalReason command = do
+  outcome <- trySubmit options command
+  case outcome of
+    Right _ -> fail $ "expected a refusal because: " <> refusalReason
+    Left failure -> do
+      let reported = case failure of
+            FailureStatusError status -> status.message
+            other -> show other
+      unless (refusalReason `isInfixOf` reported) $
+        fail $ "expected a refusal because " <> show refusalReason <> ", not: " <> reported
+
+notFoundWith : SubmitOptions -> ContractId t -> Commands a -> Script ()
+notFoundWith options cid command = do
+  outcome <- trySubmit options command
+  case outcome of
+    Left (ContractNotFound with unknownContractIds) | show cid `elem` NonEmpty.toList unknownContractIds -> pure ()
+    Left failure -> fail $ "expected the ledger not to find " <> show cid <> ", not: " <> show failure
+    Right _ -> fail $ "expected the ledger not to find " <> show cid
+
+withOnLedgerWeights : (Network -> Script ()) -> Script ()
+withOnLedgerWeights = runOn DsoTestUtils.initMainNetWithSvRightOwners
+
+withLegacyWeights : (Network -> Script ()) -> Script ()
+withLegacyWeights = runOn DsoTestUtils.initMainNet
+
+runOn : Script (AmuletScripts.AmuletApp, Party, (Party, Party, Party, Party)) -> (Network -> Script ()) -> Script ()
+runOn initNetwork test = do
+  (app, _, (sv1Party, sv2Party, sv3Party, sv4Party)) <- initNetwork
+  let sv1 = Operator with name = "sv1"; party = sv1Party
+  test Network with
+    app
+    sv1
+    sv2 = Operator with name = "sv2"; party = sv2Party
+    sv3 = Operator with name = "sv3"; party = sv3Party
+    sv4 = Operator with name = "sv4"; party = sv4Party
+    -- On an on-ledger network the sv1 operator acts as its own right owner. Under legacy weights
+    -- there is no such contract and sv1 holds the weight itself.
+    genesisOwner = SvRightOwner with
+      name = "sv1"
+      party = sv1Party
+      hostedBy = sv1
+      rewardWeight = tier1RewardWeight
+      beneficiaries = Map.empty
+  DsoTestUtils.checkSvContractInvariants app
+
+tier1RewardWeight : Int
+tier1RewardWeight = 10 * DsoTestUtils.bpsMultiplier
+
+tier2RewardWeight : Int
+tier2RewardWeight = 3 * DsoTestUtils.bpsMultiplier
+
+newSvRightOwner : Text -> Operator -> Script SvRightOwner
+newSvRightOwner name hostedBy = do
+  party <- allocateParty (name <> "-party")
+  pure SvRightOwner with
+    name; party; hostedBy; rewardWeight = tier2RewardWeight; beneficiaries = Map.empty
+
+newSvNodeOperator : Text -> Script Operator
+newSvNodeOperator name = do
+  party <- allocateParty (name <> "-party")
+  pure Operator with name; party
+
+onboard : Network -> Operator -> Script Attempt
+onboard net operator = attempt net net.app.dso $ \dsoRulesCid ->
+  exerciseCmd dsoRulesCid DsoRules_AddSv with
+    newSvParty = operator.party
+    newSvName = operator.name
+    newSvRewardWeight = 0
+    newSvParticipantId = operator.name <> "-participant-id"
+    joinedAsOfRound = Round 0
+
+sharingWith : [(Party, Decimal)] -> Map.Map Party Amulet.BeneficiaryInfo
+sharingWith shares = Map.fromList [(party, Amulet.BeneficiaryInfo with rewardRatio) | (party, rewardRatio) <- shares]
+
+svRightOwnerInfo : SvRightOwner -> Amulet.SvRightOwnerInfo
+svRightOwnerInfo owner = Amulet.SvRightOwnerInfo with
+  rightOwnerParty = owner.party
+  rewardWeight = owner.rewardWeight
+  rewardNodeOperatorName = owner.hostedBy.name
+  beneficiaries = owner.beneficiaries
+
+svRightOwnerInfoFor : Party -> Int -> Text -> Amulet.SvRightOwnerInfo
+svRightOwnerInfoFor rightOwner weight operatorName = Amulet.SvRightOwnerInfo with
+  rightOwnerParty = rightOwner
+  rewardWeight = weight
+  rewardNodeOperatorName = operatorName
+  beneficiaries = Map.empty
+
+svRightOwnerInfosFromOperators : AmuletScripts.AmuletApp -> Script (TextMap.TextMap Amulet.SvRightOwnerInfo)
+svRightOwnerInfosFromOperators app = do
+  [(_, dsoRules)] <- query @DsoRules app.dso
+  pure $ TextMap.fromList
+    [ (info.name, svRightOwnerInfoFor party info.svRewardWeight info.name)
+    | (party, info) <- Map.toList dsoRules.svs
+    ]
+
+swapRewardStateNames
+  : Network -> TextMap.TextMap (ContractId SvRewardState) -> Script (TextMap.TextMap (ContractId SvRewardState))
+swapRewardStateNames net rewardStates = do
+  sv1RewardStateCid <- DsoTestUtils.getSvRewardStateCid net.app "sv1"
+  sv2RewardStateCid <- DsoTestUtils.getSvRewardStateCid net.app "sv2"
+  pure $ TextMap.insert "sv1" sv2RewardStateCid $ TextMap.insert "sv2" sv1RewardStateCid rewardStates
+
+rewardStatesForSvOperators : Network -> Script (TextMap.TextMap (ContractId SvRewardState))
+rewardStatesForSvOperators = DsoTestUtils.getSvOperatorRewardStateCids . (.app)
+
+currentDsoRules : Network -> Script (ContractId DsoRules, DsoRules)
+currentDsoRules net = do
+  [dsoRules] <- query @DsoRules net.app.dso
+  pure dsoRules
+
+dsoRules : Network -> Script (ContractId DsoRules)
+dsoRules net = fst <$> currentDsoRules net
+
+amuletRules : Network -> Script (ContractId AmuletRules)
+amuletRules net = do
+  [(amuletRulesCid, _)] <- query @AmuletRules net.app.dso
+  pure amuletRulesCid
+
+svRightOwnerCidFor : Network -> Text -> Script (ContractId Amulet.SvRightOwner)
+svRightOwnerCidFor net name = DsoTestUtils.getSvRightOwnerCid net.app name
+
+svRewardStateCidFor : Network -> Text -> Script (ContractId SvRewardState)
+svRewardStateCidFor net name = DsoTestUtils.getSvRewardStateCid net.app name
+
+svRewardStateNames : Network -> Script [Text]
+svRewardStateNames net = do
+  contracts <- query @SvRewardState net.app.dso
+  pure $ sort [state.svName | (_, state) <- contracts]
+
+contractPayload : (Template t, HasEnsure t) => Network -> ContractId t -> Script t
+contractPayload net cid = do
+  Some contract <- queryContractId net.app.dso cid
+  pure contract
+
+svNodeOperators : Network -> Script [Operator]
+svNodeOperators net = do
+  (_, dsoRules) <- currentDsoRules net
+  pure $ sortOn (.name)
+    [(Operator with name = svInfo.name; party) | (party, svInfo) <- Map.toList dsoRules.svs]
+
+svNodeOperatorWeights : Network -> Script [Int]
+svNodeOperatorWeights net = do
+  (_, dsoRules) <- currentDsoRules net
+  pure [svInfo.svRewardWeight | svInfo <- Map.values dsoRules.svs]
+
+svRightOwners : Network -> Script [SvRightOwner]
+svRightOwners net = do
+  operators <- svNodeOperators net
+  contracts <- query @Amulet.SvRightOwner net.app.dso
+  forA (sortOn (\(_, contract) -> contract.name) contracts) $ \(_, contract) -> do
+    let hostName = contract.info.rewardNodeOperatorName
+    hostedBy <- case [operator | operator <- operators, operator.name == hostName] of
+      [operator] -> pure operator
+      _ -> fail $ "no SV node operator is named " <> hostName
+    pure SvRightOwner with
+      name = contract.name
+      party = contract.info.rightOwnerParty
+      hostedBy
+      rewardWeight = contract.info.rewardWeight
+      beneficiaries = contract.info.beneficiaries
+
+totalSvRightOwnerWeight : Network -> Script Int
+totalSvRightOwnerWeight net = sum . map (.rewardWeight) <$> svRightOwners net
+
+svRightOwnerNamesInDsoRules : Network -> Script [Text]
+svRightOwnerNamesInDsoRules net = do
+  (_, dsoRules) <- currentDsoRules net
+  case dsoRules.svRightOwners of
+    Some names -> pure (Set.toList names)
+    None -> fail "this network does not track SV right owners on-ledger"
+
+rewardStateOf : Network -> SvRightOwner -> Script RewardState
+rewardStateOf net owner = do
+  [(_, contract)] <- queryFilter @SvRewardState net.app.dso (\c -> c.svName == owner.name)
+  pure contract.state
+
+shouldReturn : (Eq a, Show a) => Script a -> a -> Script ()
+shouldReturn action expected = action >>= (=== expected)
+infix 4 `shouldReturn`
+
+expectArchived : (Template t, HasEnsure t) => Network -> ContractId t -> Script ()
+expectArchived net cid = do
+  contract <- queryContractId net.app.dso cid
+  unless (isNone contract) (fail "expected the contract to be archived")
+
+expectActive : (Template t, HasEnsure t) => Network -> ContractId t -> Script ()
+expectActive net cid = do
+  contract <- queryContractId net.app.dso cid
+  unless (isSome contract) (fail "expected the contract to still be active")

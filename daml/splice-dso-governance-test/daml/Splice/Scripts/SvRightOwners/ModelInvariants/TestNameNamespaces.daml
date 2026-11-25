@@ -1,0 +1,29 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.ModelInvariants.TestNameNamespaces where
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldRejectAddingAnSvNodeOperatorWhoseNameIsAlreadyTaken = withOnLedgerWeights $ \net -> do
+  duplicate <- newSvNodeOperator net.sv2.name
+  newcomer <- newSvNodeOperator "new-operator"
+
+  onboard net duplicate >>= shouldBeRejected "SV is not currently onboarded"
+  onboard net newcomer >>= shouldSucceed
+
+test_shouldPreserveTheRightOwnersRewardStateWhenAddingAnSvNodeOperatorWithItsName = withOnLedgerWeights $ \net -> do
+  owner <- newSvRightOwner "hosted-sv" net.sv1
+  operator <- newSvNodeOperator owner.name
+  instruction <- voteToAdd net owner
+
+  execute net net.sv1.party instruction >>= shouldSucceed
+  ownerCidBefore <- svRightOwnerCidFor net owner.name
+  rewardStateCidBefore <- svRewardStateCidFor net owner.name
+
+  onboard net operator >>= shouldSucceed
+
+  svNodeOperators net `shouldReturn` [operator, net.sv1, net.sv2, net.sv3, net.sv4]
+  svRightOwnerCidFor net owner.name `shouldReturn` ownerCidBefore
+  svRewardStateCidFor net owner.name `shouldReturn` rewardStateCidBefore

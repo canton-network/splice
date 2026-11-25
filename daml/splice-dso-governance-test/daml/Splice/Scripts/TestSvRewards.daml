@@ -27,7 +27,7 @@ test_SvRewards_With_InitialRound_In_FirstIssuanceCurve = do
     let initialRound = 0
     let expectedIssuancePerSvRewardCoupon = 4.6832923545
 
-    (app, dso, (sv1, sv2, sv3, sv4)) <- initDecentralizedSynchronizerWithNonZeroRound False initialRound
+    (app, dso, (sv1, sv2, sv3, sv4)) <- initDecentralizedSynchronizerWithNonZeroRound False initialRound False
 
     -- extra party to represent beneficiary
     extraBeneficiary <- allocateParty "beneficiary"
@@ -172,7 +172,7 @@ test_SvRewards_With_InitialRound_In_SecondIssuanceCurve = do
     let initialRound = 50000
     let expectedIssuancePerSvRewardCoupon = 1.4049877064
 
-    (app, dso, (sv1, sv2, sv3, sv4)) <- initDecentralizedSynchronizerWithNonZeroRound False initialRound
+    (app, dso, (sv1, sv2, sv3, sv4)) <- initDecentralizedSynchronizerWithNonZeroRound False initialRound False
 
     -- extra party to represent beneficiary
     extraBeneficiary <- allocateParty "beneficiary"

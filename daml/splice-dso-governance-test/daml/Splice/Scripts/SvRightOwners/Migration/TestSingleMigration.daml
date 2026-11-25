@@ -1,0 +1,21 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.Migration.TestSingleMigration where
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldRejectASecondMigration = withLegacyWeights $ \net -> do
+  migrateDefault net
+  owners <- svRightOwnerInfosFromOperators net.app
+
+  requestMigration net owners >>= shouldBeRejected "svRightOwners are not tracked on-ledger"
+
+test_shouldKeepRightOwnerTrackingEnabledAfterEveryPostMigrationChoice = withLegacyWeights $ \net -> do
+  migrateDefault net
+  let base = svRightOwnerInfo net.genesisOwner
+  instruction <- voteToUpdate net net.genesisOwner.name base (base with rewardWeight = tier2RewardWeight)
+
+  executeUpdate net net.sv1.party instruction >>= shouldSucceed
+  svRightOwnerNamesInDsoRules net `shouldReturn` ["sv1", "sv2", "sv3", "sv4"]

@@ -1,0 +1,44 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.Migration.TestPurgingStaleRewardStates where
+
+import qualified DA.TextMap as TextMap
+
+import Daml.Script
+
+import Splice.DSO.SvState (SvRewardState)
+import Splice.DsoRules
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldPurgeTheStaleRewardStateOfAnOffboardedSvOnlyAfterMigration = withLegacyWeights $ \net -> do
+  offboardSvNodeOperator net net.sv4
+  staleRewardState <- svRewardStateCidFor net "sv4"
+  purge net "sv4" staleRewardState >>= shouldBeRejected "svRightOwners are tracked on-ledger"
+
+  migrateDefault net
+
+  svRewardStateCidFor net "sv1" >>= purge net "sv1" >>= shouldBeRejected "Leftover SvRewardState of offboarded SV \"sv1\" must belong to an SV in offboardedSvs"
+  purge net "sv4" staleRewardState >>= shouldSucceed
+  expectArchived net staleRewardState
+
+test_shouldRefusePurgingTheRewardStateOfALiveRightOwnerWhoseOperatorWasOffboarded = withOnLedgerWeights $ \net -> do
+  let owner = net.genesisOwner
+      movedOwner = owner with hostedBy = net.sv2
+  update <- voteToUpdate net owner.name (svRightOwnerInfo owner) (svRightOwnerInfo movedOwner)
+  executeUpdate net net.sv2.party update >>= shouldSucceed
+  offboardSvNodeOperator net net.sv1
+
+  rewardState <- svRewardStateCidFor net owner.name
+  attempt net net.sv2.party (\dsoRulesCid ->
+    exerciseCmd dsoRulesCid DsoRules_PurgeStaleSvRewardStates with
+      offboardedSvRewardStateCids = TextMap.fromList [(owner.name, rewardState)]
+      sv = Some net.sv2.party) >>= shouldBeRejected "SvRewardState must not belong to a live SV right owner"
+
+  svRewardStateNames net `shouldReturn` [owner.name]
+
+purge : Network -> Text -> ContractId SvRewardState -> Script Attempt
+purge net name rewardStateCid = attempt net net.sv1.party $ \dsoRulesCid ->
+  exerciseCmd dsoRulesCid DsoRules_PurgeStaleSvRewardStates with offboardedSvRewardStateCids = TextMap.fromList [(name, rewardStateCid)]; sv = Some net.sv1.party

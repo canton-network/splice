@@ -1,0 +1,43 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.ModelInvariants.TestWeightPreservation where
+
+import Daml.Script
+
+import Splice.DsoRules (DsoRules_MigrateToOnLedgerSvRightOwners(..))
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldRejectMigrationWithAnIncreasedTotalWeight =
+  withLegacyWeights $ \net -> migrationWithChangedTotalWeightIsRefused net 1
+
+test_shouldRejectMigrationWithADecreasedTotalWeight =
+  withLegacyWeights $ \net -> migrationWithChangedTotalWeightIsRefused net (-1)
+
+test_shouldAllowChangingTheTotalSvRightOwnerWeight = withOnLedgerWeights $ \net -> do
+  owner <- newSvRightOwner "sv2" net.sv2
+  let initialTotal = net.genesisOwner.rewardWeight
+
+  totalSvRightOwnerWeight net `shouldReturn` initialTotal
+
+  voteToAdd net owner >>= execute net net.sv1.party >>= shouldSucceed
+  totalSvRightOwnerWeight net `shouldReturn` initialTotal + owner.rewardWeight
+
+  updateRightOwnerWeight net owner (2 * owner.rewardWeight)
+  totalSvRightOwnerWeight net `shouldReturn` initialTotal + 2 * owner.rewardWeight
+
+  updateRightOwnerWeight net owner (owner.rewardWeight - 1)
+  totalSvRightOwnerWeight net `shouldReturn` initialTotal + owner.rewardWeight - 1
+
+  removal <- voteToRemove net owner.name
+  executeRemoval net net.sv1.party removal >>= shouldSucceed
+  totalSvRightOwnerWeight net `shouldReturn` initialTotal
+
+migrationWithChangedTotalWeightIsRefused : Network -> Int -> Script ()
+migrationWithChangedTotalWeightIsRefused net weightDelta = do
+  owners <- svRightOwnerInfosFromOperators net.app
+  let changedOwners = fmap (\info -> info with rewardWeight = info.rewardWeight + weightDelta) owners
+  attempt net net.app.dso (\dsoRulesCid -> exerciseCmd dsoRulesCid DsoRules_MigrateToOnLedgerSvRightOwners with
+    svRightOwners = changedOwners) >>= shouldBeRejected "The total SV reward weight is preserved"

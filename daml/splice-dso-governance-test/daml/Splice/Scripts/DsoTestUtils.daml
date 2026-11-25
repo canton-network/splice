@@ -12,10 +12,12 @@ import qualified DA.Map as Map
 import DA.Optional (fromOptional)
 import qualified DA.Set as Set
 import qualified DA.Text as T
+import qualified DA.TextMap as TextMap
 import Daml.Script
 import DA.Time
 
 import Splice.Amulet
+import Splice.Amulet.SvRightOwner
 import Splice.AmuletConfig (AmuletConfig(..), USD, useTrafficBasedAppRewards)
 import Splice.AmuletRules
 import Splice.Issuance
@@ -25,7 +27,7 @@ import Splice.ValidatorLicense
 
 import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistry.Parameters
-import Splice.Testing.Registries.AmuletRegistry (advanceToNextRoundChange)
+import Splice.Testing.Registries.AmuletRegistry (advanceToNextRoundChange, getActiveOpenRoundsSorted)
 
 import Splice.CometBft
 import Splice.DsoRules
@@ -40,27 +42,36 @@ import Splice.Util
 bpsMultiplier : Int
 bpsMultiplier = 10000
 
+-- TODO(canton-network/splice#7117): This is phase 1.
+-- Default `onLedgerSvRightOwners` will be set to True and eventually removed in the init helpers below in later phases.
 initMainNet : Script (AmuletApp, Party, (Party, Party, Party, Party))
-initMainNet = initDecentralizedSynchronizer False None
+initMainNet = initDecentralizedSynchronizer False None False
+
+-- | A network whose SV reward weights are tracked on-ledger from the start, with the "sv1"
+-- node operator hosting an SV right owner of the same name.
+initMainNetWithSvRightOwners : Script (AmuletApp, Party, (Party, Party, Party, Party))
+initMainNetWithSvRightOwners = initDecentralizedSynchronizer False None True
 
 
 initMainNetWithAmuletPrice : Decimal -> Script (AmuletApp, Party, (Party, Party, Party, Party))
-initMainNetWithAmuletPrice amuletPrice = initDecentralizedSynchronizerWithAmuletPrice False 0 amuletPrice None
+initMainNetWithAmuletPrice amuletPrice = initDecentralizedSynchronizerWithAmuletPrice False 0 amuletPrice None False
 
 initDevNet : Script (AmuletApp, Party, (Party, Party, Party, Party))
-initDevNet = initDecentralizedSynchronizer True None
+initDevNet = initDecentralizedSynchronizer True None False
 
 initDevNetWithAmuletConfig : AmuletConfig USD -> Script (AmuletApp, Party, (Party, Party, Party, Party))
-initDevNetWithAmuletConfig amuletConfig = initDecentralizedSynchronizer True (Some amuletConfig)
+initDevNetWithAmuletConfig amuletConfig = initDecentralizedSynchronizer True (Some amuletConfig) False
 
-initDecentralizedSynchronizer : Bool -> Optional (AmuletConfig USD) -> Script (AmuletApp, Party, (Party, Party, Party, Party))
-initDecentralizedSynchronizer isDevNet optAmuletConfig = initDecentralizedSynchronizerWithAmuletPrice isDevNet 0 1.0 optAmuletConfig
+initDecentralizedSynchronizer : Bool -> Optional (AmuletConfig USD) -> Bool -> Script (AmuletApp, Party, (Party, Party, Party, Party))
+initDecentralizedSynchronizer isDevNet optAmuletConfig onLedgerSvRightOwners =
+  initDecentralizedSynchronizerWithAmuletPrice isDevNet 0 1.0 optAmuletConfig onLedgerSvRightOwners
 
-initDecentralizedSynchronizerWithNonZeroRound : Bool -> Int -> Script (AmuletApp, Party, (Party, Party, Party, Party))
-initDecentralizedSynchronizerWithNonZeroRound isDevNet initialRound = initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound 1.0 None
+initDecentralizedSynchronizerWithNonZeroRound : Bool -> Int -> Bool -> Script (AmuletApp, Party, (Party, Party, Party, Party))
+initDecentralizedSynchronizerWithNonZeroRound isDevNet initialRound onLedgerSvRightOwners =
+  initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound 1.0 None onLedgerSvRightOwners
 
-initDecentralizedSynchronizerWithAmuletPrice : Bool -> Int -> Decimal -> Optional (AmuletConfig USD) -> Script (AmuletApp, Party, (Party, Party, Party, Party))
-initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice optAmuletConfig = do
+initDecentralizedSynchronizerWithAmuletPrice : Bool -> Int -> Decimal -> Optional (AmuletConfig USD) -> Bool -> Script (AmuletApp, Party, (Party, Party, Party, Party))
+initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice optAmuletConfig onLedgerSvRightOwners = do
   [sv1, sv2, sv3, sv4] <- forA ["sv1", "sv2", "sv3", "sv4"] allocateParty
 
   dso <- allocateParty "dso-party"
@@ -130,6 +141,7 @@ initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice o
       initialTrafficState = Map.empty
       isDevNet
       initialRound = Some initialRound
+      sv1RightOwnerName = if onLedgerSvRightOwners then Some "sv1" else None
     DsoBootstrap_Bootstrap
 
   dsoUserId <- validateUserId "dso-user"
@@ -147,7 +159,7 @@ initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice o
     submit dso $ exerciseCmd dsoRulesCid $ DsoRules_AddSv with
       newSvParty = svParty
       newSvName = svName
-      newSvRewardWeight = 3 * bpsMultiplier -- Simulate the new nodes being Tier 2 SV nodes
+      newSvRewardWeight = if onLedgerSvRightOwners then 0 else 3 * bpsMultiplier -- Simulate the new nodes being Tier 2 SV nodes
       newSvParticipantId = svName <> "-participant-id"
       joinedAsOfRound = earliestOpenRound.round
 
@@ -156,6 +168,31 @@ initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice o
 
   pure (app, dso, (sv1, sv2, sv3, sv4))
 
+
+-- | The reward state of the SV node operator with the given name.
+getSvRewardStateCid : AmuletApp -> Text -> Script (ContractId SvRewardState)
+getSvRewardStateCid app svName = do
+  [(rewardStateCid, _)] <- queryFilter @SvRewardState app.dso (\state -> state.svName == svName)
+  pure rewardStateCid
+
+-- | The SV right owner with the given name.
+getSvRightOwnerCid : AmuletApp -> Text -> Script (ContractId SvRightOwner)
+getSvRightOwnerCid app name = do
+  [(svRightOwnerCid, _)] <- queryFilter @SvRightOwner app.dso (\owner -> owner.name == name)
+  pure svRightOwnerCid
+
+-- | The reward states of all SV node operators, keyed by the operator's name.
+getSvOperatorRewardStateCids : AmuletApp -> Script (TextMap.TextMap (ContractId SvRewardState))
+getSvOperatorRewardStateCids app = do
+  [(_, rules)] <- query @DsoRules app.dso
+  fmap TextMap.fromList $ forA (Map.values rules.svs) $ \info -> do
+    rewardStateCid <- getSvRewardStateCid app info.name
+    pure (info.name, rewardStateCid)
+
+getOpenMiningRoundTriple : AmuletApp -> Script OpenMiningRoundTriple
+getOpenMiningRoundTriple app = do
+  [(round0Cid, _), (round1Cid, _), (round2Cid, _)] <- getActiveOpenRoundsSorted app.dso
+  pure OpenMiningRoundTriple with round0Cid; round1Cid; round2Cid
 
 getSvInfoByParty : AmuletApp -> Party -> Script SvInfo
 getSvInfoByParty app sv = do
@@ -452,16 +489,18 @@ checkSvRewardStates : AmuletApp -> Script ()
 checkSvRewardStates app = do
   rewardStates <- query @SvRewardState app.dso
   [(_, dsoRules)] <- query @DsoRules app.dso
-  forA_ (Map.values dsoRules.svs) $ \info ->
-    require "Each onboarded andSV name has one SvRewardState contract" $
-      any (\(_, rewardState) -> rewardState.svName == info.name) rewardStates
-  forA_ (Map.values dsoRules.offboardedSvs) $ \info ->
-    require "Each offboarded and SV name has one SvRewardState contract" $
-      any (\(_, rewardState) -> rewardState.svName == info.name) rewardStates
-  let offAndOnboardedSvs = Set.fromList (map (\info -> info.name) (Map.values dsoRules.svs) <> map (\info -> info.name) (Map.values dsoRules.offboardedSvs))
-  Set.fromList [state.svName | (_, state) <- rewardStates] === offAndOnboardedSvs
-  require "No duplicate SvRewardstate contracts" $
-    length rewardStates == Set.size offAndOnboardedSvs
+  -- Reward states are keyed by SV right owner name once weights are tracked on-ledger, and by
+  -- SV node operator name before that.
+  let expectedNames =
+        if onLedgerSvRightOwners dsoRules
+          then getSvRightOwners dsoRules
+          else Set.fromList $ map (.name) (Map.values dsoRules.svs) <> map (.name) (Map.values dsoRules.offboardedSvs)
+  forA_ (Set.toList expectedNames) $ \name ->
+    require ("Name " <> name <> " has one SvRewardState contract") $
+      any (\(_, state) -> state.svName == name) rewardStates
+  Set.fromList [state.svName | (_, state) <- rewardStates] === expectedNames
+  require "No duplicate SvRewardState contracts" $
+    length rewardStates == Set.size expectedNames
 
 -- | Check that there's exactly one status report per SV both off-boarded and onboarded.
 checkSvStatusReports : AmuletApp -> Script ()

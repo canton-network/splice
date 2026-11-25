@@ -1,0 +1,65 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Choices reject contracts supplied under the wrong name.
+module Splice.Scripts.SvRightOwners.ModelInvariants.TestContractNameValidation where
+
+import qualified DA.TextMap as TextMap
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+import Splice.Scripts.Util (runNextIssuance)
+
+test_shouldRejectMigrationWithAReusedRewardState = withLegacyWeights $ \net -> do
+  instruction <- migrationRequestedFor net =<< svRightOwnerInfosFromOperators net.app
+  rewardStates <- rewardStatesForSvOperators net
+
+  swapRewardStateNames net rewardStates >>= migrate net instruction >>= shouldBeRejected contractNameMismatch
+  migrate net instruction rewardStates >>= shouldSucceed
+
+test_shouldRejectMigrationWithAnArchivedRewardState = withLegacyWeights $ \net -> do
+  owners <- svRightOwnerInfosFromOperators net.app
+  instruction <- migrationRequestedFor net $ TextMap.fromList
+    [("hosted-" <> name, info) | (name, info) <- TextMap.toList owners]
+  rewardStates <- rewardStatesForSvOperators net
+
+  swapRewardStateNames net rewardStates >>= migrate net instruction >>= shouldBeRejected contractNameMismatch
+  migrate net instruction rewardStates >>= shouldSucceed
+
+test_shouldRejectRemovingAnOwnerWithContractsNamedForDifferentOwners = withOnLedgerWeights $ \net -> do
+  instruction <- removalRequestedFor net "sv2"
+
+  remove net instruction "sv1" "sv2" >>= shouldBeRejected contractNameMismatch
+  remove net instruction "sv2" "sv1" >>= shouldBeRejected contractNameMismatch
+  remove net instruction "sv2" "sv2" >>= shouldSucceed
+
+test_shouldRejectUpdatingOwnerInfoWithAContractNamedForAnotherOwner = withOnLedgerWeights $ \net -> do
+  instruction <- infoUpdateRequestedFor net "sv1"
+
+  updateInfo net instruction "sv2" >>= shouldBeRejected contractNameMismatch
+  updateInfo net instruction "sv1" >>= shouldSucceed
+
+test_shouldRejectUpdatingBeneficiariesUnderAnotherOwnersName = withOnLedgerWeights $ \net -> do
+  addOwnerNamed net "sv2"
+
+  updateBeneficiaries net "sv1" "sv2" >>= shouldBeRejected contractNameMismatch
+  updateBeneficiaries net "sv2" "sv2" >>= shouldSucceed
+
+test_shouldRejectRewardCouponWithAnOwnerNamedForAnotherKey = withOnLedgerWeights $ \net -> do
+  addOwnerNamed net "sv2"
+  runNextIssuance net.app -- an added owner first collects in latestUsableRound + 1
+
+  rewardCoupon net "sv1" "sv2" "sv1" >>= shouldBeRejected contractNameMismatch
+  rewardCoupon net "sv2" "sv2" "sv2" >>= shouldSucceed
+
+test_shouldRejectRewardCouponWithARewardStateNamedForAnotherKey = withOnLedgerWeights $ \net -> do
+  addOwnerNamed net "sv2"
+
+  rewardCoupon net "sv1" "sv1" "sv2" >>= shouldBeRejected contractNameMismatch
+  rewardCoupon net "sv1" "sv1" "sv1" >>= shouldSucceed
+
+test_shouldRejectRewardCouponWithTheWrongMapKey = withOnLedgerWeights $ \net -> do
+  addOwnerNamed net "sv2"
+  runNextIssuance net.app -- an added owner first collects in latestUsableRound + 1
+
+  rewardCoupon net "sv1" "sv2" "sv2" >>= shouldBeRejected contractNameMismatch
+  rewardCoupon net "sv2" "sv2" "sv2" >>= shouldSucceed

@@ -1,0 +1,74 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.AddingChangingAndRemoving.TestAddingAnOwner where
+
+import DA.Time (addRelTime)
+
+import Daml.Script
+
+import Splice.DSO.SvState (RewardState(..))
+import Splice.DsoRules (AddSvRightOwnerInstruction(..))
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+import Splice.Scripts.SvRightOwners.Util.Rewards (mintThrough)
+import Splice.Scripts.Util (getOpenRoundsSorted, runNextIssuance)
+
+test_shouldAddAnSvRightOwnerThatFirstCollectsInTheNextRound = withOnLedgerWeights $ \net -> do
+  newcomer <- newSvRightOwner "newcomer" net.sv2
+  let unknownOperator = Operator with name = "no-such-operator"; party = net.sv2.party
+  addAs net net.app.dso (newcomer with hostedBy = unknownOperator) >>= shouldBeRejected "SV right owner's node operator must exist"
+  addAs net net.app.dso (newcomer with name = net.genesisOwner.name) >>= shouldBeRejected "SV right owner \"sv1\" does not exist"
+  addAs net net.app.dso (newcomer with rewardWeight = -1) >>= shouldBeRejected "SV right owner's reward weight is non-negative"
+  votedAt <- getTime
+  (_, rules) <- currentDsoRules net
+
+  instruction <- voteToAdd net newcomer
+
+  contractPayload net instruction `shouldReturn` AddSvRightOwnerInstruction with
+    dso = net.app.dso; name = newcomer.name; info = svRightOwnerInfo newcomer; expiresAt = addRelTime votedAt rules.config.actionConfirmationTimeout
+  svRightOwners net `shouldReturn` [net.genesisOwner]
+
+  stranger <- allocateParty "stranger"
+  execute net stranger instruction >>= shouldBeRejected "SV party is an actual SV"
+  [_, (_, latestUsableRound)] <- getOpenRoundsSorted net.app
+  execute net net.sv3.party instruction >>= shouldSucceed
+
+  expectArchived net instruction
+  svRightOwners net `shouldReturn` [newcomer, net.genesisOwner]
+  svRightOwnerNamesInDsoRules net `shouldReturn` [newcomer.name, net.genesisOwner.name]
+  rewardStateOf net newcomer `shouldReturn` RewardState with
+    lastRoundCollected = latestUsableRound.round; numRoundsCollected = 0; numRoundsMissed = 0; numCouponsIssued = 0
+
+  mintThrough net net.sv2 newcomer.name >>= shouldBeRejected "is greater than the last round a reward has been received for"
+  runNextIssuance net.app
+  mintThrough net net.sv2 newcomer.name >>= shouldSucceed
+
+  unpaid <- (\owner -> owner with rewardWeight = 0) <$> newSvRightOwner "unpaid" net.sv3
+  addSvRightOwner net unpaid
+  svRightOwners net `shouldReturn` [newcomer, net.genesisOwner, unpaid]
+
+test_shouldExecuteOnlyOneAdditionPerNameAndOnlyBeforeTheDeadline = withOnLedgerWeights $ \net -> do
+  newcomer <- newSvRightOwner "newcomer" net.sv2
+  firstInstruction <- voteToAdd net newcomer
+  secondInstruction <- voteToAdd net newcomer
+  latecomerInstruction <- newSvRightOwner "latecomer" net.sv3 >>= voteToAdd net
+  stranger <- allocateParty "stranger"
+
+  execute net net.sv1.party firstInstruction >>= shouldSucceed
+  execute net net.sv2.party secondInstruction >>= shouldBeRejected "SV right owner \"newcomer\" does not exist"
+  expire net stranger secondInstruction >>= shouldBeRejected "SV party is an actual SV"
+  expire net net.sv1.party secondInstruction >>= shouldBeRejected "Ledger time is strictly before deadline 'addSvRightOwnerInstruction.expiresAt'"
+
+  instructionExpiresAt net latecomerInstruction >>= setTime
+  execute net net.sv1.party latecomerInstruction >>= shouldBeRejected "Ledger time is at or past deadline 'addSvRightOwnerInstruction.expiresAt'"
+  expire net net.sv1.party secondInstruction >>= shouldSucceed
+
+  expectArchived net secondInstruction
+  svRightOwners net `shouldReturn` [newcomer, net.genesisOwner]
+
+test_shouldRefuseAddingAnSvRightOwnerUnderLegacyWeightManagement = withLegacyWeights $ \net -> do
+  newcomer <- newSvRightOwner "newcomer" net.sv2
+
+  addAs net net.app.dso newcomer >>= shouldBeRejected "svRightOwners are tracked on-ledger"

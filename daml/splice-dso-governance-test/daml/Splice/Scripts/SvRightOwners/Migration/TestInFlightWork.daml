@@ -1,0 +1,36 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.Migration.TestInFlightWork where
+
+import Daml.Script
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldRefuseAnInFlightLegacyRewardWeightUpdateAfterMigration = withLegacyWeights $ \net -> do
+  migrateDefault net
+
+  updateLegacyWeight net net.sv2.party tier2RewardWeight >>= shouldBeRejected "svRightOwners are not tracked on-ledger"
+
+test_shouldRefuseMigrationAfterALegacyWeightUpdateAndAllowItsInstructionToExpire = withLegacyWeights $ \net -> do
+  owners <- svRightOwnerInfosFromOperators net.app
+  instruction <- migrationRequestedFor net owners
+
+  updateLegacyWeight net net.sv2.party tier1RewardWeight >>= shouldSucceed
+  rewardStates <- rewardStatesForSvOperators net
+  migrate net instruction rewardStates >>= shouldBeRejected "The total SV reward weight is preserved"
+
+  instructionExpiresAt net instruction >>= setTime
+  expireMigration net net.sv1.party instruction >>= shouldSucceed
+  expectArchived net instruction
+
+test_shouldAllowAnInFlightMigrationInstructionToExpireAfterItsDeadline = withLegacyWeights $ \net -> do
+  owners <- svRightOwnerInfosFromOperators net.app
+  instruction <- migrationRequestedFor net owners
+
+  expireMigration net net.sv1.party instruction >>= shouldBeRejected "Ledger time is strictly before deadline"
+  instructionExpiresAt net instruction >>= setTime
+  rewardStatesForSvOperators net >>= migrate net instruction >>= shouldBeRejected "Ledger time is at or past deadline 'migrateToOnLedgerSvRightOwnersInstruction.expiresAt'"
+  expireMigration net net.sv1.party instruction >>= shouldSucceed
+  expectArchived net instruction

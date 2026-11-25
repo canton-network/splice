@@ -43,6 +43,7 @@ template SvOnboardingConfirmed with
     svParty : Party
     svName : Text
     svRewardWeight : Int
+      -- ^ Legacy SV operator reward weight. After SV right owners migrations only 0 value is allowed.
     svParticipantId: Text
     reason : Text
     dso : Party

@@ -1,0 +1,64 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.SvRightOwners.BeneficiariesAndRewardSplitting.TestSettingBeneficiaries where
+
+import Daml.Script
+
+import Splice.Scripts.SvRightOwners.Util.Fixture
+import Splice.Scripts.SvRightOwners.Util.Governance
+
+test_shouldLetOnlyTheSvRightOwnerReplaceItsBeneficiaries = withTwoSvRightOwners $ \net newcomer -> do
+  [first, second] <- forA ["first", "second"] $ \name -> allocateParty (name <> "-beneficiary")
+  crowd <- forA [1 .. 21] $ \i -> allocateParty ("crowd-beneficiary-" <> show i)
+  stranger <- allocateParty "stranger"
+  cotenant <- newSvRightOwner "cotenant" net.sv2
+  addSvRightOwner net cotenant
+  let ownSplit = sharingWith [(first, 0.2), (second, 0.3)]
+      notOwner = "Beneficiaries are set by the SV right owner itself"
+
+  setBeneficiariesAs net net.sv2.party newcomer ownSplit >>= shouldBeRejected notOwner
+  setBeneficiariesAs net net.genesisOwner.party newcomer ownSplit >>= shouldBeRejected notOwner
+  setBeneficiariesAs net cotenant.party newcomer ownSplit >>= shouldBeRejected notOwner
+  setBeneficiariesAs net stranger newcomer ownSplit >>= shouldBeRejected notOwner
+  setBeneficiariesAs net newcomer.party newcomer (sharingWith [(first, 0.6), (second, 0.5)]) >>= shouldBeRejected "Beneficiary reward ratios add up to at most 1.0"
+  setBeneficiariesAs net newcomer.party newcomer (sharingWith [(first, 0.0)]) >>= shouldBeRejected "Beneficiary reward ratios are positive"
+  setBeneficiariesAs net newcomer.party newcomer (sharingWith [(newcomer.party, 0.1)]) >>= shouldBeRejected "SV right owner is not a beneficiary"
+  setBeneficiariesAs net newcomer.party newcomer (sharingWith [(party, 0.01) | party <- crowd]) >>= shouldBeRejected "There are at most 20 beneficiaries"
+  setBeneficiariesAs net newcomer.party newcomer (sharingWith [(party, 0.01) | party <- take 20 crowd]) >>= shouldSucceed
+  
+  setBeneficiariesAs net newcomer.party newcomer ownSplit >>= shouldSucceed
+
+  svRightOwners net `shouldReturn` [cotenant, (newcomer with beneficiaries = ownSplit), net.genesisOwner]
+
+test_shouldLetAnSvRightOwnerWithoutAnSvNodeSetItsBeneficiariesFromDisclosedContracts = withTwoSvRightOwners $ \net newcomer -> do
+  beneficiary <- allocateParty "beneficiary"
+  let split = sharingWith [(beneficiary, 0.2)]
+  dsoRulesCid <- dsoRules net
+  ownerCid <- svRightOwnerCidFor net newcomer.name
+  [dsoRulesDisclosure, ownerDisclosure] <- servedByScan net newcomer.name
+
+  setBeneficiariesAs net newcomer.party newcomer split >>= shouldNotFindDisclosing [] dsoRulesCid
+  setBeneficiariesAs net newcomer.party newcomer split >>= shouldNotFindDisclosing [dsoRulesDisclosure] ownerCid
+  setBeneficiariesAs net newcomer.party newcomer split >>= shouldSucceedDisclosing [dsoRulesDisclosure, ownerDisclosure]
+
+  svRightOwners net `shouldReturn` [(newcomer with beneficiaries = split), net.genesisOwner]
+  newOwnerCid <- svRightOwnerCidFor net newcomer.name
+  queryContractId newcomer.party newOwnerCid `shouldReturn` None
+
+test_shouldLetOnlyTheNewPartySetTheBeneficiariesAfterAVotedPartyRotation = withTwoSvRightOwners $ \net newcomer -> do
+  beneficiary <- allocateParty "beneficiary"
+  successor <- allocateParty "successor"
+  let split = sharingWith [(beneficiary, 0.2)]
+      rotated = newcomer with party = successor
+  rotation <- voteToUpdate net newcomer.name (svRightOwnerInfo newcomer) (svRightOwnerInfo rotated)
+  executeUpdate net net.sv1.party rotation >>= shouldSucceed
+
+  disclosures <- servedByScan net newcomer.name
+  setBeneficiariesAs net newcomer.party newcomer split >>= shouldBeRejectedDisclosing disclosures "Beneficiaries are set by the SV right owner itself"
+  setBeneficiariesAs net successor rotated split >>= shouldSucceedDisclosing disclosures
+  svRightOwners net `shouldReturn` [(rotated with beneficiaries = split), net.genesisOwner]
+
+test_shouldRefuseSettingBeneficiariesUnderLegacyWeightManagement = withLegacyWeights $ \net -> do
+  noSvRightOwner <- coerceContractId <$> dsoRules net
+  setBeneficiariesWith net net.genesisOwner.party net.genesisOwner.name (sharingWith []) noSvRightOwner >>= shouldBeRejected "svRightOwners are tracked on-ledger"

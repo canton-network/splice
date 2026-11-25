@@ -593,7 +593,7 @@ template ValidatorRewardCoupon
 -- | A coupon for a beneficiary to receive part of the SV issuance for a specific SV node and round.
 template SvRewardCoupon with
     dso : Party
-    sv : Party -- ^ The party identifying the SV node for which the reward is issued.
+    sv : Party -- ^ The SV node operator, or the SV right owner after SV right owners migration, for which the reward is issued.
     beneficiary : Party -- ^ The beneficiary allowed to receive the reward.
     round : Round
     weight : Int -- ^ Coupons receive a share of the SV issuance proportional to their weight.
