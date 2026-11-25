@@ -44,7 +44,6 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
-  OpenMiningRoundTxLogEntry,
   ScanStore,
   ScanTxLogParser,
   TxLogEntry,
@@ -65,14 +64,12 @@ import org.lfdecentralizedtrust.splice.store.{
   Limit,
   ResultsPage,
   TxLogStore,
-  UpdateHistory,
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   GovernanceLockUtil,
-  PackageQualifiedName,
   QualifiedName,
   TemplateJsonDecoder,
 }
@@ -530,34 +527,6 @@ class DbScanStore private (
       )
     }
 
-  override def getAmuletConfigForRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[OpenMiningRoundTxLogEntry] = waitUntilAcsIngested {
-    for {
-      row <- storage
-        .querySingle(
-          selectFromTxLogTable(
-            txLogTableName,
-            txLogStoreId,
-            where = sql"""
-                   entry_type = ${EntryType.OpenMiningRoundTxLogEntry} and
-                   round = $round
-              """,
-            orderLimit = sql"order by entry_number desc limit 1",
-          ).headOption,
-          "getAmuletConfigForRound",
-        )
-        .value
-      entry = row.map(txLogEntryFromRow[OpenMiningRoundTxLogEntry](txLogConfig))
-      result <- entry match {
-        case Some(omr: OpenMiningRoundTxLogEntry) =>
-          Future.successful(omr)
-        case None =>
-          Future.failed(txLogNotFound())
-      }
-    } yield result
-  }
-
   override def listSvNodeStates()(implicit tc: TraceContext): Future[Seq[SvNodeState]] =
     for {
       dsoRules <- getDsoRulesWithState()
@@ -810,34 +779,4 @@ class DbScanStore private (
     } yield result.map(contractFromRow(VoteRequest.COMPANION)(_))
   }
 
-  // TODO (#934): this method probably belongs in UpdateHistory instead
-  override def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
-      companion: C,
-      updateHistory: UpdateHistory,
-      recordTime: CantonTimestamp,
-  )(implicit
-      companionClass: ContractCompanion[C, TCId, T],
-      tc: TraceContext,
-  ): Future[Option[Contract[TCId, T]]] = {
-    val pqn @ PackageQualifiedName(packageName, QualifiedName(moduleName, entityName)) =
-      companionClass.packageQualifiedName(companion)
-    for {
-      row <- storage
-        .querySingle(
-          selectFromUpdateCreatesTableResult(
-            updateHistory.historyId,
-            where = sql"""template_id_module_name = ${lengthLimited(moduleName)}
-              and template_id_entity_name = ${lengthLimited(entityName)}
-              and package_name = ${lengthLimited(packageName)}
-              and record_time > $recordTime""",
-            // TODO(#934): Order by row_id is suspicious
-            orderLimit = sql"""order by row_id asc limit 1""",
-          ).headOption,
-          s"lookup[$pqn]",
-        )
-        .value
-    } yield {
-      row.map(contractFromEvent(companion)(_))
-    }
-  }
 }

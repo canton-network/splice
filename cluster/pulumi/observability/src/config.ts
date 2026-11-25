@@ -1,6 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig, SplicePostgresSchema } from '@canton-network/splice-pulumi-common';
+import {
+  clusterSubConfig,
+  defaultPostgresImage,
+  SplicePostgresSchema,
+} from '@canton-network/splice-pulumi-common';
 import { CloudArmorConfigSchema } from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import { z } from 'zod';
 
@@ -95,7 +99,9 @@ const MuteTimeIntervalSchema = z.array(
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
-    grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
+    grafanaPostgres: SplicePostgresSchema.default({
+      postgresImage: defaultPostgresImage,
+    }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
       // routes more alerts than just "mining rounds are not advancing" to #team-canton-network-high-prio-prod-alerts

@@ -37,14 +37,14 @@ class ScheduledPackageVettingIntegrationTest
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(
             initialPackageConfig = InitialPackageConfig(
-              amuletVersion = DarResources.amulet_0_1_19.metadata.version.toString,
+              amuletVersion = DarResources.amulet_0_1_21.metadata.version.toString,
               amuletNameServiceVersion =
-                DarResources.amuletNameService_0_1_20.metadata.version.toString,
-              dsoGovernanceVersion = DarResources.dsoGovernance_0_1_25.metadata.version.toString,
+                DarResources.amuletNameService_0_1_22.metadata.version.toString,
+              dsoGovernanceVersion = DarResources.dsoGovernance_0_1_27.metadata.version.toString,
               validatorLifecycleVersion =
                 InitialPackageConfig.defaultInitialPackageConfig.validatorLifecycleVersion,
-              walletVersion = DarResources.wallet_0_1_20.metadata.version.toString,
-              walletPaymentsVersion = DarResources.walletPayments_0_1_19.metadata.version.toString,
+              walletVersion = DarResources.wallet_0_1_22.metadata.version.toString,
+              walletPaymentsVersion = DarResources.walletPayments_0_1_21.metadata.version.toString,
             ),
             initialSvOperationsSwitchOverTimes = None,
           )
@@ -69,10 +69,10 @@ class ScheduledPackageVettingIntegrationTest
         aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger]
 
       val scheduledValidatorDars = Seq(
-        DarResources.amulet_0_1_20,
-        DarResources.amuletNameService_0_1_21,
-        DarResources.wallet_0_1_21,
-        DarResources.walletPayments_0_1_20,
+        DarResources.amulet_0_1_22,
+        DarResources.amuletNameService_0_1_23,
+        DarResources.wallet_0_1_23,
+        DarResources.walletPayments_0_1_22,
       )
 
       def scheduledDarsAreVettedFromEffectiveTime(): Unit = {
@@ -94,12 +94,12 @@ class ScheduledPackageVettingIntegrationTest
           val config = AmuletConfigSchedule(sv1ScanBackend.getAmuletRules())
             .getConfigAsOf(env.environment.clock.now)
           val newerPackageConfig = new PackageConfig(
-            DarResources.amulet_0_1_20.metadata.version.toString(),
-            DarResources.amuletNameService_0_1_21.metadata.version.toString(),
-            DarResources.dsoGovernance_0_1_26.metadata.version.toString(),
+            DarResources.amulet_0_1_22.metadata.version.toString(),
+            DarResources.amuletNameService_0_1_23.metadata.version.toString(),
+            DarResources.dsoGovernance_0_1_28.metadata.version.toString(),
             config.packageConfig.validatorLifecycle,
-            DarResources.wallet_0_1_21.metadata.version.toString(),
-            DarResources.walletPayments_0_1_20.metadata.version.toString(),
+            DarResources.wallet_0_1_23.metadata.version.toString(),
+            DarResources.walletPayments_0_1_22.metadata.version.toString(),
           )
           setAmuletConfig(
             Seq((Some(Duration.ofHours(1)), withPackageConfig(config, newerPackageConfig), config))
@@ -113,8 +113,10 @@ class ScheduledPackageVettingIntegrationTest
       clue("alice's validator restarts and its vetting trigger runs once") {
         aliceValidatorBackend.stop()
         aliceValidatorBackend.startSync()
+        // The vetting trigger is not task-based, so there is no stale task that could count as done,
+        // and the outcome is checked through the vetting state below.
         aliceVettingTrigger
-          .runOnce()
+          .runOnePollingIteration()
           .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(60, "seconds")))
       }
 

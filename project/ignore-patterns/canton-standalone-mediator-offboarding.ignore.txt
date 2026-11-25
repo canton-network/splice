@@ -20,3 +20,6 @@ SEQUENCER_SUBMISSION_REQUEST_MALFORMED.*MED::sv4SvOffboarding.*(is not part of t
 Could not send a time-advancing message
 
 Request failed for server.*Sequencer.* Is the server running?
+
+# The offboarded sv4 mediator loses access to the sequencer
+Closing sequencer subscription due to permission denied.*mediator=sv4StandaloneMediator

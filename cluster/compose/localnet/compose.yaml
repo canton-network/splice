@@ -187,6 +187,7 @@ services:
         BASE_IMAGE: ${IMAGE_REPO}canton:${IMAGE_TAG}
     environment:
       - MULTI_SYNC=false
+      - CANTON_PROTOCOL_VERSION
     env_file:
       - ${LOCALNET_ENV_DIR}/common.env
       - *app-provider-auth-env
@@ -211,6 +212,7 @@ services:
     container_name: multi-sync-startup
     environment:
       - MULTI_SYNC=true
+      - CANTON_PROTOCOL_VERSION
     depends_on:
       splice:
         condition: service_healthy

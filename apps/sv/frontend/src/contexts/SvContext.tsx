@@ -1,21 +1,25 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useSvClient, useUserState, DsoInfo, SvInfo } from '@canton-network/splice-common-frontend';
+import { UserContext, DsoInfo, SvInfo } from '@canton-network/splice-common-frontend';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
+import { useContext } from 'react';
 
 import { AmuletRules } from '@daml.js/splice-amulet/lib/Splice/AmuletRules';
 import { SvNodeState } from '@daml.js/splice-dso-governance/lib/Splice/DSO/SvState';
 import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
-import { useSvAdminClient } from './SvAdminServiceContext';
+import { useDappModeConfig } from '../utils';
+import { useGovernanceReadClient } from './GovernanceReadClientContext';
 
-export const useDsoInfos = (): UseQueryResult<DsoInfo & SvInfo> => {
-  const { getDsoInfo } = useSvClient();
-  // The SV app's /v1/dso endpoint requires authentication
-  const { userAccessToken } = useUserState();
+export const useDsoInfos = (): UseQueryResult<DsoInfo & Partial<SvInfo>> => {
+  const { getDsoInfo } = useGovernanceReadClient();
+  const dappMode = useDappModeConfig();
+  // The SV app's /v1/dso endpoint requires authentication; Scan's (dApp mode) does not.
+  // The user context is absent in dApp mode, which mounts no UserProvider.
+  const userAccessToken = useContext(UserContext)?.userAccessToken;
   return useQuery({
-    enabled: !!userAccessToken,
+    enabled: dappMode !== undefined || !!userAccessToken,
     queryKey: ['getDsoInfo', DsoRules, AmuletRules],
     queryFn: async () => {
       const resp = await getDsoInfo();
@@ -34,7 +38,7 @@ export const useDsoInfos = (): UseQueryResult<DsoInfo & SvInfo> => {
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export const useFeatureSupport = (): UseQueryResult<{}> => {
-  const { featureSupport } = useSvAdminClient();
+  const { featureSupport } = useGovernanceReadClient();
   return useQuery({
     queryKey: ['featureSupport'],
     queryFn: async () => {

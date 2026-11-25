@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.scan.metrics.AcsSnapshotPruningMetrics
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.AcsSnapshot
 import org.lfdecentralizedtrust.splice.store.KeyValueStore
-import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.timestampCodec
+import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 

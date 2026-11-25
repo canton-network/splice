@@ -87,7 +87,7 @@
                 },
                 {
                   "name": "SPLICE_APP_POSTGRES_HOST",
-                  "value": "postgres-2.multi-validator.svc.cluster.local"
+                  "value": "postgres-2-helmless.multi-validator.svc.cluster.local"
                 },
                 {
                   "name": "SPLICE_APP_POSTGRES_PORT",
@@ -261,7 +261,7 @@
               "command": [
                 "bash",
                 "-c",
-                "\n                        function createDb() {\n                          local dbname=\"$1\"\n\n                          until errmsg=$(psql -h postgres-2.multi-validator.svc.cluster.local --username=cnadmin --dbname=cantonnet -c \"create database $dbname\" 2>&1); do\n                          if [[ $errmsg == *\"already exists\"* ]]; then\n                              echo \"Database $dbname already exists. Done.\"\n                              break\n                          fi\n\n                          echo \"trying to create postgres database $dbname, last error: $errmsg\";\n                          sleep 2;\n                          done\n                        }\n\n                        createDb cantonnet_v_00\ncreateDb cantonnet_v_01\ncreateDb cantonnet_v_02\ncreateDb cantonnet_v_03\ncreateDb cantonnet_v_04\ncreateDb cantonnet_v_05\ncreateDb cantonnet_v_06\ncreateDb cantonnet_v_07\ncreateDb cantonnet_v_08\ncreateDb cantonnet_v_09\n                      "
+                "\n                        function createDb() {\n                          local dbname=\"$1\"\n\n                          until errmsg=$(psql -h postgres-2-helmless.multi-validator.svc.cluster.local --username=cnadmin --dbname=cantonnet -c \"create database $dbname\" 2>&1); do\n                          if [[ $errmsg == *\"already exists\"* ]]; then\n                              echo \"Database $dbname already exists. Done.\"\n                              break\n                          fi\n\n                          echo \"trying to create postgres database $dbname, last error: $errmsg\";\n                          sleep 2;\n                          done\n                        }\n\n                        createDb cantonnet_v_00\ncreateDb cantonnet_v_01\ncreateDb cantonnet_v_02\ncreateDb cantonnet_v_03\ncreateDb cantonnet_v_04\ncreateDb cantonnet_v_05\ncreateDb cantonnet_v_06\ncreateDb cantonnet_v_07\ncreateDb cantonnet_v_08\ncreateDb cantonnet_v_09\n                      "
               ],
               "env": [
                 {

@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
 import com.daml.ledger.javaapi.data.{DamlRecord, Unit as damlUnit}
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
@@ -15,7 +16,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, Amulet_ExpireResult}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
-  AmuletRules,
   AmuletRules_BuyMemberTrafficResult,
   AmuletRules_MintResult,
 }
@@ -56,7 +56,6 @@ import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
-import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
@@ -75,33 +74,6 @@ abstract class ScanStoreTest
     with AmuletTransferUtil {
 
   "ScanStore" should {
-    "getAmuletConfigForRound" should {
-
-      "return the amulet OpenMiningRoundTxLogEntry for the round" in {
-        val wanted = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
-        val unwanted = openMiningRound(dsoParty, round = 3, amuletPrice = 3.0)
-        for {
-          store <- mkStore()
-          _ <- dummyDomain.create(wanted)(store.multiDomainAcsStore)
-          _ <- dummyDomain.create(unwanted)(store.multiDomainAcsStore)
-        } yield {
-          val logEntry = store.getAmuletConfigForRound(round = 2).futureValue
-          logEntry match {
-            case omr: OpenMiningRoundTxLogEntry =>
-              omr.round should be(wanted.payload.round.number)
-            case x =>
-              fail(s"Entry was not an OpenMiningRoundTxLogEntry but a $x")
-          }
-          numeric(logEntry.amuletCreateFee) should be(
-            numeric(
-              wanted.payload.transferConfigUsd.createFee.fee.divide(wanted.payload.amuletPrice)
-            )
-          )
-        }
-      }
-
-    }
-
     "getTotalPurchasedMemberTraffic" should {
 
       "return the sum over all traffic contracts for the member" in {
@@ -797,89 +769,6 @@ abstract class ScanStoreTest
         }
       }
     }
-
-    "lookupContractByRecordTime" should {
-
-      "find the DsoRules contract at a given time" in {
-        val now = CantonTimestamp.now()
-        val firstDsoRules = dsoRules(dsoParty, epoch = 1)
-        val secondDsoRules = dsoRules(dsoParty, epoch = 2)
-        val thirdDsoRules = dsoRules(dsoParty, epoch = 3)
-        val recordTimeFirst = now.plusSeconds(1).toInstant
-        val recordTimeSecond = now.plusSeconds(5).toInstant
-        val recordTimeThird = now.plusSeconds(9).toInstant
-        for {
-          store <- mkStore()
-          updateHistory <- mkUpdateHistory(domainMigrationId)
-          _ <- updateHistory.ingestionSink.initialize()
-          first <- dummyDomain.create(
-            firstDsoRules,
-            recordTime = recordTimeFirst,
-          )(
-            updateHistory
-          )
-          firstRecordTime = CantonTimestamp.fromInstant(first.getRecordTime).getOrElse(now)
-          _ <- dummyDomain.create(
-            secondDsoRules,
-            recordTime = recordTimeSecond,
-          )(updateHistory)
-          _ <- dummyDomain.create(
-            thirdDsoRules,
-            recordTime = recordTimeThird,
-          )(updateHistory)
-          result <- store.lookupContractByRecordTime(
-            DsoRules.COMPANION,
-            updateHistory,
-            firstRecordTime.plusSeconds(1),
-          )
-        } yield {
-          result.value should not be firstDsoRules
-          result.value shouldBe secondDsoRules
-          result.value should not be thirdDsoRules
-        }
-      }
-
-      "find the AmuletRules contract at a given time" in {
-        val now = CantonTimestamp.now()
-        val firstAmuletRules = amuletRules(10)
-        val secondAmuletRules = amuletRules(20)
-        val thirdAmuletRules = amuletRules(30)
-        val recordTimeFirst = now.plusSeconds(1).toInstant
-        val recordTimeSecond = now.plusSeconds(5).toInstant
-        val recordTimeThird = now.plusSeconds(9).toInstant
-        for {
-          store <- mkStore()
-          updateHistory <- mkUpdateHistory(domainMigrationId)
-          _ <- updateHistory.ingestionSink.initialize()
-          first <- dummyDomain.create(
-            firstAmuletRules,
-            recordTime = recordTimeFirst,
-          )(
-            updateHistory
-          )
-          firstRecordTime = CantonTimestamp.fromInstant(first.getRecordTime).getOrElse(now)
-          _ <- dummyDomain.create(
-            secondAmuletRules,
-            recordTime = recordTimeSecond,
-          )(
-            updateHistory
-          )
-          _ <- dummyDomain.create(
-            thirdAmuletRules,
-            recordTime = recordTimeThird,
-          )(updateHistory)
-          result <- store.lookupContractByRecordTime(
-            AmuletRules.COMPANION,
-            updateHistory,
-            firstRecordTime.plusSeconds(1),
-          )
-        } yield {
-          result.value should not be firstAmuletRules
-          result.value shouldBe secondAmuletRules
-          result.value should not be thirdAmuletRules
-        }
-      }
-    }
   }
   def mkVoteRequests(): Vector[Contract[VoteRequest.ContractId, VoteRequest]] = {
     val voteRequestContract1 = voteRequest(
@@ -1007,7 +896,9 @@ abstract class ScanStoreTest
   ): Future[ScanStore]
 
   protected def mkUpdateHistory(
-      migrationId: Long
+      migrationId: Long,
+      timeStart: CantonTimestamp,
+      partitionRunwayDays: Int = 7,
   ): Future[UpdateHistory]
 
   private lazy val user1 = userParty(1)
@@ -1446,7 +1337,9 @@ class DbScanStoreTest
         acsStoreDescriptorUserVersion,
         txLogStoreDescriptorUserVersion,
       )(parallelExecutionContext, implicitly, implicitly, implicitly)
-      initializeResult <- store.multiDomainAcsStore.testIngestionSink.initialize()
+      initializeResult <- store.multiDomainAcsStore.testIngestionSink.initialize(
+        mockLedgerConnection()
+      )
       _ <- initializeResult match {
         case ResumeAtOffset(_) | UpdateHistoryInitAtLatestPrunedOffset => Future.unit
         case InitializeAcsAtLatestOffset =>
@@ -1467,9 +1360,17 @@ class DbScanStoreTest
   }
 
   override def mkUpdateHistory(
-      migrationId: Long
+      migrationId: Long,
+      timeStart: CantonTimestamp,
+      partitionRunwayDays: Int = 7,
   ): Future[UpdateHistory] = {
     for {
+      kvStore <- ScanKeyValueStore(
+        dsoParty,
+        mkParticipantId("whatever"),
+        storage.underlying,
+        loggerFactory,
+      )
       updateHistory <- UpdateHistory.create(
         storage.underlying, // not under test
         migrationId,
@@ -1478,13 +1379,19 @@ class DbScanStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
+      _ <- UpdateHistoryTestBase.createUpdateHistoryPartitions(
+        updateHistory,
+        timeStart,
+        partitionRunwayDays,
+      )
     } yield updateHistory
   }
 

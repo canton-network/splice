@@ -7,7 +7,6 @@
 Checks data consistency across all scans of a network.
 
 Checks:
-  migration_info  - /v0/backfilling/migration-info
   updates         - /v2/updates (within a record time window)
   import_updates  - /v0/backfilling/import-updates (limited by number of contracts)
   acs             - /v2/state/acs on the latest snapshot available on all scans (limited by number of contracts)
@@ -35,7 +34,7 @@ from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 import requests
 
@@ -54,7 +53,7 @@ PROFILES = {
     "full":     dict(update_window="24h", import_limit=0,      acs_limit=0,      max_tracked_ids=1_000_000),
 }
 
-ALL_CHECKS = ["migration_info", "updates", "import_updates", "acs"]
+ALL_CHECKS = ["updates", "import_updates", "acs"]
 UNITS = {"updates": "updates", "import_updates": "import updates", "acs": "contracts"}
 MAX_EXAMPLES = 5
 MASK256 = (1 << 256) - 1
@@ -201,8 +200,9 @@ def run_per_scan(clients: List[ScanClient], fn: Callable[[ScanClient], T]) -> Di
 # Fetchers
 # ---------------------------------------------------------------------------
 
-def fetch_migration_info(c: ScanClient, mid: int) -> Optional[dict[str, Any]]:
-    return c.request("POST", "/v0/backfilling/migration-info", json={"migration_id": mid})
+def fetch_latest_record_time(c: ScanClient) -> Optional[str]:
+    response = c.request("GET", "/v0/events/latest-record-time")
+    return response.get("record_time") if response else None
 
 
 def fetch_latest_snapshot(c: ScanClient, mid: int, before: str) -> Optional[str]:
@@ -358,44 +358,6 @@ def compare_digests(name: str, unit: str, results: Dict[str, Digest], max_tracke
     return consistent
 
 
-def normalize_migration_info(info: object, live_tolerance: timedelta) -> object:
-    """Replace record time range ends that are close to wall clock time: on the current
-    migration they just track the current time and naturally differ between scans."""
-    if not isinstance(info, dict):
-        return info
-    now = datetime.now(timezone.utc)
-    info = dict(info)
-    ranges: list[dict[str, Any]] = []
-    for r in info.get("record_time_range", []):
-        r = dict(r)
-        if now - parse_ts(r["max"]) < live_tolerance:
-            r["max"] = "<live>"
-        ranges.append(r)
-    info["record_time_range"] = sorted(ranges, key=lambda r: r.get("synchronizer_id", ""))
-    return info
-
-
-def compare_migration_info(infos: Mapping[str, object], live_tolerance: timedelta) -> bool:
-    log.info("=" * 100)
-    log.info("Result [migration_info] (range ends less than %s behind now are ignored)", live_tolerance)
-    groups: Dict[str, List[str]] = {}
-    for url, info in infos.items():
-        if isinstance(info, Exception):
-            key = f"error: {info}"
-        else:
-            key = json.dumps(normalize_migration_info(info, live_tolerance), sort_keys=True)
-        groups.setdefault(key, []).append(url)
-    ref = max(groups, key=lambda k: len(groups[k]))
-    log.info("  reference (%d of %d scans): %s", len(groups[ref]), len(infos), ref)
-    for key, urls in groups.items():
-        for url in urls:
-            if key == ref:
-                log.info("  ✔ %s", url)
-            else:
-                log.error("  ✖ %s: %s", url, key)
-    return len(groups) == 1
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -408,8 +370,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--checks", default=",".join(ALL_CHECKS), help=f"Comma-separated subset of {ALL_CHECKS}")
     p.add_argument("--scans", help="Comma-separated scan URLs (skips DSO discovery)")
     p.add_argument("--exclude-scans", default="", help="Comma-separated scan URLs to skip")
-    p.add_argument("--migration-info-live-tolerance", default="1h",
-                   help="Ignore migration-info record time range ends less than this behind wall clock time")
     # Profile overrides
     p.add_argument("--update-window", help="Window length, e.g. 30s, 10m, 2h, 1d")
     p.add_argument("--updates-from", help="Window start (ISO 8601). Default: end - window")
@@ -461,44 +421,42 @@ def main() -> int:
     ok = True
     had_errors = False
 
-    # --- phase 1: migration info + latest snapshot, per scan ---
+    # --- phase 1: latest snapshot, per scan ---
     acs_before = args.acs_before or fmt_ts(datetime.now(timezone.utc))
 
-    def phase1(c: ScanClient) -> tuple[Optional[dict[str, Any]], Optional[str]]:
-        info = fetch_migration_info(c, mid)
+    def phase1(c: ScanClient) -> tuple[Optional[str], Optional[str]]:
         snap = fetch_latest_snapshot(c, mid, acs_before) if "acs" in args.checks else None
-        log.info("%s: migration_info=%s latest_snapshot=%s", c.url, json.dumps(info), snap)
-        return info, snap
+        latest = fetch_latest_record_time(c) if "updates" in args.checks and not args.updates_to else None
+        log.info("%s: latest_snapshot=%s latest_record_time=%s", c.url, snap, latest)
+        return snap, latest
 
     p1 = run_per_scan(clients, phase1)
-    infos = {u: (r if isinstance(r, Exception) else r[0]) for u, r in p1.items()}
-    if "migration_info" in args.checks:
-        ok &= compare_migration_info(infos, parse_duration(args.migration_info_live_tolerance))
-
-    # --- choose update window ---
-    window = None
     if "updates" in args.checks:
-        valid = [i for i in infos.values() if isinstance(i, dict) and i.get("record_time_range")]
-        if not valid and not (args.updates_from and args.updates_to):
-            log.error("No migration info with record time ranges; skipping updates check")
+        latest = {url: result[1] for url, result in p1.items() if not isinstance(result, Exception) and result[1]}
+        end = None
+        if args.updates_to:
+            end = parse_ts(args.updates_to)
+        elif latest:
+            slowest = min(latest, key=lambda url: parse_ts(latest[url]))
+            end = parse_ts(latest[slowest])
+            log.info("Update window end is the slowest scan's latest record time: %s (%s)", latest[slowest], slowest)
+        if end is None:
+            log.error("No latest record time available; skipping updates check")
             had_errors = True
+            window = None
         else:
-            max_common = min(max(parse_ts(r["max"]) for r in i["record_time_range"]) for i in valid) if valid else None
-            min_common = max(min(parse_ts(r["min"]) for r in i["record_time_range"]) for i in valid) if valid else None
-            end = parse_ts(args.updates_to) if args.updates_to else max_common
-            assert end is not None  # no --updates-to implies `valid` is non-empty, so max_common is set
             start = parse_ts(args.updates_from) if args.updates_from else end - parse_duration(args.update_window)
-            if min_common and start < min_common:
-                start = min_common - timedelta(microseconds=1)  # 'after' is exclusive
             window = (fmt_ts(start), end)
             secs = (end - start).total_seconds()
             log.info("Update window: (%s, %s] (%.0fs, expect ~%d-%d updates)",
                      window[0], fmt_ts(end), secs, secs, 100 * secs)
+    else:
+        window = None
 
     # --- choose common snapshot ---
     snapshot = None
     if "acs" in args.checks:
-        snaps = {u: r[1] for u, r in p1.items() if not isinstance(r, Exception)}
+        snaps = {url: result[0] for url, result in p1.items() if not isinstance(result, Exception)}
         missing = [u for u, s in snaps.items() if s is None]
         if missing:
             log.warning("Scans without snapshot for migration %d: %s", mid, examples(missing))
@@ -542,6 +500,12 @@ def main() -> int:
         if per_scan:
             ok &= compare_digests(check, UNITS[check], per_scan, args.max_tracked_ids)
             had_errors |= any(d.error for d in per_scan.values())
+            fetched = [digest for digest in per_scan.values() if not digest.error]
+            if check == "updates" and fetched and all(digest.count == 0 for digest in fetched):
+                log.error("No scan returned updates of migration %d in the update window; "
+                          "for a past migration pass --updates-from and --updates-to", mid)
+                ok = False
+                had_errors = True
 
     log.info("=" * 100)
     if ok:

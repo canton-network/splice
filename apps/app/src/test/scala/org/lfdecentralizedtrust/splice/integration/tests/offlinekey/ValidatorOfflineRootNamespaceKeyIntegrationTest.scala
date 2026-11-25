@@ -1,6 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests.offlinekey
 
-import com.digitalasset.canton.crypto.SigningKeyUsage
+import com.digitalasset.canton.crypto.{SigningKeyUsage, SigningPublicKey}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.DelegationRestriction
 import com.digitalasset.canton.version.ProtocolVersion
@@ -88,16 +88,27 @@ class ValidatorOfflineRootNamespaceKeyIntegrationTest
         // used by the alice validator
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
+        testResourcesPath / "standalone-participant-extra-auto-init.conf",
       ),
       Seq(
       ),
       "aliceValidatorExtra",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> "alice_participant_offline_key_2",
+      "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorBackend),
     ) {
       clue("participant starts and works normally") {
         aliceValidatorBackend.startSync()
         instanceHasRootNamespaceKey(aliceValidatorBackend.participantClientWithAdminToken)
+      }
+      clue("Canton created purpose-scoped signing keys") {
+        val keys = aliceValidatorBackend.participantClientWithAdminToken.keys.secret.list()
+        forAll(keys) { key =>
+          key.publicKeyWithName.publicKey match {
+            case k: SigningPublicKey => k.usage should not be SigningKeyUsage.All
+            case _ => succeed
+          }
+        }
       }
       val aliceParticipant = aliceValidatorBackend.participantClientWithAdminToken
       val rootKeyId = aliceParticipant.topology.namespace_delegations

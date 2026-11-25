@@ -152,7 +152,7 @@ final class DbMultiDomainAcsStore[TXE] private[db] (
   // The former is slightly more asynchronous due to RetryProvider/FutureUnlessShutdown.
   def hasFinishedAcsIngestion: Boolean = finishedAcsIngestion.isCompleted
 
-  def lastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp] =
+  override def lastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp] =
     state.get().lastIngestedRecordTimes
 
   def waitUntilRecordTimeReached(
@@ -954,7 +954,10 @@ final class DbMultiDomainAcsStore[TXE] private[db] (
       }
     }
 
-    override def initialize()(implicit traceContext: TraceContext): Future[IngestionStart] = {
+    override def initialize(connection: BaseLedgerConnection)(implicit
+        traceContext: TraceContext,
+        mat: Materializer,
+    ): Future[IngestionStart] = {
       for {
         acsInitResult <- initializeIngestionState(AcsStoreId.unwrap(acsStoreId))
           .map(AcsStoreId.subst)

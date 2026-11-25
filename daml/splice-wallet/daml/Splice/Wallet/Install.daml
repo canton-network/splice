@@ -50,21 +50,27 @@ executeAmuletOperationRec : ExecutionContext -> [TransferInput] -> [AmuletOperat
 executeAmuletOperationRec executionContext inputs prevResults (operation::remainingOperations) = do
   case operation of
     CO_AppPayment cid -> do
+      _ <- fetchButArchiveLater (ForOwner with dso = executionContext.dso; owner = executionContext.endUser) cid
       result <- exercise cid (AppPaymentRequest_Accept inputs executionContext.paymentContext executionContext.validator)
       handleResultAcceptAppPayment result
     CO_CompleteAcceptedTransfer cid -> do
+      acceptedOffer <- fetchUncheckedButArchiveLater cid
+      requireEndUser executionContext.endUser "sender" acceptedOffer.sender
       result <- exercise cid (AcceptedTransferOffer_Complete inputs executionContext.paymentContext executionContext.validator)
       handleResultCompleteAcceptedTransfer result
     CO_SubscriptionAcceptAndMakeInitialPayment cid -> do
+      _ <- fetchButArchiveLater (ForOwner with dso = executionContext.dso; owner = executionContext.endUser) cid
       result <- exercise cid (SubscriptionRequest_AcceptAndMakePayment inputs executionContext.paymentContext executionContext.validator)
       handleResultSubscriptionAcceptAndMakePayment result
     CO_SubscriptionMakePayment cid -> do
+      _ <- fetchButArchiveLater (ForOwner with dso = executionContext.dso; owner = executionContext.endUser) cid
       result <- exercise cid (SubscriptionIdleState_MakePayment inputs executionContext.paymentContext executionContext.validator)
       handleResultSubscriptionMakePayment result
     CO_BuyMemberTraffic trafficAmount memberId synchronizerId migrationId minTopupInterval topupStateCid -> do
       result <- handleBuyMemberTraffic trafficAmount memberId synchronizerId migrationId minTopupInterval topupStateCid
       handleResult COO_BuyMemberTraffic result
     CO_CompleteBuyTrafficRequest cid -> do
+      _ <- fetchButArchiveLater (ForOwner with dso = executionContext.dso; owner = executionContext.endUser) cid
       result <- exercise cid (BuyTrafficRequest_Complete inputs executionContext.paymentContext executionContext.validator)
       handleResultBuyTraffic result
     CO_MergeTransferInputs -> do
@@ -161,6 +167,7 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
 
     handleBuyMemberTraffic: Int -> Text -> Text -> Int -> RelTime -> Optional (ContractId ValidatorTopUpState) -> Update (ContractId MemberTraffic, Optional (ContractId Amulet))
     handleBuyMemberTraffic trafficAmount memberId synchronizerId migrationId minTopupInterval topupStateCidO = do
+      require "Only a validator can buy member traffic" (executionContext.endUser == executionContext.validator)
       now <- getTime
       -- validate and update topupState if provided
       forA_ topupStateCidO $ \topupStateCid -> do
@@ -222,6 +229,8 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
 
     handleRenewTransferPreapproval : ContractId TransferPreapproval -> Time -> Update (ContractId TransferPreapproval, [TransferInput])
     handleRenewTransferPreapproval previousApprovalCid newExpiresAt = do
+      previousApproval <- fetchButArchiveLater (ForDso executionContext.dso) previousApprovalCid
+      requireEndUser executionContext.endUser "provider" previousApproval.provider
       TransferPreapproval_RenewResult{..} <- exercise previousApprovalCid TransferPreapproval_Renew with
         context = executionContext.paymentContext
         inputs
@@ -236,6 +245,14 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
 
 executeAmuletOperationRec _executionContext _inputs prevResults [] = do
   return prevResults
+
+-- | Check that the end user plays the given role on a contract that a choice of the `WalletAppInstall` acts on.
+--
+-- The choices of the `WalletAppInstall` have the authority of both the end user and the validator party.
+-- Callers use this check instead of a contract group check for templates without a `HasCheckedFetch` instance.
+requireEndUser : Party -> Text -> Party -> Update ()
+requireEndUser endUserParty role party =
+  require (role <> " " <> show party <> " must match endUserParty " <> show endUserParty) (party == endUserParty)
 
 mkMergeAmuletAndRewardsTransfer : Party -> [TransferInput] -> Transfer
 mkMergeAmuletAndRewardsTransfer endUserP inputs = do
@@ -440,7 +457,8 @@ template WalletAppInstall
       with
         cid : ContractId AppPaymentRequest
       controller validatorParty
-      do result <- exercise cid AppPaymentRequest_Reject
+      do _ <- fetchButArchiveLater (ForOwner with dso = dsoParty; owner = endUserParty) cid
+         result <- exercise cid AppPaymentRequest_Reject
          return WalletAppInstall_AppPaymentRequest_RejectResult with
             terminatedAppPayment = result.terminatedAppPayment
 
@@ -456,7 +474,8 @@ template WalletAppInstall
       with
         cid : ContractId SubscriptionRequest
       controller validatorParty
-      do result <- exercise cid SubscriptionRequest_Reject
+      do _ <- fetchButArchiveLater (ForOwner with dso = dsoParty; owner = endUserParty) cid
+         result <- exercise cid SubscriptionRequest_Reject
          return WalletAppInstall_SubscriptionRequest_RejectResult with
             terminatedSubscription = result.terminatedSubscription
 
@@ -464,7 +483,8 @@ template WalletAppInstall
       with
         cid : ContractId SubscriptionIdleState
       controller validatorParty
-      do result <- exercise cid SubscriptionIdleState_CancelSubscription
+      do _ <- fetchButArchiveLater (ForOwner with dso = dsoParty; owner = endUserParty) cid
+         result <- exercise cid SubscriptionIdleState_CancelSubscription
          return WalletAppInstall_SubscriptionIdleState_CancelSubscriptionResult with
             terminatedSubscription = result.terminatedSubscription
 
@@ -487,7 +507,9 @@ template WalletAppInstall
       with
         cid : ContractId TransferOffer
       controller validatorParty
-      do acceptResult <- exercise cid TransferOffer_Accept
+      do offer <- fetchUncheckedButArchiveLater cid
+         requireEndUser endUserParty "receiver" offer.receiver
+         acceptResult <- exercise cid TransferOffer_Accept
          return WalletAppInstall_TransferOffer_AcceptResult with
             acceptedTransferOffer = acceptResult.acceptedTransferOffer
 
@@ -495,7 +517,9 @@ template WalletAppInstall
       with
         cid : ContractId TransferOffer
       controller validatorParty
-      do rejectResult <- exercise cid TransferOffer_Reject
+      do offer <- fetchUncheckedButArchiveLater cid
+         requireEndUser endUserParty "receiver" offer.receiver
+         rejectResult <- exercise cid TransferOffer_Reject
          return WalletAppInstall_TransferOffer_RejectResult with
            trackingInfo = rejectResult.trackingInfo
 
@@ -504,7 +528,9 @@ template WalletAppInstall
         cid : ContractId TransferOffer
         reason : Text
       controller validatorParty
-      do withdrawResult <- exercise cid TransferOffer_Withdraw with ..
+      do offer <- fetchUncheckedButArchiveLater cid
+         requireEndUser endUserParty "sender" offer.sender
+         withdrawResult <- exercise cid TransferOffer_Withdraw with ..
          return WalletAppInstall_TransferOffer_WithdrawResult with
            trackingInfo = withdrawResult.trackingInfo
 
@@ -521,7 +547,9 @@ template WalletAppInstall
         cid : ContractId AcceptedTransferOffer
         reason : Text
       controller validatorParty
-      do result <- exercise cid $ AcceptedTransferOffer_Abort with ..
+      do acceptedOffer <- fetchUncheckedButArchiveLater cid
+         requireEndUser endUserParty "sender" acceptedOffer.sender
+         result <- exercise cid $ AcceptedTransferOffer_Abort with ..
          return WalletAppInstall_AcceptedTransferOffer_AbortResult with
             trackingInfo = result.trackingInfo
 
@@ -530,7 +558,9 @@ template WalletAppInstall
         cid : ContractId AcceptedTransferOffer
         reason : Text
       controller validatorParty
-      do result <- exercise cid $ AcceptedTransferOffer_Withdraw with ..
+      do acceptedOffer <- fetchUncheckedButArchiveLater cid
+         requireEndUser endUserParty "receiver" acceptedOffer.receiver
+         result <- exercise cid $ AcceptedTransferOffer_Withdraw with ..
          return WalletAppInstall_AcceptedTransferOffer_WithdrawResult with
             trackingInfo = result.trackingInfo
 
@@ -562,7 +592,8 @@ template WalletAppInstall
         requestCid : ContractId BuyTrafficRequest
         reason : Text
       controller validatorParty
-      do result <- exercise requestCid $ BuyTrafficRequest_Cancel with reason
+      do _ <- fetchButArchiveLater (ForOwner with dso = dsoParty; owner = endUserParty) requestCid
+         result <- exercise requestCid $ BuyTrafficRequest_Cancel with reason
          return WalletAppInstall_BuyTrafficRequest_CancelResult with
           trackingInfo = result.trackingInfo
 
@@ -570,7 +601,8 @@ template WalletAppInstall
       with
         requestCid : ContractId BuyTrafficRequest
       controller validatorParty
-      do result <- exercise requestCid $ BuyTrafficRequest_Expire
+      do _ <- fetchButArchiveLater (ForOwner with dso = dsoParty; owner = endUserParty) requestCid
+         result <- exercise requestCid $ BuyTrafficRequest_Expire
          return WalletAppInstall_BuyTrafficRequest_ExpireResult with
           trackingInfo = result.trackingInfo
 
@@ -578,7 +610,9 @@ template WalletAppInstall
       with
         cid : ContractId FeaturedAppRight
       controller validatorParty
-      do exercise cid $ FeaturedAppRight_Cancel
+      do -- checks that the end user is the provider
+         _ <- fetchButArchiveLater (ForOwner with dso = dsoParty; owner = endUserParty) cid
+         exercise cid $ FeaturedAppRight_Cancel
          pure WalletAppInstall_FeaturedAppRights_CancelResult
 
     nonconsuming choice WalletAppInstall_FeaturedAppRights_SelfGrant : WalletAppInstall_FeaturedAppRights_SelfGrantResult
@@ -588,8 +622,7 @@ template WalletAppInstall
         appKind : Optional FeaturedAppKind
         opsParties : Optional [Party]
       controller validatorParty
-      do require "opsParties has at most 10 entries" (optional 0 length opsParties <= 10)
-         result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
+      do result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
            provider = endUserParty
            activityWeight
            appKind
@@ -677,7 +710,8 @@ template WalletAppInstall
         transferFactoryCid : ContractId Splice.Api.Token.TransferInstructionV2.TransferFactory
         transferArg : Splice.Api.Token.TransferInstructionV2.TransferFactory_Transfer
       controller validatorParty
-      do TokenStandard.Utils.requireMatchExpected ("transfer.instrumentId", transferArg.transfer.instrumentId) (amuletInstrumentIdV2 dsoParty)
+      do TokenStandard.Utils.checkActors transferArg.actors [[endUserParty]]
+         TokenStandard.Utils.requireMatchExpected ("transfer.instrumentId", transferArg.transfer.instrumentId) (amuletInstrumentIdV2 dsoParty)
          exercise transferFactoryCid transferArg
 
     nonconsuming choice WalletAppInstall_TransferInstructionV2_Accept : Splice.Api.Token.TransferInstructionV2.TransferInstructionResult

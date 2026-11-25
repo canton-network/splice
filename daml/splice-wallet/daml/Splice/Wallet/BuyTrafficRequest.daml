@@ -6,6 +6,7 @@ module Splice.Wallet.BuyTrafficRequest where
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.DecentralizedSynchronizer (MemberTraffic)
+import Splice.Types (ForOwner(..))
 import Splice.Util
 
 
@@ -86,3 +87,6 @@ template BuyTrafficRequest
         require "Contract has expired" (now >= expiresAt)
         let trackingInfo = BuyTrafficRequestTrackingInfo with ..
         return BuyTrafficRequest_ExpireResult with ..
+
+instance HasCheckedFetch BuyTrafficRequest ForOwner where
+  contractGroupId BuyTrafficRequest{dso, endUserParty} = ForOwner with dso; owner = endUserParty

@@ -64,6 +64,7 @@ services:
       - CANTON_PARTICIPANT_POSTGRES_DB=${PARTICIPANT_DB_NAME}
       - CANTON_PARTICIPANT_POSTGRES_PORT=${SPLICE_DB_PORT}
       - ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER=canton.participants.participant.monitoring.http-health-server.port=5071
+      - CANTON_PARTICIPANT_IDENTIFIER=${PARTICIPANT_IDENTIFIER}
       # TODO(DACH-NY/canton-network-internal#8256): tie disabling admin API auth to disabling ledger API auth
       - ADDITIONAL_CONFIG_DISABLE_ADMIN_API_AUTH=canton.participants.participant.admin-api.auth-services=[]
     depends_on:

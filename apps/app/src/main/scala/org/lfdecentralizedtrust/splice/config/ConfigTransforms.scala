@@ -206,7 +206,6 @@ object ConfigTransforms {
       // Tests default to TrafficBasedAppRewards. Networks (which don't apply
       // ConfigTransforms.defaults) fall back to the FeaturedAppMarkers default
       withTrafficBasedAppRewards,
-      withPerAcsSnapshotTablesEnabled,
     )
   }
 
@@ -693,9 +692,6 @@ object ConfigTransforms {
         )
       )
     )
-
-  def withPerAcsSnapshotTablesEnabled: ConfigTransform =
-    updateAllScanAppConfigs_(c => c.copy(perAcsSnapshotTablesEnabled = true))
 
   // A BFT sequencer that misses its segment (e.g., right after onboarding or under load) is
   // blacklisted for several epochs, during which it rejects all client submissions.

@@ -543,6 +543,7 @@ case class SvAppBackendConfig(
     unclaimedDevelopmentFundCouponsThreshold: Int = 10,
     svAcsStoreDescriptorUserVersion: Option[Long] = None,
     dsoAcsStoreDescriptorUserVersion: Option[Long] = None,
+    unavailablePartiesStoreDescriptorUserVersion: Option[Long] = None,
     // TODO(#3897) Consider removing this once we're confident in this approach.
     // Safety option in case setting the observers ends up causing issues e.g. overloading validators that now receive larger transactions.
     convertFeaturedAppActivityMarkerObservers: Boolean = true,
@@ -644,7 +645,7 @@ final case class SvSequencerConfig(
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
     // TODO (#8263): remove once DA BFT is the only supported sequencer
-    isCantonBftSequencer: Boolean = false,
+    isCantonBftSequencer: Boolean = true,
     cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,

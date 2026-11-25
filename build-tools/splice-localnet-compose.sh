@@ -28,7 +28,7 @@ export DB_PORT
 ACTION=""
 MULTI_SYNC_PROFILE=()
 DOWN_COMMAND=( stop )
-ALPHA_PROTOCOL_VERSION_ENV=$LOCALNET_DIR/env/alpha-protocol-version.env
+ALPHA_PROTOCOL_VERSION_ENV=""
 
 function usage() {
     echo "Usage: $SCRIPTNAME <start|stop> [-D] [-M] [-u] [-p <protocol_version>]"
@@ -38,6 +38,9 @@ function usage() {
     echo "  -M                        Start the localnet with the 'multi-sync' profile enabled"
     echo "  -u                        Enable unstable Canton protocol versions. WARNING: This should be used only for temporary test environments that be be reset often."
     echo "  -p <protocol_version>     Set the PROTOCOL_VERSION environment variable to the specified value (e.g. 35)"
+    echo ""
+    echo "Environment:"
+    echo "  LOCALNET_START_TIMEOUT    Maximum time to wait for the localnet to start (default: 10m)"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -125,7 +128,13 @@ case $ACTION in
               done
           fi
         done >> "${SPLICE_ROOT}/log/compose.log" 2>&1 &
-        "${DOCKER_COMPOSE_CMD[@]}" "${MULTI_SYNC_PROFILE[@]}" up -d || _error "Failed to start localnet, please check ${SPLICE_ROOT}/log/console.log for details"
+        # `up -d` blocks until all `depends_on` health conditions are met, which can take hours
+        # given the healthcheck retries, so bound it to fail fast instead of hanging CI.
+        start_timeout="${LOCALNET_START_TIMEOUT:-10m}"
+        if ! timeout --kill-after=30s "$start_timeout" "${DOCKER_COMPOSE_CMD[@]}" "${MULTI_SYNC_PROFILE[@]}" up -d; then
+            "${DOCKER_COMPOSE_CMD[@]}" "${MULTI_SYNC_PROFILE[@]}" ps -a || true
+            _error "Failed to start localnet within ${start_timeout}, please check ${SPLICE_ROOT}/log/console.log and ${SPLICE_ROOT}/log/compose-localnet-*.clog for details"
+        fi
         ;;
     stop)
         "${DOCKER_COMPOSE_CMD[@]}" "${MULTI_SYNC_PROFILE[@]}" "${DOWN_COMMAND[@]}"

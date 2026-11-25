@@ -59,6 +59,9 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
 
   def synchronizerId: SynchronizerId
 
+  /** The highest record time that this store has ingested since it was started, per synchronizer. */
+  def lastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp]
+
   def defaultLimit: Limit
 
   protected implicit lazy val mc: MetricsContext = MetricsContext(
@@ -805,7 +808,10 @@ object MultiDomainAcsStore extends StoreErrors {
     def ingestionFilter: IngestionFilter
 
     /** Must be the first method called. Returns information about where and how to start ingestion. */
-    def initialize()(implicit traceContext: TraceContext): Future[IngestionStart]
+    def initialize(connection: BaseLedgerConnection)(implicit
+        traceContext: TraceContext,
+        mat: Materializer,
+    ): Future[IngestionStart]
 
     @VisibleForTesting
     def ingestAcs(

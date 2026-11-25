@@ -7,7 +7,6 @@ import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.daml.metrics.api.MetricQualification.Latency
 import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.http.scaladsl.server.{Directive0, RouteResult}
 
 import scala.util.{Failure, Success}
@@ -57,7 +56,7 @@ class HttpServerMetrics(
 
   // This directive is used to wrap HTTP routes with metrics collection.
   // We need to pass the operation explicitly, which represents the OpenAPI operation ID.
-  def withMetrics(service: String)(operation: String)(implicit tc: TraceContext): Directive0 = {
+  def withMetrics(service: String)(operation: String): Directive0 = {
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
     extractExecutionContext.flatMap { implicit ec =>
@@ -65,19 +64,8 @@ class HttpServerMetrics(
         val c = MetricsContext(Operation -> operation, HttpService -> service)
         implicit val mc: MetricsContext = req.headers
           .find(_.is(customSourceUiHeader)) // custom header added by the UI
-          .map { header =>
-            val sourceUi = header.value
-            logger.debug(
-              s"HTTP Request from UI($customSourceUiHeader: $sourceUi): service = $service, operation= $operation"
-            )
-            c.withExtraLabels(SourceUi -> sourceUi)
-          }
-          .getOrElse {
-            logger.debug(
-              s"HTTP Request no source UI header: service = $service, operation= $operation"
-            )
-            c
-          }
+          .map(header => c.withExtraLabels(SourceUi -> header.value))
+          .getOrElse(c)
 
         inFlightRequests.inc()
         val timing = requestTiming.startAsync()

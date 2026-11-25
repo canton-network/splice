@@ -264,13 +264,19 @@ trait PollingTrigger extends Trigger with FlagCloseableAsync {
     }
   }
 
-  /** Runs the trigger once.
+  /** Runs one iteration of the polling loop of the paused trigger, i.e., [[performWorkIfAvailable]].
+    * Unlike the polling loop, it does not wait for the trigger to be ready to work, and it returns
+    * failures instead of logging and retrying them.
     *
     * The resulting Future completes with true when the trigger is done executing the work,
     * or completes with false if there was nothing to do.
     * See [[pause()]] for a description of when work is "done".
+    *
+    * Note that "done" does not mean "succeeded": for task-based triggers, a task that was skipped
+    * because it had become stale also counts as done. Tests of such triggers should use
+    * [[PollingParallelTaskExecutionTrigger.runOnceWithTaskOutcome]] or the helpers in `TriggerTestUtil`.
     */
-  def runOnce()(implicit traceContext: TraceContext): Future[Boolean] = {
+  def runOnePollingIteration()(implicit traceContext: TraceContext): Future[Boolean] = {
     blocking {
       mutex.exclusive {
         assert(

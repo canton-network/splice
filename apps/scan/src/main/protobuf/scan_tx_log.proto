@@ -5,52 +5,14 @@ syntax = "proto3";
 
 package org.lfdecentralizedtrust.splice.scan.store;
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "scalapb/scalapb.proto";
-
-message SteppedRate {
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  message Step {
-    option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-    string from = 1 [(scalapb.field).type = "scala.math.BigDecimal"];
-    string rate = 2 [(scalapb.field).type = "scala.math.BigDecimal"];
-  }
-
-  string initial_rate = 1 [(scalapb.field).type = "scala.math.BigDecimal"];
-  repeated Step steps = 2;
-}
 
 message ErrorTxLogEntry {
   option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
   option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
 
   string event_id = 1;
-}
-
-message OpenMiningRoundTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  string amulet_create_fee = 4 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string holding_fee = 5 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string lock_holder_fee = 6 [(scalapb.field).type = "scala.math.BigDecimal"];
-  SteppedRate transfer_fee = 7;
-}
-
-message ClosedMiningRoundTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  google.protobuf.Timestamp effective_at = 4 [(scalapb.field).type = "java.time.Instant"];
 }
 
 message VoteRequestTxLogEntry {

@@ -26,7 +26,7 @@ def process_file(filepath: str) -> None:
     with open(filepath, 'r+') as file:
         lines = file.readlines()
 
-        formatted_dt = None
+        formatted_dt: str | None = None
 
         def convert_timestamp(m: re.Match[str]) -> str:
             nonlocal formatted_dt

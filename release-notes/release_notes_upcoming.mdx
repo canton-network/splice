@@ -2,11 +2,31 @@
 
 {/* Add all release notes in this section */}
 
+  - Participant
+
+    - **Breaking** The participant's repair service (`canton.features.enable-repair-commands`) is now disabled by default.
+      This was originally announced for 0.10.0, but the default change was blocked by a bug.
+      **SVs must enable the repair service**, as Scan's `/v0/acs/{party}` endpoint, which validators use to restore from an identities dump,
+      exports the ACS through it. To enable it, set `enableRepairCommands: true` in the `splice-participant` Helm chart
+      (see updated example `participant-values.yaml` for SVs).
+      Validators only need the repair service while restoring from an identities dump (`migrateValidatorParty`) or while running
+      repair commands such as `participant.repair.import_acs`.
+      The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
+
   - Scan App
 
     - Removed the internal `/v0/transfer-command-counter/{party}` and `/v0/transfer-command/status` endpoints.
       Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0, this removes
       the remaining parts.
+    - Removed the deprecated `/v0/amulet-config-for-round` endpoint. Use the `transferConfigUsd` and `amuletPrice`
+      fields of the `OpenMiningRound` contracts returned by `/v0/open-and-issuing-mining-rounds` instead.
+    - The `DeleteCorruptAcsSnapshotTrigger` is removed because it is obsolete.
+    - Scan switches its update history to tables partitioned by record time. On the first start, a database migration
+      renames the existing update history tables to `*_legacy` (no data is copied) and creates the new tables. Scan reads
+      from both. After this migration, Scan cannot be downgraded to an earlier version.
+    - ACS snapshots are now always stored in per-snapshot tables. The `per-acs-snapshot-tables-enabled` setting is
+      deprecated: `true` is accepted and has no effect, `false` is rejected at startup. Remove it from your configuration.
+    - An SV that joins after the switch cannot backfill update history from other SVs until a later release.
 
   - Validator App
 
@@ -14,7 +34,23 @@
       endpoints. Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0,
       this removes the remaining parts.
 
+
+
 ## Upcoming for next minor release (template):
+
+  - Helm charts and Docker images
+
+    - **Breaking** The deprecated `splice-postgres` Helm chart has been removed. Run Splice against a PostgreSQL
+      instance that you provision yourself; see the [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration).
+
+    - `splice-participant`: new required value `nodeIdentifier`. Canton now initializes the
+      participant's identity itself, so the chart must be given the same node identifier that
+      the controlling SV or validator app expects, i.e. the previous `nodeIdentifier` of `splice-sv-node`
+      or `splice-validator`. Set it in `participant-values.yaml`.
+
+    - `splice-participant`: new value `enableAutoInit`, default `true`. Set it to `false` when the
+      participant's identity comes from elsewhere, e.g. while restoring from an identities dump or
+      when using an offline root namespace key.
 
 {/* If you introduce any breaking changes in the next minor release,
     then in addition to the release notes as above,
@@ -33,6 +69,43 @@
 
     - Breaking Deployment Changes:
 
+      - the `splice-participant` helm chart now requires `nodeIdentifier`. copy the value that you previously set on the sv app or validator app helm charts.
+
     - Protocol Changes:
 
     - Daml Model Changes:
+
+      - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
+        that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
+        SV apps pass the node states once this version is vetted.
+
+      - Security hardening: add extra assertions to the `WalletAppInstall` choices.
+
+      - `splice-wallet` now depends on `splice-util-batched-markers` and `splice-util-token-standard-wallet`.
+        The versions of these packages that validators vet now follow the voted `splice-wallet` version.
+
+      - All Canton Coin transactions now emit token standard V2 transaction-history events, i.e.,
+        `EventLog_HoldingsChange` events reported by the DSO party. Clients can rely on these events
+        to parse the history of all Canton Coin holdings.
+
+      - To guarantee this, the minimum supported Daml package versions are raised to the ones introduced
+        in Splice 0.6.11, which are the first to implement the token standard V2:
+
+          | name | version |
+          | :--- | :--- |
+          | amulet | 0.1.21 |
+          | amuletNameService | 0.1.22 |
+          | dsoGovernance | 0.1.27 |
+          | validatorLifecycle | 0.1.8 |
+          | wallet | 0.1.22 |
+          | walletPayments | 0.1.21 |
+
+        Nodes no longer upload or vet older versions of these packages, and downgrading the Daml models
+        below these versions is no longer supported.
+
+      - Added a new template `ActivityRecorder` in `splice-amulet` to support extra activity reporting
+        by dedicated synchronizers, as specified by the
+        [CIP-0104 App Activity Recording Extension Hook](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md#app-activity-recording-extension-hook).
+
+    - The deprecated `splice-postgres` Helm chart has been removed. Run Splice against a PostgreSQL
+      instance that you provision yourself; see the [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration).

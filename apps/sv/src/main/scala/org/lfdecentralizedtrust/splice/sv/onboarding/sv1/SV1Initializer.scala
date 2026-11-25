@@ -329,6 +329,7 @@ class SV1Initializer(
           retryProvider,
           loggerFactory,
           config.scan,
+          packageVersionSupport,
         ),
       )
       _ = dsoAutomation.registerLsuTriggers()
@@ -336,6 +337,7 @@ class SV1Initializer(
       withDsoStore = new WithDsoStore(
         dsoAutomation,
         psid,
+        packageVersionSupport,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -601,6 +603,7 @@ class SV1Initializer(
   private class WithDsoStore(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
       psid: PhysicalSynchronizerId,
+      packageVersionSupport: PackageVersionSupport,
   ) {
 
     private val synchronizerId = psid.logical
@@ -614,6 +617,7 @@ class SV1Initializer(
       retryProvider = retryProvider,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
+      packageVersionSupport = packageVersionSupport,
     )
 
     /** The one and only entry-point: found a fresh DSO, given a properly

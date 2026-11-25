@@ -246,7 +246,7 @@
         "fullnameOverride": "grafana",
         "grafana.ini": {
           "database": {
-            "host": "grafana-postgres.observability.svc.cluster.local:5432",
+            "host": "grafana-postgres-helmless.observability.svc.cluster.local:5432",
             "name": "cantonnet",
             "password": "${postgresPassword}",
             "type": "postgres",

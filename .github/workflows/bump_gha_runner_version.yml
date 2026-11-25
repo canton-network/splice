@@ -6,6 +6,8 @@ on:
 
 jobs:
   bump_gha_runner_version:
+    # Only run in the main repo, not in forks
+    if: github.repository == 'canton-network/splice'
     name: Bump GHA runner version
     runs-on: self-hosted-k8s-small
     container:

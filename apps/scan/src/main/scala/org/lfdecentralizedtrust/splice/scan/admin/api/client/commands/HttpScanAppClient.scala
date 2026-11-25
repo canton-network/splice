@@ -68,6 +68,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.p2p.grpc.P2PGrpcNetworking.P2PEndpoint
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.P2PEndpointConfig
 import com.digitalasset.canton.topology.{
@@ -662,66 +663,6 @@ object HttpScanAppClient {
           .leftMap(_.toString)
       case http.LookupTransferPreapprovalByPartyResponse.NotFound(_) =>
         Right(None)
-    }
-  }
-
-  final case class RateStep(
-      amount: BigDecimal,
-      rate: BigDecimal,
-  )
-  final case class SteppedRate(
-      initial: BigDecimal,
-      steps: Seq[RateStep],
-  )
-  final case class AmuletConfig(
-      amuletCreateFee: BigDecimal,
-      holdingFee: BigDecimal,
-      lockHolderFee: BigDecimal,
-      transferFee: SteppedRate,
-  )
-  case class GetAmuletConfigForRound(round: Long)
-      extends InternalBaseCommand[http.GetAmuletConfigForRoundResponse, AmuletConfig] {
-
-    override def submitRequest(
-        client: ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetAmuletConfigForRoundResponse] =
-      client.getAmuletConfigForRound(round, headers)
-
-    private def decodeStep(step: definitions.RateStep): Either[String, RateStep] =
-      for {
-        amount <- Codec.decode(Codec.BigDecimal)(step.amount)
-        rate <- Codec.decode(Codec.BigDecimal)(step.rate)
-      } yield RateStep(amount, rate)
-
-    private def decodeTransferFeeSteps(
-        tf: Seq[definitions.RateStep]
-    ): Either[String, Seq[RateStep]] =
-      tf.map(decodeStep(_)).sequence
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = {
-      case http.GetAmuletConfigForRoundResponse.OK(response) =>
-        for {
-          amuletCreate <- Codec.decode(Codec.BigDecimal)(response.amuletCreateFee)
-          holding <- Codec.decode(Codec.BigDecimal)(response.holdingFee)
-          lockHolder <- Codec.decode(Codec.BigDecimal)(response.lockHolderFee)
-          initial <- Codec.decode(Codec.BigDecimal)(response.transferFee.initial)
-          steps <- decodeTransferFeeSteps(response.transferFee.steps.toSeq)
-        } yield {
-          AmuletConfig(
-            amuletCreateFee = amuletCreate,
-            holdingFee = holding,
-            lockHolderFee = lockHolder,
-            transferFee = SteppedRate(
-              initial = initial,
-              steps = steps,
-            ),
-          )
-        }
-      case http.GetAmuletConfigForRoundResponse.NotFound(err) =>
-        Left(err.error)
     }
   }
 
@@ -1599,6 +1540,71 @@ object HttpScanAppClient {
         Right(response)
     }
   }
+
+  case class GetVotesBackfillingStatus(before: CantonTimestamp)
+      extends InternalBaseCommand[
+        http.GetVotesBackfillingStatusResponse,
+        definitions.VotesAvailability,
+      ] {
+    override def submitRequest(
+        client: http.ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.GetVotesBackfillingStatusResponse] =
+      client.getVotesBackfillingStatus(
+        before.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        headers,
+      )
+
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
+      case http.GetVotesBackfillingStatusResponse.OK(response) =>
+        Right(response.availability)
+    }
+  }
+
+  case class GetVotesBefore(
+      before: DbVotesStore.VotesBackfillCursor,
+      count: Int,
+  ) extends InternalBaseCommand[
+        http.GetVotesBeforeResponse,
+        Seq[DbVotesStore.EncodedPeerVoteResult],
+      ] {
+    override def submitRequest(
+        client: http.ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.GetVotesBeforeResponse] = {
+      client.getVotesBefore(
+        definitions.GetVotesBeforeRequest(
+          before.recordTime.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          before.eventNumber,
+          count,
+        ),
+        headers,
+      )
+    }
+
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
+      case http.GetVotesBeforeResponse.OK(response) =>
+        Right(response.votes.map(decodeVoteResultForBackfilling))
+    }
+  }
+
+  private def decodeVoteResultForBackfilling(
+      row: definitions.VoteResultForBackfilling
+  ): DbVotesStore.EncodedPeerVoteResult =
+    DbVotesStore.EncodedPeerVoteResult(
+      recordTime = CantonTimestamp.assertFromInstant(row.recordTime.toInstant),
+      synchronizerId = row.synchronizerId,
+      updateId = row.updateId,
+      eventNumber = row.eventNumber,
+      contractId = row.contractId,
+      choiceResult = row.choiceResult.noSpaces,
+    )
 
   case class GetTransferFactory(choiceArgs: transferinstructionv1.TransferFactory_Transfer)
       extends TokenStandardTransferInstructionBaseCommand[

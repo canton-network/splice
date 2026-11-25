@@ -14,7 +14,6 @@ const PulumiProjectConfigSchema = z.object({
   interAppsDependencies: z.boolean(),
   cloudSql: CloudSqlConfigSchema,
   defaultSplicePostgresConfig: SplicePostgresSchema.default({
-    deployment: 'docker-image',
     postgresImage: defaultPostgresImage,
   }),
   allowDowngrade: z.boolean(),

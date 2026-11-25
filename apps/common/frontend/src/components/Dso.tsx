@@ -73,15 +73,15 @@ function getInfoTable(title: string, rows: { key: string; value: string; isParty
 function createRow(key: string, value: string, isParty: boolean = false) {
   return { key, value, isParty };
 }
-const GeneralInformationView: React.FC<{ dsoInfo: DsoInfo; svInfo: SvInfo }> = ({
+const GeneralInformationView: React.FC<{ dsoInfo: DsoInfo; svInfo: Partial<SvInfo> }> = ({
   dsoInfo,
   svInfo,
 }) => {
   const cs: { key: string; value: string }[] = [];
   dsoInfo.dsoRules.payload.svs.forEach((value, key) => cs.push(createRow(key, value.name)));
   const svInfos = [
-    createRow('svUser', svInfo.svUser),
-    createRow('svPartyId', svInfo.svPartyId, true),
+    createRow('svUser', svInfo.svUser ?? ''),
+    createRow('svPartyId', svInfo.svPartyId ?? '', true),
   ];
   const membersInfos: { key: string; value: string; isParty: boolean }[] = [];
   for (const member of cs) {
@@ -191,7 +191,7 @@ function tabProps(info: string) {
 }
 interface DsoViewPrettyJSONProps {
   dsoInfoQuery: UseQueryResult<DsoInfo>;
-  svInfoQuery: UseQueryResult<SvInfo>;
+  svInfoQuery: UseQueryResult<Partial<SvInfo>>;
   sequencerStatusQuery?: UseQueryResult<NodeStatus>;
   mediatorStatusQuery?: UseQueryResult<NodeStatus>;
 }

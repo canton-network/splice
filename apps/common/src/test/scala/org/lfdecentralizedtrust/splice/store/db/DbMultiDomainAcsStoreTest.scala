@@ -228,7 +228,7 @@ class DbMultiDomainAcsStoreTest
       "refuse to ingest the ACS twice" in {
         val store = mkStore(acsId = 0, txLogId = Some(0))
         for {
-          _ <- store.ingestionSink.initialize()
+          _ <- store.ingestionSink.initialize(mockLedgerConnection())
           _ <- acs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))(store)
           error <- acs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))(store).failed
           _ = error.getMessage should include("already ingested")
@@ -239,7 +239,7 @@ class DbMultiDomainAcsStoreTest
         val ingestedOneItem = Promise[Unit]()
         val continueIngesting = Promise[Unit]()
         for {
-          _ <- store.ingestionSink.initialize()
+          _ <- store.ingestionSink.initialize(mockLedgerConnection())
           _ = store.hasFinishedAcsIngestion should be(false)
           ingestionCompletedFuture = store.ingestionSink.ingestAcsStreamInBatches(
             Source
@@ -265,7 +265,7 @@ class DbMultiDomainAcsStoreTest
       "initialize empty stores with equal descriptors" in {
         val store = mkStore(acsId = 0, txLogId = Some(0))
         for {
-          r <- store.ingestionSink.initialize()
+          r <- store.ingestionSink.initialize(mockLedgerConnection())
           _ = r shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ = store.acsStoreId shouldBe store.txLogStoreId
           _ = store.hasFinishedAcsIngestion shouldBe false
@@ -274,7 +274,7 @@ class DbMultiDomainAcsStoreTest
       "initialize empty stores with different descriptors" in {
         val store = mkStore(acsId = 0, txLogId = Some(1))
         for {
-          r <- store.ingestionSink.initialize()
+          r <- store.ingestionSink.initialize(mockLedgerConnection())
           _ = r shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ = store.acsStoreId should not be store.txLogStoreId
           _ = store.hasFinishedAcsIngestion shouldBe false
@@ -283,7 +283,7 @@ class DbMultiDomainAcsStoreTest
       "initialize empty store without a txlog" in {
         val store = mkStore(acsId = 0, txLogId = None)
         for {
-          r <- store.ingestionSink.initialize()
+          r <- store.ingestionSink.initialize(mockLedgerConnection())
           _ = r shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ = assertThrows[RuntimeException](store.txLogStoreId)
           _ = store.hasFinishedAcsIngestion shouldBe false
@@ -293,11 +293,11 @@ class DbMultiDomainAcsStoreTest
         val store0 = mkStore(acsId = 0, txLogId = Some(0))
         val store1 = mkStore(acsId = 0, txLogId = Some(0))
         for {
-          r0 <- store0.ingestionSink.initialize()
+          r0 <- store0.ingestionSink.initialize(mockLedgerConnection())
           _ = r0 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ = store0.hasFinishedAcsIngestion shouldBe false
 
-          r1 <- store1.ingestionSink.initialize()
+          r1 <- store1.ingestionSink.initialize(mockLedgerConnection())
           _ = r1 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ = store1.hasFinishedAcsIngestion shouldBe false
 
@@ -310,12 +310,12 @@ class DbMultiDomainAcsStoreTest
         val store0 = mkStore(acsId = 0, txLogId = Some(0))
         val store1 = mkStore(acsId = 0, txLogId = Some(0))
         for {
-          r0 <- store0.ingestionSink.initialize()
+          r0 <- store0.ingestionSink.initialize(mockLedgerConnection())
           _ = r0 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ <- acs(acsOffset = 0L)(store0)
           _ <- store0.hasFinishedAcsIngestion shouldBe true
 
-          r1 <- store1.ingestionSink.initialize()
+          r1 <- store1.ingestionSink.initialize(mockLedgerConnection())
           _ = r1 shouldBe IngestionStart.ResumeAtOffset(0L)
           _ <- store1.hasFinishedAcsIngestion shouldBe true
 
@@ -328,11 +328,11 @@ class DbMultiDomainAcsStoreTest
         val store0 = mkStore(acsId = 0, txLogId = Some(0))
         val store1 = mkStore(acsId = 0, txLogId = Some(0))
         for {
-          _ <- store0.ingestionSink.initialize()
+          _ <- store0.ingestionSink.initialize(mockLedgerConnection())
           _ <- acs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))(store0)
           tx <- d1.create(c(2))(store0)
 
-          r1 <- store1.ingestionSink.initialize()
+          r1 <- store1.ingestionSink.initialize(mockLedgerConnection())
           _ = r1 shouldBe IngestionStart.ResumeAtOffset(tx.getOffset)
           _ = store1.hasFinishedAcsIngestion shouldBe true
 
@@ -349,12 +349,12 @@ class DbMultiDomainAcsStoreTest
         val store0 = mkStore(acsId = 0, txLogId = Some(0), migrationId = 0)
         val store1 = mkStore(acsId = 0, txLogId = Some(0), migrationId = 1)
         for {
-          r0 <- store0.ingestionSink.initialize()
+          r0 <- store0.ingestionSink.initialize(mockLedgerConnection())
           _ = r0 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ <- acs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))(store0)
           _ <- d1.create(c(2))(store0)
 
-          r1 <- store1.ingestionSink.initialize()
+          r1 <- store1.ingestionSink.initialize(mockLedgerConnection())
           _ = r1 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ = store1.hasFinishedAcsIngestion shouldBe false
           _ <- acs()(store1)
@@ -372,12 +372,12 @@ class DbMultiDomainAcsStoreTest
         val store0 = mkStore(acsId = 0, txLogId = Some(0))
         val store1 = mkStore(acsId = 1, txLogId = Some(0))
         for {
-          r0 <- store0.ingestionSink.initialize()
+          r0 <- store0.ingestionSink.initialize(mockLedgerConnection())
           _ = r0 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ <- acs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))(store0)
           tx <- d1.create(c(2))(store0)
 
-          r1 <- store1.ingestionSink.initialize()
+          r1 <- store1.ingestionSink.initialize(mockLedgerConnection())
           _ = r1 shouldBe IngestionStart.InitializeAcsAtOffset(tx.getOffset)
           _ = store1.hasFinishedAcsIngestion shouldBe false
           _ <- acs()(store1)
@@ -395,12 +395,12 @@ class DbMultiDomainAcsStoreTest
         val store0 = mkStore(acsId = 0, txLogId = Some(0))
         val store1 = mkStore(acsId = 0, txLogId = Some(1))
         for {
-          r0 <- store0.ingestionSink.initialize()
+          r0 <- store0.ingestionSink.initialize(mockLedgerConnection())
           _ = r0 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ <- acs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))(store0)
           tx <- d1.create(c(2))(store0)
 
-          r1 <- store1.ingestionSink.initialize()
+          r1 <- store1.ingestionSink.initialize(mockLedgerConnection())
           _ = r1 shouldBe IngestionStart.ResumeAtOffset(tx.getOffset)
           _ = store1.hasFinishedAcsIngestion shouldBe true
 
@@ -417,12 +417,12 @@ class DbMultiDomainAcsStoreTest
         val store0 = mkStore(acsId = 0, txLogId = Some(0))
         val store1 = mkStore(acsId = 1, txLogId = Some(1))
         for {
-          r0 <- store0.ingestionSink.initialize()
+          r0 <- store0.ingestionSink.initialize(mockLedgerConnection())
           _ = r0 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ <- acs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))(store0)
           _ <- d1.create(c(2))(store0)
 
-          r1 <- store1.ingestionSink.initialize()
+          r1 <- store1.ingestionSink.initialize(mockLedgerConnection())
           _ = r1 shouldBe IngestionStart.InitializeAcsAtLatestOffset
           _ = store1.hasFinishedAcsIngestion shouldBe false
           _ <- acs()(store1)

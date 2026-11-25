@@ -61,6 +61,8 @@ export async function installSplitwell(
 
   const imagePullDeps = imagePullSecret(xns);
 
+  const nodeIdentifier = 'splitwell';
+
   installIngress(xns, imagePullDeps);
 
   checkValidatorKeyDownloadForPeriodicBackups('splitwell', splitwellConfig, backupConfig);
@@ -68,6 +70,8 @@ export async function installSplitwell(
     splitwellConfig,
     xns,
     auth0Client.getCfg(),
+    nodeIdentifier,
+    !participantBootstrapDump,
     false,
     decentralizedSynchronizerMigrationConfig.active.version,
     sharedPostgres,
@@ -186,7 +190,7 @@ export async function installSplitwell(
     auth0ValidatorAppName: 'splitwell_validator',
     validatorWalletUsers: pulumi.output([validatorWalletUser]),
     validatorPartyHint: 'digitalasset-splitwell-1',
-    nodeIdentifier: 'splitwell',
+    nodeIdentifier,
     logLevel: splitwellConfig.logging?.level,
     logAsync: splitwellConfig.logging?.async,
     version: activeVersion,

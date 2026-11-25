@@ -1,0 +1,173 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "apiVersion": "apps/v1",
+    "kind": "StatefulSet",
+    "metadata": {
+      "name": "postgres-1-helmless",
+      "namespace": "multi-validator"
+    },
+    "spec": {
+      "replicas": 1,
+      "selector": {
+        "matchLabels": {
+          "app": "postgres-1-helmless"
+        }
+      },
+      "serviceName": "postgres-1-helmless",
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "postgres-1-helmless",
+            "namespace": "multi-validator"
+          }
+        },
+        "spec": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "containers": [
+            {
+              "args": [
+                "-c",
+                "max_connections=1000",
+                "-c",
+                "max_wal_size=2GB"
+              ],
+              "env": [
+                {
+                  "name": "POSTGRES_PASSWORD",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "postgresPassword",
+                      "name": "postgres-1-secret"
+                    }
+                  }
+                }
+              ],
+              "envFrom": [
+                {
+                  "configMapRef": {
+                    "name": "postgres-1-helmless-configuration"
+                  }
+                }
+              ],
+              "image": "postgres:18.7-trixie@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc",
+              "imagePullPolicy": "IfNotPresent",
+              "livenessProbe": {
+                "exec": {
+                  "command": [
+                    "psql",
+                    "-U",
+                    "cnadmin",
+                    "-d",
+                    "template1",
+                    "-c",
+                    "SELECT 1"
+                  ]
+                },
+                "failureThreshold": 3,
+                "periodSeconds": 10,
+                "successThreshold": 1,
+                "timeoutSeconds": 1
+              },
+              "name": "postgres-1-helmless",
+              "ports": [
+                {
+                  "containerPort": 5432,
+                  "name": "postgresdb",
+                  "protocol": "TCP"
+                }
+              ],
+              "resources": {
+                "limits": {
+                  "memory": "12Gi"
+                },
+                "requests": {
+                  "cpu": "0.5",
+                  "memory": "5Gi"
+                }
+              },
+              "securityContext": {
+                "allowPrivilegeEscalation": false,
+                "capabilities": {
+                  "drop": [
+                    "ALL"
+                  ]
+                },
+                "privileged": false,
+                "runAsGroup": 999,
+                "runAsNonRoot": true,
+                "runAsUser": 999
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/var/lib/postgresql/data",
+                  "name": "pg-data-hd"
+                }
+              ]
+            }
+          ],
+          "restartPolicy": "Always",
+          "securityContext": {
+            "fsGroup": 999,
+            "fsGroupChangePolicy": "OnRootMismatch",
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "volumeClaimTemplates": [
+        {
+          "metadata": {
+            "name": "pg-data-hd"
+          },
+          "spec": {
+            "accessModes": [
+              "ReadWriteOnce"
+            ],
+            "resources": {
+              "requests": {
+                "storage": "100Gi"
+              }
+            },
+            "storageClassName": "hyperdisk-standard-rwo",
+            "volumeMode": "Filesystem"
+          }
+        }
+      ]
+    }
+  },
+  "name": "multi-validator-postgres-1-helmless",
+  "provider": "",
+  "type": "kubernetes:apps/v1:StatefulSet"
+}

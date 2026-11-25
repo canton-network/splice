@@ -235,16 +235,16 @@ testSvOnboarding = do
 
   let sequencerConfig = Some SequencerConfig with
         migrationId = 0
-        sequencerId = "sequencer-id"
+        sequencerId = "sequencer-id-svX"
         url = "sequencer.address:1234"
         availableAfter = Some now
 
   let sequencerIdentityConfig = Some SequencerIdentityConfig with
-        sequencerId = "sequencer-id"
+        sequencerId = "sequencer-id-svX"
         availableAfter = Some now
 
   let mediatorConfig = Some MediatorConfig with
-        mediatorId = "mediator-id"
+        mediatorId = "mediator-id-svX"
 
   let scanConfig = Some ScanConfig with
         publicUrl = "https://scan1234.example.com"

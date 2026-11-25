@@ -9,7 +9,8 @@ import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
-import io.circe.{Decoder, Encoder}
+import com.digitalasset.canton.data.CantonTimestamp
+import io.circe.{Codec, Decoder, Encoder}
 import org.lfdecentralizedtrust.splice.store.db.{DbKeyValueStore, StoreDescriptor}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -52,6 +53,13 @@ trait KeyValueStore extends NamedLogging {
 }
 
 object KeyValueStore {
+
+  implicit val timestampCodec: Codec[CantonTimestamp] =
+    Codec
+      .from[Long](implicitly, implicitly)
+      .iemap(timestamp => CantonTimestamp.fromProtoPrimitive(timestamp).left.map(_.message))(
+        _.toProtoPrimitive
+      )
 
   def apply(
       descriptor: StoreDescriptor,

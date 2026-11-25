@@ -85,24 +85,24 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
   // Use versions one above minimumInitialization so that after unvetting,
   // the minimum versions still remain vetted and the system can function.
   private val darsToDowngradeTo = Seq(
-    DarResources.amulet_0_1_20,
-    DarResources.amuletNameService_0_1_21,
-    DarResources.dsoGovernance_0_1_26,
-    DarResources.walletPayments_0_1_20,
-    DarResources.wallet_0_1_21,
+    DarResources.amulet_0_1_22,
+    DarResources.amuletNameService_0_1_23,
+    DarResources.dsoGovernance_0_1_28,
+    DarResources.walletPayments_0_1_22,
+    DarResources.wallet_0_1_23,
   )
 
   override val initialPackageConfig: InitialPackageConfig = new InitialPackageConfig(
-    DarResources.amulet_0_1_20.metadata.version.toString(),
-    DarResources.amuletNameService_0_1_21.metadata.version.toString(),
-    DarResources.dsoGovernance_0_1_26.metadata.version.toString(),
-    DarResources.validatorLifecycle_0_1_6.metadata.version.toString(),
-    DarResources.wallet_0_1_21.metadata.version.toString(),
-    DarResources.walletPayments_0_1_20.metadata.version.toString(),
+    DarResources.amulet_0_1_22.metadata.version.toString(),
+    DarResources.amuletNameService_0_1_23.metadata.version.toString(),
+    DarResources.dsoGovernance_0_1_28.metadata.version.toString(),
+    DarResources.validatorLifecycle_0_1_9.metadata.version.toString(),
+    DarResources.wallet_0_1_23.metadata.version.toString(),
+    DarResources.walletPayments_0_1_22.metadata.version.toString(),
   )
   override val additionalPackagesToUnvetSv1: Seq[DarResource] = darsToDowngradeTo
   override val additionalPackagesToUnvetSv1Local: Seq[DarResource] = Seq(
-    DarResources.wallet_0_1_20
+    DarResources.wallet_0_1_22
   )
 
   "sv1 can unvet all upgraded sv packages" in { implicit env =>
@@ -144,7 +144,7 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
           synchronizerId,
         )
         vettedPackageIds should contain allElementsOf darsToDowngradeTo.map(_.packageId)
-        vettedPackageIds should not contain DarResources.wallet_0_1_19.packageId
+        vettedPackageIds should not contain DarResources.wallet_0_1_21.packageId
       }
       stopAllAsync(
         sv1LocalBackend,

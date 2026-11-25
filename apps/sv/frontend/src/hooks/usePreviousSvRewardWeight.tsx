@@ -3,7 +3,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../contexts/GovernanceReadClientContext';
 import { retryOnRateLimit } from '@canton-network/splice-common-frontend';
 
 export interface PreviousSvRewardWeightResult {
@@ -15,7 +15,7 @@ export function usePreviousSvRewardWeight(
   svParty: string | undefined,
   effectiveBefore: string | undefined
 ): PreviousSvRewardWeightResult {
-  const { getPreviousSvRewardWeight } = useSvAdminClient();
+  const { getPreviousSvRewardWeight } = useGovernanceReadClient();
   const query = useQuery({
     queryKey: ['getPreviousSvRewardWeight', svParty, effectiveBefore],
     queryFn: async () => {

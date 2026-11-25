@@ -3,7 +3,13 @@
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
-import { config, EnvVarConfigSchema, LogLevelSchema, SplicePostgresSchema } from '.';
+import {
+  config,
+  defaultPostgresImage,
+  EnvVarConfigSchema,
+  LogLevelSchema,
+  SplicePostgresSchema,
+} from '.';
 import { K8sResourceSchema } from './configSchema';
 
 export const MultiValidatorConfigSchema = z.object({
@@ -11,9 +17,8 @@ export const MultiValidatorConfigSchema = z.object({
     .object({
       instanceCount: z.number().default(0),
       postgresPvcSize: z.string().optional(),
-      // Multi-validator needs to be migrated
       postgres: SplicePostgresSchema.default({
-        deployment: 'legacy-helm-chart',
+        postgresImage: defaultPostgresImage,
       }),
       requiresOnboardingSecret: z.boolean().default(false),
       extraValidatorEnvVars: z.array(EnvVarConfigSchema).default([]),

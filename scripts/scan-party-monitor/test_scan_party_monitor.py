@@ -16,6 +16,7 @@ shell), to check the fake Scan's JSON against Scan's OpenAPI spec.
 
 from __future__ import annotations
 
+from typing import override
 import argparse
 import contextlib
 import hashlib
@@ -318,6 +319,7 @@ class FakeScan(spm.ScanClient):
         self.failed_events_attempts: Dict[int, int] = {}
         self.clock = 0.0
 
+    @override
     def _call(
         self,
         pacer: spm.Pacer,
@@ -374,6 +376,7 @@ class FakeSlack(spm.SlackNotifier):
         self.posts: List[str] = []
         self.fail = False
 
+    @override
     def post(self, text: str) -> None:
         if self.fail:
             raise spm.FatalError("Slack webhook rejected the message with HTTP 400")
@@ -385,6 +388,7 @@ class ListHandler(logging.Handler):
         super().__init__()
         self.messages: List[str] = []
 
+    @override
     def emit(self, record: logging.LogRecord) -> None:
         self.messages.append(record.getMessage())
 
@@ -414,6 +418,7 @@ def http_server(respond: Respond) -> Iterator[str]:
     and yields its base URL. A larger Content-Length in `headers` truncates the response."""
 
     class Handler(BaseHTTPRequestHandler):
+        @override
         def log_message(self, format: str, *args: Any) -> None:
             pass
 
@@ -596,6 +601,7 @@ class ScanSpecTest(unittest.TestCase):
     spec: StrictScanSpec
 
     @classmethod
+    @override
     def setUpClass(cls) -> None:
         cls.spec = StrictScanSpec(SCAN_YAML)
 
@@ -830,6 +836,7 @@ class SlackFormatTest(unittest.TestCase):
 
 
 class StoreTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -880,6 +887,7 @@ class StoreTest(unittest.TestCase):
 
 
 class MonitorTestCase(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -1271,6 +1279,7 @@ class ReconfigurationTest(MonitorTestCase):
 
 
 class HttpTest(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         patcher = mock.patch.object(spm, "backoff_delay", return_value=0.0)
         patcher.start()

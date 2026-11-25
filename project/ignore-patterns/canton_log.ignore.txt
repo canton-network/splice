@@ -26,7 +26,7 @@ HMAC256 JWT Validator is NOT recommended for production environments
 
 # Using an access token for a user that has not yet been allocated produces the following warning.
 # Users are allocated by the validator app, and all apps are starting concurrently.
-PERMISSION_DENIED.*Could not resolve is_deactivated status for user
+(PERMISSION_DENIED|UNAUTHENTICATED).*Could not resolve is_deactivated status for user
 
 # Using multiple auth configs for the long-running Canton instances produces the following warning
 # when authenticating using an auth config that is not the first in the list.

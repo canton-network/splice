@@ -18,3 +18,6 @@ adminApi:
 enableHealthProbes: true
 # Required for SVs: Scan serves ACS snapshots for validator recovery through the participant's repair service.
 enableRepairCommands: true
+# The node identifier Canton initializes this participant with.
+# Must match the nodeIdentifier of the SV or validator that controls it.
+nodeIdentifier: YOUR_NODE_IDENTIFIER

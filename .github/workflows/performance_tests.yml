@@ -21,7 +21,8 @@ jobs:
     container:
       image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
     name: Ingestion Performance Tests
-    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+    # Only run in the main repo, not in forks
+    if: github.repository == 'canton-network/splice'
     steps:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -47,7 +48,7 @@ jobs:
           service_account: '${{ secrets.MAINNET_HISTORY_DUMPS_USER_SA }}'
           create_credentials_file: true
 
-      - name: Run ingestion performance tests
+      - name: Run ingestion performance tests (DbSvDsoStore)
         uses: ./.github/actions/sbt/execute_sbt_command
         env:
           PERFORMANCE_TESTS_DB_PASSWORD: ${{ secrets.PERFORMANCE_TESTS_DB_PASSWORD }}
@@ -77,7 +78,46 @@ jobs:
             echo "Downloading verdict events from mainnet for performance tests"
             gcloud storage cp "gs://mainnet-history-dumps/mainnetevents.json" /tmp/mainnetevents.json
             ls -lah /tmp/mainnetevents.json
-          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbScanStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t UpdateHistory -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t VerdictStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetevents.json"'
+          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
+
+      - name: Run ingestion performance tests (DbScanStore)
+        uses: ./.github/actions/sbt/execute_sbt_command
+        env:
+          PERFORMANCE_TESTS_DB_PASSWORD: ${{ secrets.PERFORMANCE_TESTS_DB_PASSWORD }}
+          PERFORMANCE_TESTS_DB_HOST: ${{ secrets.PERFORMANCE_TESTS_DB_HOST }}
+          PERFORMANCE_TESTS_DB_USER: ${{ secrets.PERFORMANCE_TESTS_DB_USER }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.gcp_auth.outputs.credentials_file_path }}
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.gcp_auth.outputs.credentials_file_path }}
+        with:
+          additional_nix_args: "--keep PERFORMANCE_TESTS_DB_PASSWORD --keep PERFORMANCE_TESTS_DB_HOST --keep PERFORMANCE_TESTS_DB_USER --keep GOOGLE_APPLICATION_CREDENTIALS --keep CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE"
+          extra_env_vars: 'POSTGRES_HOST="$PERFORMANCE_TESTS_DB_HOST" POSTGRES_USER="$PERFORMANCE_TESTS_DB_USER" POSTGRES_PASSWORD="$PERFORMANCE_TESTS_DB_PASSWORD"'
+          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbScanStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
+
+      - name: Run ingestion performance tests (UpdateHistory)
+        uses: ./.github/actions/sbt/execute_sbt_command
+        env:
+          PERFORMANCE_TESTS_DB_PASSWORD: ${{ secrets.PERFORMANCE_TESTS_DB_PASSWORD }}
+          PERFORMANCE_TESTS_DB_HOST: ${{ secrets.PERFORMANCE_TESTS_DB_HOST }}
+          PERFORMANCE_TESTS_DB_USER: ${{ secrets.PERFORMANCE_TESTS_DB_USER }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.gcp_auth.outputs.credentials_file_path }}
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.gcp_auth.outputs.credentials_file_path }}
+        with:
+          additional_nix_args: "--keep PERFORMANCE_TESTS_DB_PASSWORD --keep PERFORMANCE_TESTS_DB_HOST --keep PERFORMANCE_TESTS_DB_USER --keep GOOGLE_APPLICATION_CREDENTIALS --keep CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE"
+          extra_env_vars: 'POSTGRES_HOST="$PERFORMANCE_TESTS_DB_HOST" POSTGRES_USER="$PERFORMANCE_TESTS_DB_USER" POSTGRES_PASSWORD="$PERFORMANCE_TESTS_DB_PASSWORD"'
+          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t UpdateHistory -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
+
+      - name: Run ingestion performance tests (VerdictStore)
+        uses: ./.github/actions/sbt/execute_sbt_command
+        env:
+          PERFORMANCE_TESTS_DB_PASSWORD: ${{ secrets.PERFORMANCE_TESTS_DB_PASSWORD }}
+          PERFORMANCE_TESTS_DB_HOST: ${{ secrets.PERFORMANCE_TESTS_DB_HOST }}
+          PERFORMANCE_TESTS_DB_USER: ${{ secrets.PERFORMANCE_TESTS_DB_USER }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.gcp_auth.outputs.credentials_file_path }}
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.gcp_auth.outputs.credentials_file_path }}
+        with:
+          additional_nix_args: "--keep PERFORMANCE_TESTS_DB_PASSWORD --keep PERFORMANCE_TESTS_DB_HOST --keep PERFORMANCE_TESTS_DB_USER --keep GOOGLE_APPLICATION_CREDENTIALS --keep CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE"
+          extra_env_vars: 'POSTGRES_HOST="$PERFORMANCE_TESTS_DB_HOST" POSTGRES_USER="$PERFORMANCE_TESTS_DB_USER" POSTGRES_PASSWORD="$PERFORMANCE_TESTS_DB_PASSWORD"'
+          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t VerdictStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetevents.json"'
 
       - name: Push ingestion metrics to Prometheus Pushgateway
         if: ${{ success() }}
@@ -129,7 +169,6 @@ jobs:
     container:
       image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
     name: Read Performance Tests
-    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     steps:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

@@ -1,8 +1,0 @@
-{
-  "custom": false,
-  "id": "",
-  "inputs": {},
-  "name": "multi-validator-postgres-4",
-  "provider": "",
-  "type": "canton:network:postgres"
-}

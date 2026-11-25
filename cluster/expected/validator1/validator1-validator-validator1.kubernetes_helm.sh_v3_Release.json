@@ -47,8 +47,6 @@
           "https://cns.validator1.mock.global.canton.network.digitalasset.com"
         ],
         "appDars": [
-          "splice-node/dars/splitwell-0.1.20.dar",
-          "splice-node/dars/splitwell-0.1.21.dar",
           "splice-node/dars/splitwell-0.1.22.dar",
           "splice-node/dars/splitwell-0.1.23.dar",
           "splice-node/dars/splitwell-0.1.24.dar"

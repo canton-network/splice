@@ -4,6 +4,7 @@ import {
   activeVersion,
   Auth0Client,
   auth0UserNameEnvVarSource,
+  config,
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
@@ -15,12 +16,20 @@ import {
   svConfigs,
   svRunbookConfig,
 } from '@canton-network/splice-pulumi-common-sv';
+import { readBackupConfig } from '@canton-network/splice-pulumi-common-validator/src/backup';
 
 import { installParticipant } from './participant';
 import { installSvApps } from './sv';
 
+// The SV runbook restores its identity from either a GCP dump or a local file,
+// see setupBootstrapping in sv-runbook. readBackupConfig only reports the GCP
+// one, so both are checked before letting Canton create an identity. This env
+// var is only ever set for the runbook, so it is scoped to that node below.
+const participantIdentitiesFile = config.optionalEnv('PARTICIPANT_IDENTITIES_FILE');
+
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
   const staticConfig = findStaticConfigOrFail(sv);
+  const isSvRunbook = staticConfig.nodeName === svRunbookConfig.nodeName;
   const config = configForSv(staticConfig.nodeName);
   const xns = exactNamespace(staticConfig.nodeName, true, false);
   const serviceAccountName = 'sv';
@@ -28,9 +37,10 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   const auth0Config = auth0Client.getCfg();
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
-  if (staticConfig.nodeName !== svRunbookConfig.nodeName) {
+  if (!isSvRunbook) {
     await installSvApps(xns, staticConfig, config, auth0Client, []);
   }
+  const backupConfig = await readBackupConfig();
   const version = config.versionOverride ?? activeVersion;
   const participant = await installParticipant(
     {
@@ -39,9 +49,12 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       logging: config.logging,
       auth0: auth0Config,
       version,
-      disableProtection: staticConfig.nodeName === svRunbookConfig.nodeName,
+      disableProtection: isSvRunbook,
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,
+      nodeIdentifier: staticConfig.onboardingName,
+      enableAutoInit:
+        !backupConfig.bootstrappingDumpConfig && !(isSvRunbook && participantIdentitiesFile),
     },
     { dependsOn: [...imagePullDeps, ledgerApiUserSecret] }
   );
