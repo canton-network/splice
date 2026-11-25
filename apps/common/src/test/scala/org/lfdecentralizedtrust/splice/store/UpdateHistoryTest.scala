@@ -1026,6 +1026,36 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           cut shouldBe uncut
         }
       }
+
+      "return the import updates from the legacy tables" in {
+        val store1 = mkStore(party1, migration1, participant1)
+        val store2 = mkStore(party1, migration2, participant1)
+        def readImportUpdates(store: UpdateHistory) = for {
+          importUpdates <- store.getImportUpdates(migration2, "", PageLimit.tryCreate(1000))
+          lastImportUpdateId <- store.getLastImportUpdateId(migration2)
+        } yield (importUpdates, lastImportUpdateId)
+
+        for {
+          _ <- initStore(store1)
+          tx1 <- create(domain1, "c1", validOffset(1), party1, store1, time(1))
+          tx2 <- create(domain1, "c2", validOffset(2), party1, store1, time(2))
+          _ <- initStore(store2)
+          _ <- importUpdate(tx2, validOffset(1), store2)
+          _ <- importUpdate(tx1, validOffset(2), store2)
+          _ <- create(domain1, "c3", validOffset(3), party1, store2, time(3))
+
+          uncut <- readImportUpdates(store2)
+          _ <- moveToLegacyTables(store2.historyId, time(3))
+          _ <- forgetLastLegacyRecordTime(store2.historyId)
+          cutStore = mkStore(party1, migration2, participant1)
+          cut <- readImportUpdates(cutStore)
+        } yield {
+          cutStore.lastLegacyRecordTime shouldBe Some(importUpdateRecordTime)
+          uncut._1.map(_.update.update.updateId) shouldBe Seq("c1", "c2")
+          uncut._2 shouldBe Some("c2")
+          cut shouldBe uncut
+        }
+      }
     }
 
     "lastLegacyRecordTime" should {
