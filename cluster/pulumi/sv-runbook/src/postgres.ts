@@ -48,7 +48,6 @@ export async function installPostgres(
       parent => installPasswordWithParent(parent, xns, name, secretName),
       // No need to support legacy chart
       {
-        deployment: 'docker-image',
         postgresImage: valuesFromFile.db.postgresImage || defaultPostgresImage,
       },
       values,
