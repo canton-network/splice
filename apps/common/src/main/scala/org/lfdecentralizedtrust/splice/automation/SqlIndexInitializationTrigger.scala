@@ -11,14 +11,18 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTrigger.IndexAction
 import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
+import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.{
+  IndexAction,
+  IndexStatus,
+  defaultIndexActions,
+  getIndexStatusAction,
+}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
-import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.util.concurrent.atomic.AtomicReference
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
+import scala.concurrent.{ExecutionContextExecutor, Future, Promise}
 import scala.util.{Failure, Success}
 
 /** A trigger that asynchronously creates or drops SQL indexes at application startup.
@@ -172,114 +176,6 @@ object SqlIndexInitializationTrigger {
       indexActions,
     )
   }
-
-  sealed trait IndexStatus
-  object IndexStatus {
-
-    /** Index is valid and ready for use */
-    final case object Valid extends IndexStatus
-
-    /** Index is permanently invalid */
-    final case object Invalid extends IndexStatus
-
-    /** Index does not exist */
-    final case object DoesNotExist extends IndexStatus
-
-    /** Index is being built by the given background process */
-    final case class InProgress(pid: Long) extends IndexStatus
-  }
-
-  def getIndexStatusAction(
-      indexName: String
-  )(implicit
-      ec: ExecutionContext
-  ): DBIOAction[IndexStatus, NoStream, Effect.Read] = {
-    sql"""
-      select
-        i.indisvalid, pspci.pid
-      from
-        pg_class c
-      join
-        pg_namespace n on n.oid = c.relnamespace
-      join
-        pg_index i on i.indexrelid = c.oid
-      left join
-        pg_stat_progress_create_index pspci on pspci.index_relid = c.oid
-      where
-        c.relname = $indexName
-        and n.nspname = current_schema
-        and c.relkind = 'i'
-    """.as[(Boolean, Option[Long])].headOption.map {
-      // The status is "in progress" if a backend process exists that is actively building the index
-      case Some((_, Some(pid))) => IndexStatus.InProgress(pid)
-      case Some((true, None)) => IndexStatus.Valid
-      case Some((false, None)) => IndexStatus.Invalid
-      case None => IndexStatus.DoesNotExist
-    }
-  }
-
-  sealed trait IndexAction {
-    def indexName: String
-  }
-  object IndexAction {
-
-    /** Drop this index if it exists. */
-    final case class Drop(indexName: String) extends IndexAction
-
-    /** Create this index if it does not exist. */
-    final case class Create(
-        indexName: String,
-        createAction: DBIOAction[Int, NoStream, Effect.Write & Effect.Transactional],
-    ) extends IndexAction
-  }
-
-  /** Indexes managed by this trigger class
-    *  WARNING: partitioned tables (such as all update_history tables) cannot be indexed 'concurrently'.
-    */
-  val defaultIndexActions: List[IndexAction] = List[IndexAction](
-    IndexAction
-      .Create(
-        indexName = "dso_acs_store_sid_mid_pn_tid_rbio",
-        createAction = sqlu"""
-          create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_rbio
-          on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, reward_party)
-          where reward_beneficiary_is_observer = false
-        """,
-      ),
-    IndexAction
-      .Create(
-        indexName = "dso_acs_store_sid_mid_pn_tid_farp",
-        createAction = sqlu"""
-          create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_farp
-          on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, featured_app_right_provider)
-          where featured_app_right_provider is not null
-        """,
-      ),
-    governanceLockTypeAndSubjectIndexAction("dso_acs_store"),
-    governanceLockTypeAndSubjectIndexAction("scan_acs_store"),
-    governanceLockTypeAndSubjectIndexAction("user_wallet_acs_store"),
-    governanceLockTypeAndSubjectIndexAction("external_party_wallet_acs_store"),
-    IndexAction
-      .Create(
-        indexName = "scan_txlog_store_sid_effat_en_vot",
-        createAction = sqlu"""
-          create index concurrently if not exists scan_txlog_store_sid_effat_en_vot
-          on scan_txlog_store (store_id, coalesce(vote_effective_at, entry_data->'result'->>'completedAt') desc, entry_number desc)
-          where entry_type = 'vot'
-        """,
-      ),
-    IndexAction.Drop(indexName = "scan_txlog_store_sid_en_vot"),
-  )
-
-  private def governanceLockTypeAndSubjectIndexAction(tableName: String): IndexAction =
-    IndexAction.Create(
-      indexName = s"${tableName}_sid_mid_glt_gls",
-      createAction = sqlu"""
-        create index concurrently if not exists #${tableName}_sid_mid_glt_gls
-        on #$tableName (store_id, migration_id, governance_lock_type, governance_lock_subject)
-        where governance_lock_type is not null
-      """,
-    )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting
   object Task {

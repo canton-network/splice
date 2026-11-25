@@ -12,13 +12,14 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{FutureHelpers, HasActorSystem, HasExecutionContext}
-import org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTrigger.IndexAction
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsJdbcTypes,
   AcsTables,
   AdvisoryLocks,
   SplicePostgresTest,
+  SqlIndexInitializer,
 }
+import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.IndexAction
 import org.slf4j.event.Level
 import slick.dbio.DBIOAction
 import slick.jdbc.{GetResult, PositionedResult}
@@ -49,7 +50,7 @@ class SqlIndexInitializationTriggerStoreTest
   "SqlIndexInitializationTrigger" should {
 
     "use if not exists concurrently" in {
-      SqlIndexInitializationTrigger.defaultIndexActions.foreach {
+      SqlIndexInitializer.defaultIndexActions.foreach {
         case IndexAction.Create(_, statement) =>
           // "if not exists" is already enforced by DbStorageIdempotency retrying all statements in tests,
           // but a check here gives better feedback.
@@ -463,7 +464,7 @@ class SqlIndexInitializationTriggerStoreTest
   )(implicit traceContext: TraceContext): FutureUnlessShutdown[?] = for {
     _ <- resetAllAppTables(storage)
     _ <- dropIndexes(
-      SqlIndexInitializationTrigger.defaultIndexActions.map(_.indexName) ++ Seq("test_index")
+      SqlIndexInitializer.defaultIndexActions.map(_.indexName) ++ Seq("test_index")
     )
     // Need to drop this after dropping the indexes using it.
     _ <- storage.update(sqlu"drop function if exists slow_function", "drop slow_function")
