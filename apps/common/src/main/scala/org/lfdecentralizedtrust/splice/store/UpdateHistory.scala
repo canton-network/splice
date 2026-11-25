@@ -1346,14 +1346,16 @@ class UpdateHistory private (
     * Note: HttpScanHandler rewrites event ids in order to make them consistent across SVs.
     * For import updates, we need to implement the rewrite here, as it needs to implemented
     * in the database query.
-    *
-    * Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
     */
   def getImportUpdates(
       migrationId: Long,
       afterUpdateId: String,
       limit: PageLimit,
   )(implicit tc: TraceContext): Future[Seq[TreeUpdateWithMigrationId]] = {
+    val creates =
+      historyTableContainingRecordTime("update_history_creates", CantonTimestamp.MinValue)
+    val transactions =
+      historyTableContainingRecordTime("update_history_transactions", CantonTimestamp.MinValue)
     val query =
       // creates: updt_hist_crea_hi_mi_rt (no contract_id index), transactions: primary key on row_id
       sql"""
@@ -1377,8 +1379,8 @@ class UpdateHistory private (
           c.observers,
           c.contract_key
         from
-          update_history_creates c,
-          update_history_transactions tx
+          #$creates c,
+          #$transactions tx
         where
           c.history_id = $historyId and
           c.migration_id = $migrationId and
@@ -2003,11 +2005,12 @@ class UpdateHistory private (
     }
   }
 
-  // Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
   def getLastImportUpdateId(
       migrationId: Long
   )(implicit tc: TraceContext): Future[Option[String]] = {
     if (enableImportUpdateBackfill) {
+      val creates =
+        historyTableContainingRecordTime("update_history_creates", CantonTimestamp.MinValue)
       storage.query(
         // updt_hist_crea_hi_mi_rt
         sql"""
@@ -2015,7 +2018,7 @@ class UpdateHistory private (
           -- Note: to make update ids consistent across SVs, we use the contract id as the update id.
           max(c.contract_id)
         from
-          update_history_creates c
+          #$creates c
         where
           history_id = $historyId and
           migration_id = $migrationId and
