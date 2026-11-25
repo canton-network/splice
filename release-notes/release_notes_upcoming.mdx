@@ -13,10 +13,22 @@
       repair commands such as `participant.repair.import_acs`.
       The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
 
+  - Daml
+
+    - Add the `SRARC_CreateUnclaimedRewardsBurnInstruction` vote action, which lets SVs vote to burn an amount
+      from the unclaimed rewards pool.
+
+    - These changes require a Daml upgrade to the following versions:
+
+      | name | version |
+      | :--- | :--- |
+      | dsoGovernance | 0.1.32 |
+
   - SV App
 
     - Removed the legacy "Update Featured Application Metadata (use before Splice 0.10.0)" proposal option from the SV UI.
       Use "Update Featured Application Metadata" instead. Existing votes of the old type are still displayed.
+    - Add a "Burn Unclaimed Rewards" proposal type to the SV UI.
 
   - Validator
 
