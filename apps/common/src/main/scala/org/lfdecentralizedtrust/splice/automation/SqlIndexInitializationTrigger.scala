@@ -12,7 +12,10 @@ import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.db.{AdvisoryLocks, SqlIndexInitializer}
-import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.{IndexAction, defaultIndexActions}
+import org.lfdecentralizedtrust.splice.store.db.SqlIndexInitializer.{
+  IndexAction,
+  defaultIndexActions,
+}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
 import java.util.concurrent.atomic.AtomicReference
