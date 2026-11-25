@@ -317,6 +317,37 @@ class DbUnavailablePartiesStoreTest
         }
       }
     }
+
+    "userVersion" should {
+
+      "start with an empty store when the userVersion is bumped, and keep the old data" in {
+        val bumped = storeDescriptor.copy(userVersion = Some(1L))
+        for {
+          oldStore <- mkStore(storeDescriptor)
+          _ <- oldStore.addPartiesAt(Seq(userParty(1), userParty(2)), atSeconds(0))
+          newStore <- mkStore(bumped)
+          newParties <- newStore.listPartiesAt(atSeconds(0))
+          oldParties <- oldStore.listPartiesAt(atSeconds(0))
+        } yield {
+          newStore.storeId should not be oldStore.storeId
+          newParties shouldBe empty
+          oldParties should contain theSameElementsAs Seq(userParty(1), userParty(2))
+        }
+      }
+
+      "resolve to the same store for the same userVersion" in {
+        val bumped = storeDescriptor.copy(userVersion = Some(1L))
+        for {
+          store1 <- mkStore(bumped)
+          _ <- store1.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          store2 <- mkStore(bumped)
+          parties <- store2.listPartiesAt(atSeconds(0))
+        } yield {
+          store2.storeId shouldBe store1.storeId
+          parties should contain theSameElementsAs Seq(userParty(1))
+        }
+      }
+    }
   }
 
   override protected def cleanDb(
