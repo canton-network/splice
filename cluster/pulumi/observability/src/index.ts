@@ -1,9 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
-import { ExactNamespace } from '@canton-network/splice-pulumi-common';
+import { enableGcpAlerts, ExactNamespace } from '@canton-network/splice-pulumi-common';
 
-import { clusterIsResetPeriodically, enableAlerts } from './alertings';
 import { installCloudArmorRejectionsMetrics } from './cloudArmorMetrics';
 import { cloudArmorConfig, monitoringConfig } from './config';
 import {
@@ -14,6 +13,7 @@ import {
   installNatAlerts,
   installGcpLoggingAlerts,
   installGcpQuotaAlerts,
+  installLegacyBqMaxStalenessAlert,
   installLoggedSecretsAlerts,
   installSequencerForkDetectedAlert,
   installSequencerParticipantRegistrationAlert,
@@ -55,7 +55,7 @@ if (notificationChannel) {
   // unnoticed
   installSequencerForkDetectedAlert(notificationChannel);
 }
-if (enableAlerts && !clusterIsResetPeriodically) {
+if (enableGcpAlerts) {
   if (notificationChannel) {
     installGcpLoggingAlerts(notificationChannel);
     installTopologyKeyMonitorAlerts(notificationChannel);
@@ -72,5 +72,6 @@ if (enableAlerts && !clusterIsResetPeriodically) {
       installSequencerParticipantRegistrationAlert(notificationChannel);
     }
     installNatAlerts(notificationChannel, monitoringConfig.alerting.alerts.natPortUsage);
+    installLegacyBqMaxStalenessAlert(notificationChannel);
   }
 }

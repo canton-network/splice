@@ -7,7 +7,11 @@ import * as pulumi from '@pulumi/pulumi';
 import * as fs from 'fs';
 import * as ip from 'ip';
 import * as path from 'path';
-import { clusterProdLike, config } from '@canton-network/splice-pulumi-common/src/config';
+import {
+  clusterProdLike,
+  config,
+  enableGcpAlerts,
+} from '@canton-network/splice-pulumi-common/src/config';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import type { InstalledHelmChart } from '@canton-network/splice-pulumi-common/src/helm';
 import {
@@ -25,6 +29,7 @@ import {
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
 
+import { legacyMaxStalenessErrorTag } from './bigQueryAlerts';
 import { type FlywayMigrationToWaitFor } from './bigQueryFlywayMigration';
 import {
   type AppendMode,
@@ -32,7 +37,7 @@ import {
   type ReplicatedTables,
   replicatedTablesFor,
 } from './bigQueryReplicatedTables';
-import { ScanBigQueryConfig } from './singleSvConfig';
+import { LEGACY_DATASTREAM_DATA_FRESHNESS_SECONDS, ScanBigQueryConfig } from './singleSvConfig';
 
 // ============================================================================
 // PIPELINE CONFIGURATION & TYPES
@@ -192,7 +197,7 @@ function installDatastream(
           },
           // editing dataFreshness does not alter existing BQ tables, see its
           // docstring or https://github.com/canton-network/splice/issues/2011
-          dataFreshness: clusterProdLike ? '14400s' : '0s',
+          dataFreshness: clusterProdLike ? `${LEGACY_DATASTREAM_DATA_FRESHNESS_SECONDS}s` : '0s',
         },
         destinationConnectionProfile: destination.name,
       },
@@ -205,6 +210,66 @@ function installDatastream(
       },
     },
     { dependsOn: [databaseInstance, source, destination, bigQueryDataset, pubRepSlots] }
+  );
+}
+
+// The legacy Datastream's BigQuery table for `tableName`: it replicates
+// schema `scanAppDatabaseName(namespace)` into a single target dataset,
+// where Datastream names each table `<schema>_<table>`.
+function legacyTableNameFor(namespace: ExactNamespace, tableName: string): string {
+  return `${scanAppDatabaseName(namespace)}_${tableName}`;
+}
+
+// the minute past each hour at which the max_staleness check runs
+const legacyMaxStalenessCheckMinute = 37;
+
+// A query that runs hourly and fails, naming the tables, while any
+// legacy Datastream table's max_staleness is below
+// `minSafeStalenessSeconds` (or unset, which means continuous). Datastream only applies dataFreshness when it
+// creates a table, so this catches a max_staleness lowered by hand,
+// e.g. for debugging, and not raised again. The observability stack
+// alerts on the failure.
+function installLegacyMaxStalenessCheck(
+  namespace: ExactNamespace,
+  legacyDataset: gcp.bigquery.Dataset,
+  context: ScheduledQueryContext,
+  tablesToReplicate: string[],
+  minSafeStalenessSeconds: number
+) {
+  const { projectId, transferServiceAgentPermission } = context;
+  const tableNames = tablesToReplicate
+    .map(tableName => `'${legacyTableNameFor(namespace, tableName)}'`)
+    .join(', ');
+  const errorTag = legacyMaxStalenessErrorTag(CLUSTER_BASENAME);
+
+  new gcp.bigquery.DataTransferConfig(
+    `${CLUSTER_BASENAME}_legacy-max-staleness-check`,
+    {
+      displayName: `${CLUSTER_BASENAME} Legacy Datastream max_staleness Check`,
+      location: cloudsdkComputeRegion(),
+      serviceAccountName: bigQueryServiceAccountName(projectId),
+      dataSourceId: 'scheduled_query',
+      schedule: hourlySchedule(legacyMaxStalenessCheckMinute),
+
+      params: {
+        query: pulumi.all([projectId, legacyDataset.datasetId]).apply(([proj, ds]) => {
+          const infoSchema = (view: string) => `\`${proj}.${ds}.INFORMATION_SCHEMA.${view}\``;
+          return `DECLARE below_safe STRING DEFAULT (
+  SELECT STRING_AGG(FORMAT('%s=%s', t.table_name, IFNULL(o.option_value, 'unset')), ', ' ORDER BY t.table_name)
+  FROM ${infoSchema('TABLES')} t
+  LEFT JOIN ${infoSchema('TABLE_OPTIONS')} o
+    ON o.table_name = t.table_name AND o.option_name = 'max_staleness'
+  WHERE t.table_name IN (${tableNames})
+    AND (o.option_value IS NULL
+      OR CAST(o.option_value AS INTERVAL) < MAKE_INTERVAL(second => ${minSafeStalenessSeconds}))
+);
+IF below_safe IS NOT NULL THEN
+  RAISE USING MESSAGE = CONCAT('${errorTag}: max_staleness below ${minSafeStalenessSeconds}s on ', below_safe);
+END IF;`;
+        }),
+      },
+    },
+    { dependsOn: [transferServiceAgentPermission, legacyDataset] }
   );
 }
 
@@ -1283,6 +1348,11 @@ export async function configureScanBigQuery({
   // legacy dataset is kept even when the legacy Datastream is disabled
   const legacyDataset = installBigqueryDataset(bigQueryConfig);
 
+  // shared by all scheduled queries, as it installs a project-wide IAM member
+  let sharedScheduledQueryContext: ScheduledQueryContext | undefined;
+  const getScheduledQueryContext = () =>
+    (sharedScheduledQueryContext ??= installBqScheduledQueryContext());
+
   if (enableLegacyDatastream && slots.slot1) {
     const legacyDestinationProfile = installBigqueryConnectionProfile(
       namespace,
@@ -1300,6 +1370,16 @@ export async function configureScanBigQuery({
       legacyDesiredState,
       tablesToReplicate
     );
+
+    if (enableGcpAlerts) {
+      installLegacyMaxStalenessCheck(
+        namespace,
+        legacyDataset,
+        getScheduledQueryContext(),
+        tablesToReplicate,
+        bigQueryConfig.legacyMinSafeStalenessSeconds
+      );
+    }
   }
 
   if (enableStagProdDatastream && slots.slot2) {
@@ -1321,7 +1401,7 @@ export async function configureScanBigQuery({
       stagProdDesiredState,
       tablesToReplicate
     );
-    const scheduledQueryContext = installBqScheduledQueryContext();
+    const scheduledQueryContext = getScheduledQueryContext();
     const prodSchemaMigration = installProdSchemaMigrationRoutines(
       namespace,
       stagingDataset,

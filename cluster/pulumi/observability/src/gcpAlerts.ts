@@ -8,6 +8,7 @@ import {
   conditionalString,
   config,
 } from '@canton-network/splice-pulumi-common';
+import { legacyMaxStalenessErrorTag } from '@canton-network/splice-pulumi-common-sv/src/bigQueryAlerts';
 
 import { slackAlertNotificationChannel, slackToken } from './alertings';
 import { type GcpQuotaAlertsConfig, monitoringConfig, type NatPortUsageConfig } from './config';
@@ -688,6 +689,41 @@ export function installCloudSqlTxIdUtilizationAlert(
             count: 1,
           },
           thresholdValue: 0.8,
+        },
+      },
+    ],
+  });
+}
+
+// Fires while the legacy BigQuery max_staleness check, a scheduled query
+// installed with the legacy Datastream (common-sv bigQuery.ts), fails
+export function installLegacyBqMaxStalenessAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  const displayName = `Legacy BigQuery max_staleness below safe value in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('legacyBqMaxStalenessAlert', {
+    ...getAlertPolicyBaseArgs(notificationChannel),
+    // log-match conditions need a rate limit, and do not support
+    // notificationChannelStrategies; this re-notifies at most every 4
+    // hours while the hourly check keeps failing
+    alertStrategy: {
+      autoClose: '1800s',
+      notificationRateLimit: { period: `${4 * 60 * 60}s` },
+    },
+    displayName,
+    documentation: {
+      subject: displayName,
+      content: [
+        `A legacy Datastream table in **${CLUSTER_BASENAME}** has a \`max_staleness\` below the safe value, perhaps lowered for debugging and not raised again; the incident's log entry names the tables.`,
+        'Restore each with e.g. `ALTER TABLE <dataset>.<table> SET OPTIONS (max_staleness = INTERVAL 4 HOUR);`, see https://github.com/canton-network/splice/issues/2011',
+      ].join('\n\n'),
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName,
+        conditionMatchedLog: {
+          filter: `resource.type="bigquery_dts_config" AND severity>=ERROR AND "${legacyMaxStalenessErrorTag(CLUSTER_BASENAME)}"`,
         },
       },
     ],

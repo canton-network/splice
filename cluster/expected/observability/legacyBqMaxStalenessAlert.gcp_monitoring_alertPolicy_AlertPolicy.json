@@ -1,0 +1,36 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "alertStrategy": {
+      "autoClose": "1800s",
+      "notificationRateLimit": {
+        "period": "14400s"
+      }
+    },
+    "combiner": "OR",
+    "conditions": [
+      {
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"bigquery_dts_config\" AND severity>=ERROR AND \"splice-legacy-bq-max-staleness-below-safe cluster=mock\""
+        },
+        "displayName": "Legacy BigQuery max_staleness below safe value in mock"
+      }
+    ],
+    "displayName": "Legacy BigQuery max_staleness below safe value in mock",
+    "documentation": {
+      "content": "A legacy Datastream table in **mock** has a `max_staleness` below the safe value, perhaps lowered for debugging and not raised again; the incident's log entry names the tables.\n\nRestore each with e.g. `ALTER TABLE <dataset>.<table> SET OPTIONS (max_staleness = INTERVAL 4 HOUR);`, see https://github.com/canton-network/splice/issues/2011",
+      "mimeType": "text/markdown",
+      "subject": "Legacy BigQuery max_staleness below safe value in mock"
+    },
+    "notificationChannels": [
+      null
+    ],
+    "userLabels": {
+      "cluster": "mock"
+    }
+  },
+  "name": "legacyBqMaxStalenessAlert",
+  "provider": "",
+  "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+}
