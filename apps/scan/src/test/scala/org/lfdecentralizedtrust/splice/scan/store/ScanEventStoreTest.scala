@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.store.{
   StoreTestBase,
   TimestampWithMigrationId,
   UpdateHistory,
+  UpdateHistoryTestBase,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{EnvelopeT, TrafficSummaryT}
@@ -154,6 +155,32 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
 
         // Fetching by id should be filtered as well
         updateEventOpt.isEmpty shouldBe true
+      }
+    }
+
+    "Cap the verdicts till the latest legacy update right after the cutover" in {
+      for {
+        ctx <- newEventStore()
+        recordTs1 = CantonTimestamp.now()
+        _ <- insertUpdate(ctx.updateHistory, recordTs1, "update1")
+        _ <- UpdateHistoryTestBase.moveToLegacyTables(
+          storage.underlying,
+          ctx.updateHistory.historyId,
+          recordTs1.plusSeconds(1),
+        )
+        _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+          storage.underlying,
+          ctx.updateHistory.historyId,
+        )
+        cutCtx <- newEventStore()
+        capRightAfterCutover <- cutCtx.verdictStore.maxUpdateRecordTime(domainMigrationId)
+        recordTs2 = recordTs1.plusSeconds(2)
+        _ <- insertUpdate(cutCtx.updateHistory, recordTs2, "update2")
+        capAfterNextUpdate <- cutCtx.verdictStore.maxUpdateRecordTime(domainMigrationId)
+      } yield {
+        cutCtx.updateHistory.lastLegacyRecordTime should not be empty
+        capRightAfterCutover shouldBe Some(recordTs1)
+        capAfterNextUpdate shouldBe Some(recordTs2)
       }
     }
 
@@ -1024,6 +1051,85 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
     }
   }
 
+  "DbScanVerdictStore.insertVerdictAndTransactionViews" should {
+
+    "attach each verdict's views to its own row in a multi-verdict batch" in {
+      val viewIdsByUpdateId = Seq(
+        "update1" -> Seq(0),
+        "update2" -> Seq(0, 1, 2),
+        "update3" -> Seq.empty[Int],
+        "update4" -> Seq(0, 1),
+      )
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        _ <- verdictStore.insertVerdictAndTransactionViews(
+          viewIdsByUpdateId.zipWithIndex.map { case ((updateId, viewIds), i) =>
+            mkVerdict(
+              verdictStore,
+              updateId,
+              CantonTimestamp.MinValue.plusSeconds(i.toLong + 1),
+            ) -> { (rowId: Long) =>
+              viewIds.map(viewId =>
+                new verdictStore.TransactionViewT(
+                  verdictRowId = rowId,
+                  viewId = viewId,
+                  informees = Seq(dsoParty.toProtoPrimitive),
+                  confirmingParties = Json.arr(),
+                  subViews = Seq.empty,
+                )
+              )
+            }
+          }
+        )
+        stored <- Future.traverse(viewIdsByUpdateId) { case (updateId, _) =>
+          for {
+            verdict <- verdictStore.getVerdictByUpdateId(updateId)
+            views <- verdictStore.listTransactionViews(verdict.value.rowId)
+          } yield updateId -> views.map(_.viewId)
+        }
+      } yield stored shouldBe viewIdsByUpdateId
+    }
+
+    "attach views to the right rows when the batch spans several insert chunks" in {
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        numVerdicts = verdictStore.MaxVerdictsPerInsert + 1
+        viewIds = 0 to verdictStore.MaxViewsPerInsert / verdictStore.MaxVerdictsPerInsert
+        updateIds = (1 to numVerdicts).map(i => s"chunked-update$i")
+        _ <- verdictStore.insertVerdictAndTransactionViews(
+          updateIds.zipWithIndex.map { case (updateId, i) =>
+            mkVerdict(
+              verdictStore,
+              updateId,
+              CantonTimestamp.MinValue.plusSeconds(i.toLong + 1),
+            ) -> { (rowId: Long) =>
+              viewIds.map(viewId =>
+                new verdictStore.TransactionViewT(
+                  verdictRowId = rowId,
+                  viewId = viewId,
+                  informees = Seq(dsoParty.toProtoPrimitive),
+                  confirmingParties = Json.arr(),
+                  subViews = Seq.empty,
+                )
+              )
+            }
+          }
+        )
+        stored <- Future.traverse(updateIds) { updateId =>
+          for {
+            verdict <- verdictStore.getVerdictByUpdateId(updateId)
+            views <- verdictStore.listTransactionViews(verdict.value.rowId)
+          } yield views.map(_.viewId)
+        }
+      } yield {
+        viewIds.size * numVerdicts should be > verdictStore.MaxViewsPerInsert
+        stored.distinct shouldBe Seq(viewIds)
+      }
+    }
+  }
+
   /** @return the row ID of the inserted verdict */
   private def insertVerdictWithViews(
       verdictStore: DbScanVerdictStore,
@@ -1055,10 +1161,13 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
     } yield verdict.value.rowId
 
   private def newUpdateHistory(
-      migrationId: Long
+      migrationId: Long,
+      timeStart: CantonTimestamp,
+      partitionRunwayDays: Int,
   ): Future[UpdateHistory] = {
     val participantId = mkParticipantId("ScanEventStoreTest")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage.underlying, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage.underlying,
         migrationId,
@@ -1067,12 +1176,19 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
+      _ <- UpdateHistoryTestBase.createUpdateHistoryPartitions(
+        updateHistory,
+        timeStart,
+        partitionRunwayDays,
+      )
     } yield updateHistory
   }
 
@@ -1254,9 +1370,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       eventStore: ScanEventStore,
   )
 
-  private def newEventStore(migrationId: Long = domainMigrationId): Future[EventStoreCtx] =
+  private def newEventStore(
+      migrationId: Long = domainMigrationId,
+      // Tests use CantonTimestamp.now() as record time
+      timeStart: CantonTimestamp = CantonTimestamp.now(),
+      partitionRunwayDays: Int = 7,
+  ): Future[EventStoreCtx] =
     for {
-      uh <- newUpdateHistory(migrationId)
+      uh <- newUpdateHistory(migrationId, timeStart, partitionRunwayDays)
       vs = newVerdictStore(uh)
       es = new ScanEventStore(vs, uh, loggerFactory)
     } yield EventStoreCtx(vs, uh, es)

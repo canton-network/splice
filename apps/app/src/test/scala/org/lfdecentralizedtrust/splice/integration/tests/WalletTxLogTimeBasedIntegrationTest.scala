@@ -9,6 +9,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
 }
 import org.lfdecentralizedtrust.splice.util.{
   EventId,
+  SpliceUtil,
   SplitwellTestUtil,
   SvTestUtil,
   TriggerTestUtil,
@@ -29,13 +30,14 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   ValidatorRewardCoupon,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItem
 
 import java.time.Duration
 import java.util.UUID
+import scala.jdk.CollectionConverters.*
 
 // We rely on external party config state tick durations here which are not
 // available before.
@@ -180,18 +182,21 @@ class WalletTxLogTimeBasedIntegrationTest
         // Advance time to make sure we capture at least one round change in the tx history.
         val latestRound = eventuallySucceeds() {
           advanceRoundsToNextRoundOpening(synchronizeExternalPartyConfigStates = true)
-          sv1ScanBackend.getOpenAndIssuingMiningRounds()._1.last.contract.payload.round.number
+          sv1ScanBackend.getOpenAndIssuingMiningRounds()._1.last.contract.payload
         }
 
-        val amuletConfig = clue("Get amulet config") {
-          sv1ScanBackend.getAmuletConfigForRound(latestRound)
-        }
+        val transferConfig = latestRound.transferConfigUsd
+        def usdToAmulet(usd: java.math.BigDecimal): BigDecimal =
+          SpliceUtil.dollarsToCC(usd, latestRound.amuletPrice)
+        val amuletCreateFee = usdToAmulet(transferConfig.createFee.fee)
+        val lockHolderFee = usdToAmulet(transferConfig.lockHolderFee.fee)
 
         val transferAmount = BigDecimal("32.1234567891").setScale(10)
         val transferFee =
-          amuletConfig.transferFee.steps
-            .findLast(_.amount <= transferAmount)
-            .fold(amuletConfig.transferFee.initial)(_.rate) * transferAmount
+          transferConfig.transferFee.steps.asScala
+            .map(step => (usdToAmulet(step._1), BigDecimal(step._2)))
+            .findLast(_._1 <= transferAmount)
+            .fold(BigDecimal(transferConfig.transferFee.initialRate))(_._2) * transferAmount
         val receiverFeeRatio = BigDecimal("0.1234567891").setScale(10)
         val senderFeeRatio = (BigDecimal(1.0) - receiverFeeRatio).setScale(10)
 
@@ -242,15 +247,15 @@ class WalletTxLogTimeBasedIntegrationTest
         val expectedAliceBalanceChange = BigDecimal(0) -
           3 * transferAmount - // each output is worth `transferAmount`
           3 * transferFee * senderFeeRatio - // one transferFee for each output
-          3 * amuletConfig.amuletCreateFee * senderFeeRatio - // one amuletCreateFee for each output
-          amuletConfig.lockHolderFee * senderFeeRatio - // one lockHolderFee for each lock holder that is not the receiver
-          amuletConfig.amuletCreateFee // one amuletCreateFee for the sender change amulet
+          3 * amuletCreateFee * senderFeeRatio - // one amuletCreateFee for each output
+          lockHolderFee * senderFeeRatio - // one lockHolderFee for each lock holder that is not the receiver
+          amuletCreateFee // one amuletCreateFee for the sender change amulet
 
         val expectedCharlieBalanceChange = BigDecimal(0) +
           2 * transferAmount - // 2 amulets created for Charlie (the locked amulet does not change his balance)
           3 * transferFee * receiverFeeRatio - // one transferFee for each output
-          3 * amuletConfig.amuletCreateFee * receiverFeeRatio - // one amuletCreateFee for each output
-          amuletConfig.lockHolderFee * receiverFeeRatio // one lockHolderFee for each lock holder that is not the receiver
+          3 * amuletCreateFee * receiverFeeRatio - // one amuletCreateFee for each output
+          lockHolderFee * receiverFeeRatio // one lockHolderFee for each lock holder that is not the receiver
 
         // Note: there are 3 places where we multiply fixed digit numbers:
         // - In our daml code, computing actual balance changes
@@ -498,7 +503,7 @@ class WalletTxLogTimeBasedIntegrationTest
               EventId.updateIdFromEventId(transfer.eventId)
           }
           val createTransferUpdate = eventuallySucceeds() {
-            sv1ScanBackend.getUpdate(createTransferUpdateId, CompactJson)
+            sv1ScanBackend.getUpdate(createTransferUpdateId, LedgerApiJson)
           }
           createTransferUpdate match {
             case UpdateHistoryItem.members.UpdateHistoryReassignment(_) =>

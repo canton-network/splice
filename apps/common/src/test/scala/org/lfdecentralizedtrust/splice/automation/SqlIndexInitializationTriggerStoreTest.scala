@@ -9,7 +9,6 @@ import com.digitalasset.canton.concurrent.{FutureSupervisor, Threading}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{FutureHelpers, HasActorSystem, HasExecutionContext}
@@ -39,8 +38,6 @@ class SqlIndexInitializationTriggerStoreTest
     with AdvisoryLocksTestHelper {
 
   private val expectedIndexNames = Seq(
-    "updt_hist_crea_hi_mi_ci_import_updates",
-    "updt_hist_tran_hi_eth",
     "dso_acs_store_sid_mid_pn_tid_rbio",
     "dso_acs_store_sid_mid_glt_gls",
     "scan_acs_store_sid_mid_glt_gls",
@@ -88,7 +85,7 @@ class SqlIndexInitializationTriggerStoreTest
         indexActions = List(
           IndexAction.Create(
             "test_index",
-            sqlu"create index if not exists test_index on update_history_creates (record_time)",
+            sqlu"create index if not exists test_index on dso_acs_store (contract_id)",
           )
         ),
       )
@@ -112,7 +109,7 @@ class SqlIndexInitializationTriggerStoreTest
       for {
         _ <- storage.underlying
           .update(
-            sqlu"create index test_index on update_history_creates (record_time)",
+            sqlu"create index test_index on dso_acs_store (contract_id)",
             "create test index",
           )
           .failOnShutdown
@@ -131,7 +128,7 @@ class SqlIndexInitializationTriggerStoreTest
         indexActions = List(
           IndexAction.Create(
             "test_index",
-            sqlu"create index if not exists test_index on update_history_creates (record_time)",
+            sqlu"create index if not exists test_index on dso_acs_store (contract_id)",
           )
         ),
       )
@@ -139,7 +136,7 @@ class SqlIndexInitializationTriggerStoreTest
       for {
         _ <- storage.underlying
           .update(
-            sqlu"create index test_index on update_history_creates (record_time)",
+            sqlu"create index test_index on dso_acs_store (contract_id)",
             "create test index",
           )
           .failOnShutdown
@@ -251,8 +248,8 @@ class SqlIndexInitializationTriggerStoreTest
           case other =>
             fail(s"Expected Drop for test_index, got $other")
         }
-        _ <- loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-          within = { trigger.runOnce() },
+        outcome <- loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          within = { trigger.runOnceWithTaskOutcome() },
           assertion = { entries =>
             forExactly(1, entries) {
               _.message should include(
@@ -261,6 +258,7 @@ class SqlIndexInitializationTriggerStoreTest
             }
           },
         )
+        _ = outcome should matchPattern { case Some(_: TaskSuccess) => }
         indexNamesAfterDrop <- listIndexNames()
         _ = indexNamesAfterDrop should not contain ("test_index")
 
@@ -365,7 +363,7 @@ class SqlIndexInitializationTriggerStoreTest
         indexActions = List(
           IndexAction.Create(
             "test_index",
-            sqlu"create index concurrently if not exists test_index on update_history_creates (record_time)",
+            sqlu"create index concurrently if not exists test_index on dso_acs_store (contract_id)",
           )
         ),
       )
@@ -375,7 +373,9 @@ class SqlIndexInitializationTriggerStoreTest
 
       for {
         _ <- lockAcquired
-        _ <- trigger.runOnce()
+        // The outcome is not asserted: the test only checks that the index is not created while
+        // the lock is held.
+        _ <- trigger.runOnceWithTaskOutcome()
         indexNamesWhileLocked <- listIndexNames()
         _ = indexNamesWhileLocked should not contain "test_index"
         // The contended action is still pending and succeeds once the lock is released
@@ -450,7 +450,6 @@ class SqlIndexInitializationTriggerStoreTest
     trigger.remainingActionsEmpty.future
   }
 
-  private lazy val clock = new SimClock(loggerFactory = loggerFactory)
   private lazy val triggerContext: TriggerContext = TriggerContext(
     AutomationConfig(),
     clock,

@@ -27,6 +27,7 @@ import org.lfdecentralizedtrust.splice.util.{
   GovernanceLockUtil,
   TimeTestUtil,
   TokenStandardMetadata,
+  TriggerTestUtil,
   WalletTestUtil,
 }
 import org.lfdecentralizedtrust.splice.wallet.store.{
@@ -47,7 +48,8 @@ class GovernanceLockTimeBasedIntegrationTest
     with WalletTestUtil
     with WalletTxLogTestUtil
     with TimeTestUtil
-    with GovernanceLockTest {
+    with GovernanceLockTest
+    with TriggerTestUtil {
 
   private val triggerBatchSize = 2
   private val vestingDuration = Duration.ofMinutes(2)
@@ -383,7 +385,7 @@ class GovernanceLockTimeBasedIntegrationTest
     )
 
     clue("The locks are not yet expired, so the trigger has no work") {
-      trigger.runOnce().futureValue shouldBe false
+      runExpectingNoTask(trigger)
       listVestingLocks should have length numLocks.toLong
     }
 
@@ -396,12 +398,12 @@ class GovernanceLockTimeBasedIntegrationTest
     }
 
     clue(s"First run archives one full batch of $triggerBatchSize") {
-      eventually()(trigger.runOnce().futureValue shouldBe true)
+      runUntilTaskSucceeds(trigger)
       listVestingLocks should have length (numLocks - triggerBatchSize).toLong
     }
 
     clue("Second run archives the remaining partial batch") {
-      trigger.runOnce().futureValue shouldBe true
+      runUntilTaskSucceeds(trigger)
       listVestingLocks shouldBe empty
     }
   }
@@ -431,7 +433,7 @@ class GovernanceLockTimeBasedIntegrationTest
     )
 
     clue("The lock transfers are not yet expired, so the trigger has no work") {
-      trigger.runOnce().futureValue shouldBe false
+      runExpectingNoTask(trigger)
       listLockTransfers should have length numTransfers.toLong
     }
 
@@ -445,12 +447,12 @@ class GovernanceLockTimeBasedIntegrationTest
     }
 
     clue(s"First run archives one full batch of $triggerBatchSize") {
-      eventually()(trigger.runOnce().futureValue shouldBe true)
+      runUntilTaskSucceeds(trigger)
       listLockTransfers should have length (numTransfers - triggerBatchSize).toLong
     }
 
     clue("Second run archives the remaining partial batch") {
-      trigger.runOnce().futureValue shouldBe true
+      runUntilTaskSucceeds(trigger)
       listLockTransfers shouldBe empty
     }
   }
@@ -518,7 +520,7 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       clue("The substitutions are not yet expired, so the trigger has no work") {
-        trigger.runOnce().futureValue shouldBe false
+        runExpectingNoTask(trigger)
         listLockSubstitutions should have length numSubstitutions.toLong
       }
 
@@ -532,12 +534,12 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       clue(s"First run archives one full batch of $triggerBatchSize") {
-        eventually()(trigger.runOnce().futureValue shouldBe true)
+        runUntilTaskSucceeds(trigger)
         listLockSubstitutions should have length (numSubstitutions - triggerBatchSize).toLong
       }
 
       clue("Second run archives the remaining partial batch") {
-        trigger.runOnce().futureValue shouldBe true
+        runUntilTaskSucceeds(trigger)
         listLockSubstitutions shouldBe empty
       }
 

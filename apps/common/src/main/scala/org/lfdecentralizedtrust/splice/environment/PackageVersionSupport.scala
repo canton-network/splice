@@ -39,66 +39,20 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  // TODO(#1825): remove unused flag
-  def supportsTokenStandard(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceWallet,
-      now,
-      DarResources.wallet,
-      // this is the first version implementing the token standard
-      DarResources.wallet_0_1_9,
-      ignoreRedundantCheck = true,
-    )
-  }
-
-  // TODO(#1825): remove unused flag
-  def supportsDescriptionInTransferPreapprovals(parties: Seq[PartyId], now: CantonTimestamp)(
-      implicit tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceWallet,
-      now,
-      DarResources.wallet,
-      // this is when the description field was added to transfer preapprovals
-      DarResources.wallet_0_1_9,
-      ignoreRedundantCheck = true,
-    )
-  }
-
-  def supportsConvertFeaturedAppActivityMarkerObservers(
+  def supportsAmuletAllocationV2(
       parties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[FeatureSupport] =
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceAmulet,
-      now,
-      DarResources.amulet,
-      DarResources.amulet_0_1_16,
-      ignoreRedundantCheck = true,
-    )
-
-  // TODO(#1825): remove redundant version check
-  def supports24hSubmissionDelay(
-      amuletParties: Seq[PartyId],
-      dsoGovernanceParties: Seq[PartyId],
       now: CantonTimestamp,
   )(implicit
       tc: TraceContext
   ): Future[FeatureSupport] = {
     isDarSupported(
       Seq(
-        PackageIdResolver.Package.SpliceDsoGovernance -> dsoGovernanceParties,
-        PackageIdResolver.Package.SpliceAmulet -> amuletParties,
+        PackageIdResolver.Package.SpliceAmulet -> parties
       ),
       now,
       DarResources.amulet,
-      DarResources.amulet_0_1_17,
-      ignoreRedundantCheck = true,
+      DarResources.amulet_0_1_21,
+      ignoreRedundantCheck = false,
     )
   }
 
@@ -159,36 +113,6 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
-
-  def supportsExpireTransferInstructions(
-      amuletParties: Seq[PartyId],
-      dsoGovernanceParties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
-
-  def supportsExpireAmuletAllocations(
-      amuletParties: Seq[PartyId],
-      dsoGovernanceParties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
-
-  def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] =
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceAmulet,
-      now,
-      DarResources.amulet,
-      DarResources.amulet_0_1_19,
-      ignoreRedundantCheck = true,
-    )
-
   def supportsTbarV1_1(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =
@@ -201,17 +125,13 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
-  def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] =
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceWallet,
-      now,
-      DarResources.wallet,
-      DarResources.wallet_0_1_16,
-      ignoreRedundantCheck = true,
-    )
+  /** The ids of the packages the ledger prefers for the given package requirements, i.e., for each package
+    * the newest version vetted by all of its parties.
+    */
+  def getPreferredPackageIds(
+      packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
+      at: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Seq[String]]
 
   private def isDarSupported(
       parties: Seq[PartyId],
@@ -259,6 +179,18 @@ class TopologyAwarePackageVersionSupport private[environment] (
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends PackageVersionSupport {
+
+  override def getPreferredPackageIds(
+      packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
+      at: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Seq[String]] =
+    connection
+      .getSupportedPackageVersion(
+        synchronizerId,
+        packageRequirements.map { case (k, v) => k.packageName -> v },
+        at,
+      )
+      .map(_.map(_.packageId))
 
   override def isPackageSupported(
       packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],

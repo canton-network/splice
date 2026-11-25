@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
 import com.daml.ledger.javaapi.data.{DamlRecord, Unit as damlUnit}
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
@@ -15,7 +16,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, Amulet_ExpireResult}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
-  AmuletRules,
   AmuletRules_BuyMemberTrafficResult,
   AmuletRules_MintResult,
 }
@@ -43,7 +43,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   round as roundCodegen,
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.history.*
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
@@ -60,8 +59,6 @@ import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
-import scala.jdk.OptionConverters.*
-import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
@@ -80,33 +77,6 @@ abstract class ScanStoreTest
     with AmuletTransferUtil {
 
   "ScanStore" should {
-    "getAmuletConfigForRound" should {
-
-      "return the amulet OpenMiningRoundTxLogEntry for the round" in {
-        val wanted = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
-        val unwanted = openMiningRound(dsoParty, round = 3, amuletPrice = 3.0)
-        for {
-          store <- mkStore()
-          _ <- dummyDomain.create(wanted)(store.multiDomainAcsStore)
-          _ <- dummyDomain.create(unwanted)(store.multiDomainAcsStore)
-        } yield {
-          val logEntry = store.getAmuletConfigForRound(round = 2).futureValue
-          logEntry match {
-            case omr: OpenMiningRoundTxLogEntry =>
-              omr.round should be(wanted.payload.round.number)
-            case x =>
-              fail(s"Entry was not an OpenMiningRoundTxLogEntry but a $x")
-          }
-          numeric(logEntry.amuletCreateFee) should be(
-            numeric(
-              wanted.payload.transferConfigUsd.createFee.fee.divide(wanted.payload.amuletPrice)
-            )
-          )
-        }
-      }
-
-    }
-
     "getTotalPurchasedMemberTraffic" should {
 
       "return the sum over all traffic contracts for the member" in {
@@ -451,22 +421,6 @@ abstract class ScanStoreTest
         } yield {
           store.lookupTransferPreapprovalByParty(userParty(1)).futureValue should be(expectedResult)
         }
-      }
-    }
-
-    "lookupTransferCommandCounterByParty" should {
-      "return the TransferCommandCounter for the specified party if available" in {
-        val counter = transferCommandCounter(userParty(1), 0L)
-        for {
-          store <- mkStore()
-          r <- store.lookupTransferCommandCounterByParty(userParty(1))
-          _ = r shouldBe None
-          _ <- dummyDomain.create(counter)(store.multiDomainAcsStore)
-          r <- store.lookupTransferCommandCounterByParty(userParty(1))
-          _ = r.map(_.contract) shouldBe Some(counter)
-          r <- store.lookupTransferCommandCounterByParty(userParty(2))
-          _ = r shouldBe None
-        } yield succeed
       }
     }
 
@@ -928,530 +882,6 @@ abstract class ScanStoreTest
         }
       }
     }
-
-    "lookupLatestTransferCommandEvent" should {
-      def createTransferCommand(
-          store: ScanStore,
-          externalPartyRules: Contract[
-            splice.externalpartyamuletrules.ExternalPartyAmuletRules.ContractId,
-            splice.externalpartyamuletrules.ExternalPartyAmuletRules,
-          ],
-          transferCmd: Contract[
-            splice.externalpartyamuletrules.TransferCommand.ContractId,
-            splice.externalpartyamuletrules.TransferCommand,
-          ],
-      ) = {
-        dummyDomain.exercise(
-          externalPartyRules,
-          interfaceId = Some(
-            splice.externalpartyamuletrules.ExternalPartyAmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID
-          ),
-          ExternalPartyAmuletRules_CreateTransferCommand.choice.name,
-          new splice.externalpartyamuletrules.ExternalPartyAmuletRules_CreateTransferCommand(
-            transferCmd.payload.sender,
-            transferCmd.payload.receiver,
-            transferCmd.payload.delegate,
-            transferCmd.payload.amount,
-            transferCmd.payload.expiresAt,
-            transferCmd.payload.nonce,
-            transferCmd.payload.description,
-            Optional.of(dsoParty.toProtoPrimitive),
-          ).toValue,
-          new splice.externalpartyamuletrules.ExternalPartyAmuletRules_CreateTransferCommandResult(
-            transferCmd.contractId
-          ).toValue,
-          nextOffset(),
-        )(
-          store.multiDomainAcsStore
-        )
-      }
-
-      "transitions from Created to Sent" in {
-        for {
-          store <- mkStore()
-          transferCmd = transferCommand(
-            userParty(1),
-            userParty(2),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            0L,
-          )
-          counter = transferCommandCounter(
-            userParty(1),
-            0L,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map.empty
-          rules = amuletRules()
-          externalPartyRules = externalPartyAmuletRules()
-
-          tx <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-              )
-          )
-          tx <- dummyDomain.exercise(
-            transferCmd,
-            interfaceId =
-              Some(splice.externalpartyamuletrules.TransferCommand.TEMPLATE_ID_WITH_PACKAGE_ID),
-            TransferCommand_Send.choice.name,
-            new splice.externalpartyamuletrules.TransferCommand_Send(
-              mkPaymentTransferContext(rules.contractId),
-              Seq.empty.asJava,
-              None.toJava,
-              counter.contractId,
-            ).toValue,
-            new splice.externalpartyamuletrules.TransferCommand_SendResult(
-              new splice.externalpartyamuletrules.transfercommandresult.TransferCommandResultSuccess(
-                mkTransferResult(
-                  round = 0,
-                  inputAppRewardAmount = 0,
-                  inputAmuletAmount = 42.0,
-                  inputValidatorRewardAmount = 0,
-                  inputSvRewardAmount = 0,
-                  balanceChanges = Map(
-                    user1.toProtoPrimitive -> new splice.amuletrules.BalanceChange(
-                      BigDecimal(42.0).bigDecimal,
-                      holdingFee.bigDecimal,
-                    )
-                  ),
-                  amuletPrice = 0.0005,
-                )
-              ),
-              transferCmd.payload.sender,
-              transferCmd.payload.nonce,
-            ).toValue,
-            nextOffset(),
-          )(
-            store.multiDomainAcsStore
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Sent(TransferCommandSent()),
-              )
-          )
-        } yield succeed
-      }
-
-      "transitions from Created to Failed" in {
-        for {
-          store <- mkStore()
-          transferCmd = transferCommand(
-            userParty(1),
-            userParty(2),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            0L,
-          )
-          counter = transferCommandCounter(
-            userParty(1),
-            0L,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map.empty
-          rules = amuletRules()
-          externalPartyRules = externalPartyAmuletRules()
-          tx <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-              )
-          )
-          tx <- dummyDomain.exercise(
-            transferCmd,
-            interfaceId =
-              Some(splice.externalpartyamuletrules.TransferCommand.TEMPLATE_ID_WITH_PACKAGE_ID),
-            TransferCommand_Send.choice.name,
-            new splice.externalpartyamuletrules.TransferCommand_Send(
-              mkPaymentTransferContext(rules.contractId),
-              Seq.empty.asJava,
-              None.toJava,
-              counter.contractId,
-            ).toValue,
-            new splice.externalpartyamuletrules.TransferCommand_SendResult(
-              new splice.externalpartyamuletrules.transfercommandresult.TransferCommandResultFailure(
-                new splice.amuletrules.invalidtransferreason.ITR_Other("cool reason")
-              ),
-              transferCmd.payload.sender,
-              transferCmd.payload.nonce,
-            ).toValue,
-            nextOffset(),
-          )(
-            store.multiDomainAcsStore
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Failed(
-                  TransferCommandFailed("ITR_Other(cool reason)")
-                ),
-              )
-          )
-        } yield succeed
-      }
-      "transitions from Created to Withdrawn" in {
-        for {
-          store <- mkStore()
-          transferCmd = transferCommand(
-            userParty(1),
-            userParty(2),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            0L,
-          )
-          counter = transferCommandCounter(
-            userParty(1),
-            0L,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map.empty
-          rules = amuletRules()
-          externalPartyRules = externalPartyAmuletRules()
-          tx <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-              )
-          )
-          tx <- dummyDomain.exercise(
-            transferCmd,
-            interfaceId =
-              Some(splice.externalpartyamuletrules.TransferCommand.TEMPLATE_ID_WITH_PACKAGE_ID),
-            TransferCommand_Withdraw.choice.name,
-            new splice.externalpartyamuletrules.TransferCommand_Withdraw(
-            ).toValue,
-            new splice.externalpartyamuletrules.TransferCommand_WithdrawResult(
-              transferCmd.payload.sender,
-              transferCmd.payload.nonce,
-            ).toValue,
-            nextOffset(),
-          )(
-            store.multiDomainAcsStore
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Withdrawn(TransferCommandWithdrawn()),
-              )
-          )
-        } yield succeed
-      }
-
-      "transitions from Created to Expired" in {
-        for {
-          store <- mkStore()
-          transferCmd = transferCommand(
-            userParty(1),
-            userParty(2),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            0L,
-          )
-          counter = transferCommandCounter(
-            userParty(1),
-            0L,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map.empty
-          rules = amuletRules()
-          externalPartyRules = externalPartyAmuletRules()
-          tx <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-              )
-          )
-          tx <- dummyDomain.exercise(
-            transferCmd,
-            interfaceId =
-              Some(splice.externalpartyamuletrules.TransferCommand.TEMPLATE_ID_WITH_PACKAGE_ID),
-            TransferCommand_Expire.choice.name,
-            new splice.externalpartyamuletrules.TransferCommand_Expire(
-              dsoParty.toProtoPrimitive
-            ).toValue,
-            new splice.externalpartyamuletrules.TransferCommand_ExpireResult(
-              transferCmd.payload.sender,
-              transferCmd.payload.nonce,
-            ).toValue,
-            nextOffset(),
-          )(
-            store.multiDomainAcsStore
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd.contractId ->
-              TransferCommandTxLogEntry(
-                EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, 0),
-                PartyId.tryFromProtoPrimitive(transferCmd.payload.sender),
-                transferCmd.payload.nonce,
-                transferCmd.contractId.contractId,
-                TransferCommandTxLogEntry.Status.Expired(TransferCommandExpired()),
-              )
-          )
-        } yield succeed
-      }
-
-      "filters by sender and nonce" in {
-        for {
-          store <- mkStore()
-          transferCmd1 = transferCommand(
-            userParty(1),
-            userParty(2),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            0L,
-          )
-          // different nonce, same sender
-          transferCmd2 = transferCommand(
-            userParty(1),
-            userParty(2),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            1L,
-          )
-          // same nonce, different sender
-          transferCmd3 = transferCommand(
-            userParty(2),
-            userParty(1),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            0L,
-          )
-          // same nonce, same sender, conflicts with transferCmd1
-          transferCmd4 = transferCommand(
-            userParty(1),
-            userParty(2),
-            userParty(3),
-            42.0,
-            Instant.EPOCH,
-            0L,
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map.empty
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 1L, 10)
-          _ = result shouldBe Map.empty
-          result <- store.lookupLatestTransferCommandEvents(userParty(2), 0L, 10)
-          _ = result shouldBe Map.empty
-          rules = amuletRules()
-          externalPartyRules = externalPartyAmuletRules()
-          tx1 <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd1,
-          )
-          transferCmd1Status =
-            TransferCommandTxLogEntry(
-              EventId.prefixedFromUpdateIdAndNodeId(tx1.getUpdateId, 0),
-              PartyId.tryFromProtoPrimitive(transferCmd1.payload.sender),
-              transferCmd1.payload.nonce,
-              transferCmd1.contractId.contractId,
-              TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-            )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(transferCmd1.contractId -> transferCmd1Status)
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 1L, 10)
-          _ = result shouldBe Map.empty
-          result <- store.lookupLatestTransferCommandEvents(userParty(2), 0L, 10)
-          _ = result shouldBe Map.empty
-          tx2 <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd2,
-          )
-          tx3 <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd3,
-          )
-          tx4 <- createTransferCommand(
-            store,
-            externalPartyRules,
-            transferCmd4,
-          )
-          transferCmd2Status = TransferCommandTxLogEntry(
-            EventId.prefixedFromUpdateIdAndNodeId(tx2.getUpdateId, 0),
-            PartyId.tryFromProtoPrimitive(transferCmd2.payload.sender),
-            transferCmd2.payload.nonce,
-            transferCmd2.contractId.contractId,
-            TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-          )
-          transferCmd3Status = TransferCommandTxLogEntry(
-            EventId.prefixedFromUpdateIdAndNodeId(tx3.getUpdateId, 0),
-            PartyId.tryFromProtoPrimitive(transferCmd3.payload.sender),
-            transferCmd3.payload.nonce,
-            transferCmd3.contractId.contractId,
-            TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-          )
-          transferCmd4Status = TransferCommandTxLogEntry(
-            EventId.prefixedFromUpdateIdAndNodeId(tx4.getUpdateId, 0),
-            PartyId.tryFromProtoPrimitive(transferCmd4.payload.sender),
-            transferCmd4.payload.nonce,
-            transferCmd4.contractId.contractId,
-            TransferCommandTxLogEntry.Status.Created(TransferCommandCreated()),
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 10)
-          _ = result shouldBe Map(
-            transferCmd1.contractId -> transferCmd1Status,
-            transferCmd4.contractId -> transferCmd4Status,
-          )
-          resultLimit <- store.lookupLatestTransferCommandEvents(userParty(1), 0L, 1)
-          _ = resultLimit shouldBe Map(
-            transferCmd1.contractId -> transferCmd1Status
-          )
-          result <- store.lookupLatestTransferCommandEvents(userParty(1), 1L, 10)
-          _ = result shouldBe Map(transferCmd2.contractId -> transferCmd2Status)
-          result <- store.lookupLatestTransferCommandEvents(userParty(2), 0L, 10)
-          _ = result shouldBe Map(transferCmd3.contractId -> transferCmd3Status)
-        } yield succeed
-      }
-    }
-
-    "lookupContractByRecordTime" should {
-
-      "find the DsoRules contract at a given time" in {
-        val now = CantonTimestamp.now()
-        val firstDsoRules = dsoRules(dsoParty, epoch = 1)
-        val secondDsoRules = dsoRules(dsoParty, epoch = 2)
-        val thirdDsoRules = dsoRules(dsoParty, epoch = 3)
-        val recordTimeFirst = now.plusSeconds(1).toInstant
-        val recordTimeSecond = now.plusSeconds(5).toInstant
-        val recordTimeThird = now.plusSeconds(9).toInstant
-        for {
-          store <- mkStore()
-          updateHistory <- mkUpdateHistory(domainMigrationId)
-          _ <- updateHistory.ingestionSink.initialize()
-          first <- dummyDomain.create(
-            firstDsoRules,
-            recordTime = recordTimeFirst,
-          )(
-            updateHistory
-          )
-          firstRecordTime = CantonTimestamp.fromInstant(first.getRecordTime).getOrElse(now)
-          _ <- dummyDomain.create(
-            secondDsoRules,
-            recordTime = recordTimeSecond,
-          )(updateHistory)
-          _ <- dummyDomain.create(
-            thirdDsoRules,
-            recordTime = recordTimeThird,
-          )(updateHistory)
-          result <- store.lookupContractByRecordTime(
-            DsoRules.COMPANION,
-            updateHistory,
-            firstRecordTime.plusSeconds(1),
-          )
-        } yield {
-          result.value should not be firstDsoRules
-          result.value shouldBe secondDsoRules
-          result.value should not be thirdDsoRules
-        }
-      }
-
-      "find the AmuletRules contract at a given time" in {
-        val now = CantonTimestamp.now()
-        val firstAmuletRules = amuletRules(10)
-        val secondAmuletRules = amuletRules(20)
-        val thirdAmuletRules = amuletRules(30)
-        val recordTimeFirst = now.plusSeconds(1).toInstant
-        val recordTimeSecond = now.plusSeconds(5).toInstant
-        val recordTimeThird = now.plusSeconds(9).toInstant
-        for {
-          store <- mkStore()
-          updateHistory <- mkUpdateHistory(domainMigrationId)
-          _ <- updateHistory.ingestionSink.initialize()
-          first <- dummyDomain.create(
-            firstAmuletRules,
-            recordTime = recordTimeFirst,
-          )(
-            updateHistory
-          )
-          firstRecordTime = CantonTimestamp.fromInstant(first.getRecordTime).getOrElse(now)
-          _ <- dummyDomain.create(
-            secondAmuletRules,
-            recordTime = recordTimeSecond,
-          )(
-            updateHistory
-          )
-          _ <- dummyDomain.create(
-            thirdAmuletRules,
-            recordTime = recordTimeThird,
-          )(updateHistory)
-          result <- store.lookupContractByRecordTime(
-            AmuletRules.COMPANION,
-            updateHistory,
-            firstRecordTime.plusSeconds(1),
-          )
-        } yield {
-          result.value should not be firstAmuletRules
-          result.value shouldBe secondAmuletRules
-          result.value should not be thirdAmuletRules
-        }
-      }
-    }
   }
   def mkVoteRequests(): Vector[Contract[VoteRequest.ContractId, VoteRequest]] = {
     val voteRequestContract1 = voteRequest(
@@ -1579,7 +1009,9 @@ abstract class ScanStoreTest
   ): Future[ScanStore]
 
   protected def mkUpdateHistory(
-      migrationId: Long
+      migrationId: Long,
+      timeStart: CantonTimestamp,
+      partitionRunwayDays: Int = 7,
   ): Future[UpdateHistory]
 
   private lazy val user1 = userParty(1)
@@ -2041,7 +1473,9 @@ class DbScanStoreTest
         acsStoreDescriptorUserVersion,
         txLogStoreDescriptorUserVersion,
       )(parallelExecutionContext, implicitly, implicitly, implicitly)
-      initializeResult <- store.multiDomainAcsStore.testIngestionSink.initialize()
+      initializeResult <- store.multiDomainAcsStore.testIngestionSink.initialize(
+        mockLedgerConnection()
+      )
       _ <- initializeResult match {
         case ResumeAtOffset(_) | UpdateHistoryInitAtLatestPrunedOffset => Future.unit
         case InitializeAcsAtLatestOffset =>
@@ -2062,9 +1496,17 @@ class DbScanStoreTest
   }
 
   override def mkUpdateHistory(
-      migrationId: Long
+      migrationId: Long,
+      timeStart: CantonTimestamp,
+      partitionRunwayDays: Int = 7,
   ): Future[UpdateHistory] = {
     for {
+      kvStore <- ScanKeyValueStore(
+        dsoParty,
+        mkParticipantId("whatever"),
+        storage.underlying,
+        loggerFactory,
+      )
       updateHistory <- UpdateHistory.create(
         storage.underlying, // not under test
         migrationId,
@@ -2073,13 +1515,19 @@ class DbScanStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
+      _ <- UpdateHistoryTestBase.createUpdateHistoryPartitions(
+        updateHistory,
+        timeStart,
+        partitionRunwayDays,
+      )
     } yield updateHistory
   }
 

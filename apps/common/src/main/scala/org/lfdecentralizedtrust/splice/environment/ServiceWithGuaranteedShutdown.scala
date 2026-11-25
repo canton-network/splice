@@ -8,6 +8,7 @@ import com.digitalasset.canton.lifecycle.{
   AsyncOrSyncCloseable,
   FlagCloseableAsync,
   SyncCloseable,
+  UnlessShutdown,
 }
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
@@ -74,6 +75,7 @@ class ServiceWithGuaranteedShutdown[S](
       .toMat(Sink.ignore)(Keep.both),
     errorLogMessagePrefix = "Fatally failed to handle element",
     isDone = (_: (UniqueKillSwitch, Future[Done])) => retryProvider.isClosing,
+    reportExceptionAtInfo = UnlessShutdown.isAbortedDueToShutdownException,
   )
 
   def completed: Future[Done] =

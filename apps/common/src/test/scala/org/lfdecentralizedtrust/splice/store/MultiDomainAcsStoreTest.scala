@@ -281,8 +281,8 @@ abstract class MultiDomainAcsStoreTest[
     "ingestion initialization is idempotent" in {
       implicit val store = mkStore()
       for {
-        _ <- store.ingestionSink.initialize()
-        _ <- store.ingestionSink.initialize()
+        _ <- store.ingestionSink.initialize(mockLedgerConnection())
+        _ <- store.ingestionSink.initialize(mockLedgerConnection())
       } yield succeed
     }
     "initial store is empty" in {
@@ -335,7 +335,7 @@ abstract class MultiDomainAcsStoreTest[
       }
       for {
         _ <- initWithAcs()
-        _ <- store.ingestionSink.initialize()
+        _ <- store.ingestionSink.initialize(mockLedgerConnection())
         _ <- MonadUtil.sequentialTraverse(contracts)(d1.create(_))
         paginatedResultsAsc <- paginate(None, Seq.empty, SortOrder.Ascending)
         paginatedResultsDesc <- paginate(None, Seq.empty, SortOrder.Descending)
@@ -358,9 +358,9 @@ abstract class MultiDomainAcsStoreTest[
       implicit val store = mkStore()
       for {
         _ <- initWithAcs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))
-        _ <- store.ingestionSink.initialize()
+        _ <- store.ingestionSink.initialize(mockLedgerConnection())
         _ <- d1.create(c(2))
-        _ <- store.ingestionSink.initialize()
+        _ <- store.ingestionSink.initialize(mockLedgerConnection())
         _ <- assertList(c(1) -> Some(d1), c(2) -> Some(d1))
       } yield succeed
     }
@@ -604,9 +604,9 @@ abstract class MultiDomainAcsStoreTest[
         _ <- initWithAcs(Seq(StoreTestBase.AcsImportEntry(c(1), d1, 0L)))
         _ = eventually()(assignedContracts.get() shouldBe Seq(r(1)))
         _ <- d1.create(c(2))
-        _ <- store.ingestionSink.initialize()
+        _ <- store.ingestionSink.initialize(mockLedgerConnection())
         _ = eventually()(assignedContracts.get() shouldBe Seq(r(1), r(2)))
-        _ <- store.ingestionSink.initialize()
+        _ <- store.ingestionSink.initialize(mockLedgerConnection())
         _ <- d1.create(c(3))
         _ = eventually()(assignedContracts.get() shouldBe Seq(r(1), r(2), r(3)))
         _ <- streamF
@@ -1505,7 +1505,11 @@ abstract class MultiDomainAcsStoreTest[
       val outerLoggerFactory = loggerFactory
       val versionSupport = new PackageVersionSupport {
         override def loggerFactory: NamedLoggerFactory = outerLoggerFactory
-        // Not actually relevant, but required by the trait
+        // Neither method is relevant for this test, but both are required by the trait
+        override def getPreferredPackageIds(
+            packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
+            at: CantonTimestamp,
+        )(implicit tc: TraceContext): Future[Seq[String]] = Future.successful(Seq.empty)
         override def isPackageSupported(
             packageRequirements: Seq[(PackageIdResolver.Package, Seq[PartyId])],
             at: CantonTimestamp,

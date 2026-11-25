@@ -75,8 +75,8 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       val connection = mock[BftScanConnection]
       updatesIn(
         connection,
-        Encoding.CompactJson,
-        BftOutcome.Agreed(page("s/updates_compact_json_0.zstd"), List(sv1, sv2)),
+        Encoding.LedgerApiJson,
+        BftOutcome.Agreed(page("s/updates_ledger_api_json_0.zstd"), List(sv1, sv2)),
       )
       updatesIn(
         connection,
@@ -87,7 +87,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       listingOver(connection).updateObjectsPage(at, at, 10, at).futureValue shouldBe
         PeerListing.Available(
           NonEmptyList.of(
-            ObjectsOnPeers(Seq(obj("s/updates_compact_json_0.zstd")), Seq(sv1, sv2)),
+            ObjectsOnPeers(Seq(obj("s/updates_ledger_api_json_0.zstd")), Seq(sv1, sv2)),
             ObjectsOnPeers(Seq(obj("s/updates_protobuf_json_0.zstd")), Seq(sv2, sv3)),
           )
         )
@@ -97,8 +97,8 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       val connection = mock[BftScanConnection]
       updatesIn(
         connection,
-        Encoding.CompactJson,
-        BftOutcome.Agreed(page("s/updates_compact_json_0.zstd"), List(sv1, sv2)),
+        Encoding.LedgerApiJson,
+        BftOutcome.Agreed(page("s/updates_ledger_api_json_0.zstd"), List(sv1, sv2)),
       )
       updatesIn(connection, Encoding.ProtobufJson, notYet)
 
@@ -108,7 +108,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
 
     "wait when no peer holds one encoding yet and no peer ever will hold the other" in {
       val connection = mock[BftScanConnection]
-      updatesIn(connection, Encoding.CompactJson, notYet)
+      updatesIn(connection, Encoding.LedgerApiJson, notYet)
       updatesIn(connection, Encoding.ProtobufJson, noneEver)
 
       listingOver(connection).updateObjectsPage(at, at, 10, at).futureValue shouldBe
@@ -117,7 +117,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
 
     "report that no peer will hold the objects only when every encoding says so" in {
       val connection = mock[BftScanConnection]
-      updatesIn(connection, Encoding.CompactJson, noneEver)
+      updatesIn(connection, Encoding.LedgerApiJson, noneEver)
       updatesIn(connection, Encoding.ProtobufJson, noneEver)
 
       listingOver(connection).updateObjectsPage(at, at, 10, at).futureValue shouldBe
@@ -128,8 +128,8 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       val connection = mock[BftScanConnection]
       snapshotIn(
         connection,
-        Encoding.CompactJson,
-        BftOutcome.Agreed(snapshot(at, "s/ACS_compact_json_0.zstd"), List(sv1, sv2)),
+        Encoding.LedgerApiJson,
+        BftOutcome.Agreed(snapshot(at, "s/ACS_ledger_api_json_0.zstd"), List(sv1, sv2)),
       )
       snapshotIn(
         connection,
@@ -143,7 +143,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
             SnapshotOnPeers(
               at,
               NonEmptyList.of(
-                ObjectsOnPeers(Seq(obj("s/ACS_compact_json_0.zstd")), Seq(sv1, sv2)),
+                ObjectsOnPeers(Seq(obj("s/ACS_ledger_api_json_0.zstd")), Seq(sv1, sv2)),
                 ObjectsOnPeers(Seq(obj("s/ACS_protobuf_json_0.zstd")), Seq(sv2, sv3)),
               ),
             )
@@ -155,8 +155,8 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       val connection = mock[BftScanConnection]
       snapshotIn(
         connection,
-        Encoding.CompactJson,
-        BftOutcome.Agreed(snapshot(at.plusSeconds(3600), "s/ACS_compact_json_0.zstd"), List(sv1)),
+        Encoding.LedgerApiJson,
+        BftOutcome.Agreed(snapshot(at.plusSeconds(3600), "s/ACS_ledger_api_json_0.zstd"), List(sv1)),
       )
       snapshotIn(
         connection,

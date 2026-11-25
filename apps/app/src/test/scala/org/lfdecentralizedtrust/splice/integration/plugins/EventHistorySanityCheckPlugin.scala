@@ -5,7 +5,7 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.scalatest.ScalaFuturesWithPatience
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_AddSv
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryItem,
   TreeEvent,
@@ -54,7 +54,7 @@ class EventHistorySanityCheckPlugin(
       after: Option[(Long, String)],
       acc: Chain[EventHistoryItem],
   ): Chain[EventHistoryItem] = {
-    val result = scan.getEventHistory(10, after, encoding = CompactJson)
+    val result = scan.getEventHistory(10, after, encoding = LedgerApiJson)
     val newAcc = acc ++ Chain.fromSeq(result)
     if (result.isEmpty) newAcc
     else {

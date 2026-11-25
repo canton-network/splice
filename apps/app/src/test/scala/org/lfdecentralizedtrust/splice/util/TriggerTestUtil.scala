@@ -1,10 +1,16 @@
 package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.scalatest.ScalaFuturesWithPatience
 import com.typesafe.scalalogging.LazyLogging
 import org.scalatest.concurrent.PatienceConfiguration
-import org.lfdecentralizedtrust.splice.automation.{Trigger, UpdateIngestionService}
+import org.lfdecentralizedtrust.splice.automation.{
+  PollingParallelTaskExecutionTrigger,
+  TaskSuccess,
+  Trigger,
+  UpdateIngestionService,
+}
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition.sv1Backend
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
@@ -38,21 +44,54 @@ trait TriggerTestUtil { self: BaseTest =>
     sv1Backend.dsoDelegateBasedAutomation
       .trigger[UpdateExternalPartyConfigStateTrigger]
 
+  /** Runs the (paused) trigger until it completes a task successfully.
+    *
+    * Use this instead of `runOnePollingIteration()` whenever the test relies on the task being done afterwards:
+    * `runOnePollingIteration()` also reports work done if the task failed and was skipped as stale, e.g.,
+    * because a contract it used was archived concurrently. Do not call this within another
+    * `eventually`, as retries of the outer block would run the trigger again.
+    */
+  def runUntilTaskSucceeds(
+      trigger: PollingParallelTaskExecutionTrigger[?],
+      timeUntilSuccess: FiniteDuration = BaseTest.DefaultEventuallyTimeUntilSuccess,
+  ): Unit =
+    eventually(timeUntilSuccess) {
+      trigger.runOnceWithTaskOutcome().futureValue match {
+        case Some(_: TaskSuccess) => ()
+        case outcome =>
+          fail(s"Expected a task to complete successfully, but the outcome was $outcome")
+      }
+    }
+
+  /** Runs the (paused) trigger once per attempt until `check` passes.
+    *
+    * Use this instead of [[runUntilTaskSucceeds]] when the check concerns the effect of one specific
+    * task while several tasks may be ready: every attempt processes only the first ready task, which
+    * need not be the checked one. `check` must be idempotent. Do not call this within another
+    * `eventually`.
+    */
+  def runTasksUntil(
+      trigger: PollingParallelTaskExecutionTrigger[?],
+      timeUntilSuccess: FiniteDuration = BaseTest.DefaultEventuallyTimeUntilSuccess,
+  )(check: => Unit): Unit =
+    eventually(timeUntilSuccess) {
+      trigger.runOnceWithTaskOutcome().futureValue.discard
+      check
+    }
+
+  /** Runs the (paused) trigger once and checks that no task was ready. */
+  def runExpectingNoTask(trigger: PollingParallelTaskExecutionTrigger[?]): Unit =
+    trigger.runOnceWithTaskOutcome().futureValue shouldBe None
+
   def advanceRoundsByOneTickViaAutomation(
       timeUntilSuccess: FiniteDuration = BaseTest.DefaultEventuallyTimeUntilSuccess
-  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    eventually(timeUntilSuccess) {
-      advanceOpenMiningRoundTrigger.runOnce().futureValue should be(true)
-    }
-  }
+  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+    runUntilTaskSucceeds(advanceOpenMiningRoundTrigger, timeUntilSuccess)
 
   def updateExternalPartyConfigStatesViaAutomation(
       timeUntilSuccess: FiniteDuration = BaseTest.DefaultEventuallyTimeUntilSuccess
-  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    eventually(timeUntilSuccess) {
-      updateExternalPartyConfigStateTrigger.runOnce().futureValue should be(true)
-    }
-  }
+  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+    runUntilTaskSucceeds(updateExternalPartyConfigStateTrigger, timeUntilSuccess)
 
   def pauseScanUpdateIngestionWithin[T](scan: ScanAppBackendReference)(codeBlock: => T): T = {
     try {

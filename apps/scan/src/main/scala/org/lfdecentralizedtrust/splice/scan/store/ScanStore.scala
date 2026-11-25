@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import com.digitalasset.canton.tracing.TraceContext
 
-import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -16,13 +15,11 @@ import com.digitalasset.daml.lf.data.Time.Timestamp
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, RetryProvider}
 import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.ScanAcsStoreRowData
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
-import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.{AcsInterfaceViewRowData, AcsJdbcTypes}
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
@@ -37,7 +34,6 @@ import org.lfdecentralizedtrust.splice.store.{
   MiningRoundsStore,
   MultiDomainAcsStore,
   TxLogAppStore,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
@@ -156,10 +152,6 @@ trait ScanStore
       tc: TraceContext
   ): Future[Option[ContractWithState[splice.ans.AnsRules.ContractId, splice.ans.AnsRules]]]
 
-  def getAmuletConfigForRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[OpenMiningRoundTxLogEntry]
-
   def getTopValidatorLicenses(limit: Limit)(implicit tc: TraceContext): Future[Seq[
     Contract[
       splice.validatorlicense.ValidatorLicense.ContractId,
@@ -229,15 +221,6 @@ trait ScanStore
     splice.governancelock.GovernanceLock,
   ]]]
 
-  def lookupTransferCommandCounterByParty(
-      partyId: PartyId
-  )(implicit tc: TraceContext): Future[
-    Option[ContractWithState[
-      splice.externalpartyamuletrules.TransferCommandCounter.ContractId,
-      splice.externalpartyamuletrules.TransferCommandCounter,
-    ]]
-  ]
-
   /** The registration of the dedicated synchronizer with the given id, if there is one. Nothing
     * on the ledger makes a registration unique for its synchronizer id: by convention the SVs
     * register a synchronizer at most once. With several, this returns the most recently created
@@ -251,23 +234,6 @@ trait ScanStore
       splice.decentralizedsynchronizer.RegisteredSynchronizer,
     ]]
   ]
-
-  def lookupLatestTransferCommandEvents(
-      sender: PartyId,
-      nonce: Long,
-      limit: Int,
-  )(implicit
-      tc: TraceContext
-  ): Future[Map[TransferCommand.ContractId, TransferCommandTxLogEntry]]
-
-  def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
-      companion: C,
-      updateHistory: UpdateHistory,
-      recordTime: CantonTimestamp = CantonTimestamp.MinValue,
-  )(implicit
-      companionClass: ContractCompanion[C, TCId, T],
-      tc: TraceContext,
-  ): Future[Option[Contract[TCId, T]]]
 }
 
 object ScanStore {
@@ -390,12 +356,7 @@ object ScanStore {
                 Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
             )
         },
-        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
-          },
-        ) { contract =>
+        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanAcsStoreRowData(contract)
         },
         mkFilter(splice.amulet.Amulet.COMPANION)(co => co.payload.dso == dso) { contract =>
@@ -571,13 +532,8 @@ object ScanStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
         ),
-        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) =>
-              pkgVersionSupport
-                .supports24hSubmissionDelay(Seq(key.dsoParty), Seq(key.dsoParty), now)(tc)
-          },
+        mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
+          co.payload.dso == dso
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract

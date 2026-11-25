@@ -371,9 +371,40 @@ class DbScanVerdictStore(
     )
   }
 
-  private def sqlInsertVerdictReturningId(rowT: VerdictT) = {
-    val envelopesO = rowT.trafficSummaryO.map(_.envelopeTrafficSummarys)
-    sql"""
+  // Keep each multi-row insert below Postgres' limit of 65535 bind parameters
+  // (14 per verdict row, 5 per view row), with headroom for new columns.
+  private[store] val MaxVerdictsPerInsert = 1000
+  private[store] val MaxViewsPerInsert = 5000
+
+  /** Inserts the verdicts with one multi-row insert.
+    * Returns (row_id, update_id) pairs. Postgres does not guarantee that
+    * `returning` keeps the order of `values`, so match the rows by update_id.
+    */
+  private def batchInsertVerdictsReturningIds(rows: Seq[VerdictT]): DBIO[Seq[(Long, String)]] =
+    if (rows.isEmpty) DBIO.successful(Seq.empty)
+    else {
+      val values = sqlCommaSeparated(
+        rows.map { rowT =>
+          val envelopesO = rowT.trafficSummaryO.map(_.envelopeTrafficSummarys)
+          sql"""(
+          $historyId,
+          ${rowT.migrationId},
+          ${rowT.domainId},
+          ${rowT.recordTime},
+          ${rowT.finalizationTime},
+          ${rowT.submittingParticipantUid},
+          ${rowT.verdictResult},
+          ${rowT.mediatorGroup},
+          ${rowT.updateId},
+          ${rowT.submittingParties.map(lengthLimited).toSeq},
+          ${rowT.transactionRootViews.toSeq},
+          ${rowT.trafficSummaryO.map(_.totalTrafficCost)},
+          ${envelopesO.map(seq => DbScanVerdictStore.EnvelopeT.toJson(seq))}::jsonb,
+          ${rowT.roundNumber}
+        )"""
+        }
+      )
+      (sql"""
       insert into #${Tables.verdicts}(
         history_id,
         migration_id,
@@ -389,42 +420,34 @@ class DbScanVerdictStore(
         total_traffic_cost,
         envelope_traffic_costs,
         round_number
-      ) values (
-        $historyId,
-        ${rowT.migrationId},
-        ${rowT.domainId},
-        ${rowT.recordTime},
-        ${rowT.finalizationTime},
-        ${rowT.submittingParticipantUid},
-        ${rowT.verdictResult},
-        ${rowT.mediatorGroup},
-        ${rowT.updateId},
-        ${rowT.submittingParties.map(lengthLimited).toSeq},
-        ${rowT.transactionRootViews.toSeq},
-        ${rowT.trafficSummaryO.map(_.totalTrafficCost)},
-        ${envelopesO.map(seq => DbScanVerdictStore.EnvelopeT.toJson(seq))}::jsonb,
-        ${rowT.roundNumber}
-      ) returning row_id
-    """.as[Long].headOption
-  }
+      ) values """ ++ values ++ sql" returning row_id, update_id").toActionBuilder
+        .as[(Long, String)]
+    }
 
-  private def sqlInsertView(row: TransactionViewT) = {
-    sql"""
-        insert into #${Tables.views}(
-           verdict_row_id,
-           view_id,
-           informees,
-           confirming_parties,
-           sub_views
-        ) values (
+  /** Inserts the transaction views with one multi-row insert. */
+  private def batchInsertViews(rows: Seq[TransactionViewT]): DBIO[Int] =
+    if (rows.isEmpty) DBIO.successful(0)
+    else {
+      val values = sqlCommaSeparated(
+        rows.map { row =>
+          sql"""(
           ${row.verdictRowId},
           ${row.viewId},
           ${row.informees.map(lengthLimited).toSeq},
           ${row.confirmingParties},
           ${row.subViews.toSeq}
-        )
-      """.asUpdate
-  }
+        )"""
+        }
+      )
+      (sql"""
+      insert into #${Tables.views}(
+        verdict_row_id,
+        view_id,
+        informees,
+        confirming_parties,
+        sub_views
+      ) values """ ++ values).toActionBuilder.asUpdate
+    }
 
   /** Returns a DBIO action for inserting verdicts and their transaction views.
     *
@@ -485,20 +508,40 @@ class DbScanVerdictStore(
                   logger.info(s"Already ingested verdicts: $alreadyExisting. $nonExistingMessage")
               rowIdMap <-
                 if (nonExisting.nonEmpty) {
-                  DBIO
-                    .sequence(nonExisting.map { case (verdict, mkViews) =>
-                      for {
-                        idOpt <- sqlInsertVerdictReturningId(verdict)
-                        rowId <- idOpt match {
-                          case Some(id) => DBIO.successful(id)
-                          case None =>
-                            DBIO.failed(new RuntimeException("insertVerdict did not return row_id"))
-                        }
-                        views = mkViews(rowId)
-                        _ <- DBIO.sequence(views.map(sqlInsertView)).map(_ => ())
-                      } yield verdict.recordTime -> rowId
-                    })
-                    .map(_.toMap)
+                  for {
+                    inserted <- DBIO
+                      .sequence(
+                        nonExisting
+                          .grouped(MaxVerdictsPerInsert)
+                          .map(chunk => batchInsertVerdictsReturningIds(chunk.map(_._1)))
+                          .toVector
+                      )
+                      .map(_.flatten)
+                    rowIdByUpdateId = inserted.map { case (rowId, updateId) =>
+                      updateId -> rowId
+                    }.toMap
+                    (missing, withRowIds) = nonExisting.partitionMap { case (verdict, mkViews) =>
+                      rowIdByUpdateId
+                        .get(verdict.updateId)
+                        .toRight(verdict.updateId)
+                        .map(rowId => (verdict, rowId, mkViews))
+                    }
+                    _ <-
+                      if (missing.isEmpty) DBIO.successful(())
+                      else
+                        DBIO.failed(
+                          new RuntimeException(s"insertVerdict did not return row_id for: $missing")
+                        )
+                    _ <- DBIO.sequence(
+                      withRowIds
+                        .flatMap { case (_, rowId, mkViews) => mkViews(rowId) }
+                        .grouped(MaxViewsPerInsert)
+                        .map(batchInsertViews)
+                        .toVector
+                    )
+                  } yield withRowIds.map { case (verdict, rowId, _) =>
+                    verdict.recordTime -> rowId
+                  }.toMap
                 } else {
                   DBIO.successful(Map.empty[CantonTimestamp, Long])
                 }
@@ -781,13 +824,19 @@ class DbScanVerdictStore(
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] = {
     val historyId = updateHistory.historyId
-    val q = sql"""
-      select max(record_time) from (
-        select max(record_time) as record_time from update_history_transactions where history_id = $historyId and migration_id = $migrationId
-         union all select max(record_time) as record_time from update_history_assignments where history_id = $historyId and migration_id = $migrationId
-         union all select max(record_time) as record_time from update_history_unassignments where history_id = $historyId and migration_id = $migrationId
-      ) t
+    def maxRecordTime(tableSuffix: String) =
+      sql"""
+      (select max(record_time) from (
+        select max(record_time) as record_time from #${"update_history_transactions" + tableSuffix} where history_id = $historyId and migration_id = $migrationId
+         union all select max(record_time) as record_time from #${"update_history_assignments" + tableSuffix} where history_id = $historyId and migration_id = $migrationId
+         union all select max(record_time) as record_time from #${"update_history_unassignments" + tableSuffix} where history_id = $historyId and migration_id = $migrationId
+      ) t)
     """
+    val q =
+      if (updateHistory.lastLegacyRecordTime.isDefined)
+        sql"select coalesce(" ++ maxRecordTime("") ++ sql", " ++ maxRecordTime("_legacy") ++ sql")"
+      else
+        sql"select " ++ maxRecordTime("")
 
     storage
       .query(

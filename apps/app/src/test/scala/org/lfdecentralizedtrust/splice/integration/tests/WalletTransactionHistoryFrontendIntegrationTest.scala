@@ -16,7 +16,7 @@ import org.scalatest.Assertion
 import java.time.Duration
 import scala.jdk.OptionConverters.*
 import monocle.macros.syntax.lens.*
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
+import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.LedgerApiJson
 
 class WalletTransactionHistoryFrontendIntegrationTest
     extends FrontendIntegrationTest("alice", "sv1", "scan")
@@ -190,7 +190,7 @@ class WalletTransactionHistoryFrontendIntegrationTest
       clue("update IDs from the UI can be used for querying scan") {
         updateIds.foreach(updateId =>
           eventuallySucceeds() {
-            sv1ScanBackend.getUpdate(updateId, encoding = CompactJson)
+            sv1ScanBackend.getUpdate(updateId, encoding = LedgerApiJson)
           }
         )
       }

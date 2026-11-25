@@ -58,7 +58,7 @@ class DownloadScanUpdates(
             val command = GetUpdateHistoryV2(
               count = 1000,
               after = Some((migrationId.toLong, at.toString)),
-              DamlValueEncoding.CompactJson,
+              DamlValueEncoding.LedgerApiJson,
             )
             command
               .submitRequest(command.createClient(host), Nil)

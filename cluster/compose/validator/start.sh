@@ -30,7 +30,7 @@ function _info(){
 }
 
 function usage() {
-  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> [-m <migration_id>] [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E] [-g] [--enable-key-download]"
+  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> [-m <migration_id>] [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E] [-g] [--enable-key-download] [--enable-participant-admin-api-auth]"
   echo "  -s <sponsor_sv_address>: The full URL of the sponsor SV"
   echo "  -o <onboarding_secret>: The onboarding secret to use. May be empty (\"\") if you are already onboarded."
   echo "  -p <party_hint>: The party hint to use for the validator operator, by default also your participant identifier."
@@ -51,6 +51,8 @@ function usage() {
   echo "  -k: Disable the safety check that refuses to create a new participant database when another participant database already exists."
   echo "  --enable-key-download: Allow downloading the participant's private keys via its admin API. Required for participant identities dumps (e.g., for backups)."
   echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). Requires LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE to be equal, and with -a also WALLET_GATEWAY_UI_CLIENT_ID to be set in .env."
+  # TODO(DACH-NY/canton-network-internal#8256): replace this with disable-participant-admin-api-auth
+  echo "  --enable-participant-admin-api-auth: enables authentication on the participant admin API"
 
   echo ""
   echo "Testing flags:"
@@ -85,6 +87,7 @@ bft_custom_threshold=""
 enable_participant_db_conflict_check=1
 wallet_gateway=0
 enable_key_download=0
+enable_participant_admin_api_auth=0
 
 # Long options (getopts only supports short ones)
 args=()
@@ -92,6 +95,9 @@ for arg in "$@"; do
   case "${arg}" in
     --enable-key-download)
       enable_key_download=1
+      ;;
+    --enable-participant-admin-api-auth)
+      enable_participant_admin_api_auth=1
       ;;
     *)
       args+=("${arg}")
@@ -378,6 +384,9 @@ if [ $wallet_gateway -eq 1 ]; then
   if [ $wait -ne 1 ]; then
     _info "Deploying the wallet gateway and portfolio UI, using Scan at ${WALLET_GATEWAY_SCAN_ADDRESS} as the token registry"
   fi
+fi
+if [ $auth -eq 1 ] && [ $enable_participant_admin_api_auth -eq 1 ]; then
+  extra_compose_files+=("-f" "${script_dir}/compose-enable-participant-admin-api-auth.yaml")
 fi
 extra_args=()
 if [ $wait -eq 1 ]; then

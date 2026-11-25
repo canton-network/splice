@@ -3,12 +3,12 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.historystart
 
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
+import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -41,13 +41,6 @@ class KvHistoryStartStore(kvProvider: ScanKeyValueProvider)(implicit ec: Executi
 
 object KvHistoryStartStore {
   val kvStoreKey = "scan_history_start"
-
-  private implicit val timestampCodec: Codec[CantonTimestamp] =
-    Codec
-      .from[Long](implicitly, implicitly)
-      .iemap(timestamp => CantonTimestamp.fromProtoPrimitive(timestamp).left.map(_.message))(
-        _.toProtoPrimitive
-      )
 
   implicit val historyStartCodec: Codec[HistoryStart] = deriveCodec[HistoryStart]
 }

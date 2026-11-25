@@ -15,7 +15,7 @@ import java.time.{Instant, ZoneOffset}
 class BulkStorageObjectsTest extends AnyWordSpec with BaseTest {
 
   private val folder = "2026-01-02T00:00:00Z~2026-01-03T00:00:00Z"
-  private val objectKey = s"$folder/updates_compact_json_0.zstd"
+  private val objectKey = s"$folder/updates_ledger_api_json_0.zstd"
   private val encodedKey =
     java.net.URLEncoder.encode(objectKey, java.nio.charset.StandardCharsets.UTF_8)
 

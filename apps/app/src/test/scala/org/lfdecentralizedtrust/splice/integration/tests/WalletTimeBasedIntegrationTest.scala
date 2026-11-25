@@ -30,6 +30,7 @@ import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import monocle.macros.syntax.lens.*
 
 import java.time.Duration
+import scala.concurrent.duration.DurationInt
 
 class WalletTimeBasedIntegrationTest
     extends IntegrationTest
@@ -66,6 +67,12 @@ class WalletTimeBasedIntegrationTest
           _.focus(_.transferPreapproval.preapprovalLifetime).replace(preapprovalLifetime)
         )(config)
       )
+      .addConfigTransforms((_, config) =>
+        ConfigTransforms.updateAllScanAppConfigs_(
+          // more days than default runway days are advanced
+          _.copy(updateHistoryPartitionRunwayDays = 90)
+        )(config)
+      )
 
   "A wallet" should {
 
@@ -94,7 +101,7 @@ class WalletTimeBasedIntegrationTest
                 }
               },
             )
-            actAndCheck(
+            actAndCheck(timeUntilSuccess = 60.seconds)(
               "Accept subscription request", {
                 aliceWalletClient.acceptSubscriptionRequest(requestId)
               },

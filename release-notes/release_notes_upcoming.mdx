@@ -15,45 +15,24 @@
 
   - Scan App
 
-    - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true` (Helm
-      value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
-      per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
-      releases extend this setting to the daily snapshots once they are in bulk storage.
-      ACS snapshot queries with `record_time_match=exact` for a time whose snapshot was pruned then return not found.
+    - Removed the internal `/v0/transfer-command-counter/{party}` and `/v0/transfer-command/status` endpoints.
+      Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0, this removes
+      the remaining parts.
+    - Removed the deprecated `/v0/amulet-config-for-round` endpoint. Use the `transferConfigUsd` and `amuletPrice`
+      fields of the `OpenMiningRound` contracts returned by `/v0/open-and-issuing-mining-rounds` instead.
+    - The `DeleteCorruptAcsSnapshotTrigger` is removed because it is obsolete.
+    - Scan switches its update history to tables partitioned by record time. On the first start, a database migration
+      renames the existing update history tables to `*_legacy` (no data is copied) and creates the new tables. Scan reads
+      from both. After this migration, Scan cannot be downgraded to an earlier version.
+    - ACS snapshots are now always stored in per-snapshot tables. The `per-acs-snapshot-tables-enabled` setting is
+      deprecated: `true` is accepted and has no effect, `false` is rejected at startup. Remove it from your configuration.
+    - An SV that joins after the switch cannot backfill update history from other SVs until a later release.
 
-  - SV App
+  - Validator App
 
-    - Joining SVs now download the DSO party ACS and sequencer onboarding state from their sponsor as files
-      instead of keeping the responses in the SV app's memory, reducing SV app memory usage for large
-      snapshots. SVs that restrict SV app ingress must allow other SVs to reach the new
-      `/v0/onboard/sv/party-migration/prepare`, `/v0/onboard/sv/sequencer/prepare` and
-      `/v0/onboard/sv/download/{id}` endpoints, which are tagged `x-external-audience: svs`.
-      Interrupted downloads resume where they stopped. Proxies between SVs must pass through the
-      `Repr-Digest` response header, which the joining SV uses to verify the snapshot. They should also
-      pass through the `Range` and `Content-Range` headers; otherwise interrupted downloads start again
-      from the beginning.
-
-  - Deployment
-
-    - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
-      that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
-      `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
-    - The Postgres images used by the Docker Compose deployments and by the Helm `pg-init` init containers are bumped
-      to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
-      Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
-
-  - Scan App
-
-    - Add the `ledger_api_json` option to the `DamlValueEncoding` enum, used by the `daml_value_encoding`
-      parameter of the update history and event history endpoints.
-      It encodes Daml values like the JSON Ledger API (v2) does. The encoding is identical to the existing
-      `compact_json`, with two differences: numeric values are encoded differently ("0E-10" vs "0.0000000000"),
-      and it omits trailing `null` fields of Daml records. The latter is important: with `compact_json`,
-      a daml upgrade that added new optional fields to templates caused old values to be returned with those
-      fields included in the JSON object (as `null`), so the returned JSON depends on the Scan version.
-      The new `ledger_api_json` encoding returns the same JSON regardless of the Scan version.
-      `compact_json` remains the default for now. Clients that compare responses across Scan instances should switch to
-      the new encoding.
+    - Removed the `/v0/scan-proxy/transfer-command-counter/{party}` and `/v0/scan-proxy/transfer-command/status`
+      endpoints. Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0,
+      this removes the remaining parts.
 
 
 
@@ -120,3 +99,7 @@
 
         Nodes no longer upload or vet older versions of these packages, and downgrading the Daml models
         below these versions is no longer supported.
+
+      - Added a new template `ActivityRecorder` in `splice-amulet` to support extra activity reporting
+        by dedicated synchronizers, as specified by the
+        [CIP-0104 App Activity Recording Extension Hook](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md#app-activity-recording-extension-hook).

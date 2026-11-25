@@ -41,20 +41,14 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
   GovernanceLock,
   GovernanceLockKey,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommand,
-  TransferCommandCounter,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.ExternalPartyAmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
-  OpenMiningRoundTxLogEntry,
   ScanStore,
   ScanTxLogParser,
-  TransferCommandTxLogEntry,
   TxLogEntry,
   VoteRequestTxLogEntry,
 }
@@ -73,14 +67,12 @@ import org.lfdecentralizedtrust.splice.store.{
   Limit,
   ResultsPage,
   TxLogStore,
-  UpdateHistory,
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   GovernanceLockUtil,
-  PackageQualifiedName,
   QualifiedName,
   TemplateJsonDecoder,
 }
@@ -487,29 +479,6 @@ class DbScanStore private (
       )
     }
 
-  override def lookupTransferCommandCounterByParty(
-      partyId: PartyId
-  )(implicit tc: TraceContext): Future[
-    Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]]
-  ] = waitUntilAcsIngested {
-    (for {
-      row <- storage
-        .querySingle(
-          selectFromAcsTableWithState(
-            ScanTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            TransferCommandCounter.COMPANION,
-            additionalWhere = sql"""
-                and wallet_party = $partyId
-            """,
-            orderLimit = sql"limit 1",
-          ).headOption,
-          "lookupTransferCommandCounterReceiver",
-        )
-    } yield contractWithStateFromRow(TransferCommandCounter.COMPANION)(row)).value
-  }
-
   override def lookupRegisteredSynchronizer(
       synchronizerId: SynchronizerId
   )(implicit tc: TraceContext): Future[
@@ -586,34 +555,6 @@ class DbScanStore private (
         contractWithStateFromRow(FeaturedAppRight.COMPANION)
       )
     }
-
-  override def getAmuletConfigForRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[OpenMiningRoundTxLogEntry] = waitUntilAcsIngested {
-    for {
-      row <- storage
-        .querySingle(
-          selectFromTxLogTable(
-            txLogTableName,
-            txLogStoreId,
-            where = sql"""
-                   entry_type = ${EntryType.OpenMiningRoundTxLogEntry} and
-                   round = $round
-              """,
-            orderLimit = sql"order by entry_number desc limit 1",
-          ).headOption,
-          "getAmuletConfigForRound",
-        )
-        .value
-      entry = row.map(txLogEntryFromRow[OpenMiningRoundTxLogEntry](txLogConfig))
-      result <- entry match {
-        case Some(omr: OpenMiningRoundTxLogEntry) =>
-          Future.successful(omr)
-        case None =>
-          Future.failed(txLogNotFound())
-      }
-    } yield result
-  }
 
   override def listSvNodeStates()(implicit tc: TraceContext): Future[Seq[SvNodeState]] =
     for {
@@ -867,66 +808,4 @@ class DbScanStore private (
     } yield result.map(contractFromRow(VoteRequest.COMPANION)(_))
   }
 
-  override def lookupLatestTransferCommandEvents(sender: PartyId, nonce: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Map[TransferCommand.ContractId, TransferCommandTxLogEntry]] =
-    waitUntilAcsIngested {
-      for {
-        // This query is linear in the number of events that match (sender, nonce).
-        // Given that for each TransferCommand that's at most 2 and we expect few nonce conflicts
-        // this is acceptable.
-        result <- storage
-          .query(
-            sql"""
-              with ranked_rows as (
-                select #${TxLogQueries.SelectFromTxLogTableResult
-                .sqlColumnsCommaSeparated()}, rank() over (partition by transfer_command_contract_id order by entry_number desc) from #${ScanTables.txLogTableName}
-                where store_id = $txLogStoreId
-                  and entry_type = ${TxLogEntry.EntryType.TransferCommandTxLogEntry}
-                  and transfer_command_sender = ${sender}
-                  and transfer_command_nonce = $nonce
-              )
-              select #${TxLogQueries.SelectFromTxLogTableResult.sqlColumnsCommaSeparated()}
-              from ranked_rows
-              where rank = 1
-              limit $limit
-            """.toActionBuilder.as[TxLogQueries.SelectFromTxLogTableResult],
-            "getLatestTransferCommandEventByContractId",
-          )
-      } yield result
-        .map(txLogEntryFromRow[TransferCommandTxLogEntry](txLogConfig))
-        .map(entry => new TransferCommand.ContractId(entry.contractId) -> entry)
-        .toMap
-    }
-
-  // TODO (#934): this method probably belongs in UpdateHistory instead
-  override def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
-      companion: C,
-      updateHistory: UpdateHistory,
-      recordTime: CantonTimestamp,
-  )(implicit
-      companionClass: ContractCompanion[C, TCId, T],
-      tc: TraceContext,
-  ): Future[Option[Contract[TCId, T]]] = {
-    val pqn @ PackageQualifiedName(packageName, QualifiedName(moduleName, entityName)) =
-      companionClass.packageQualifiedName(companion)
-    for {
-      row <- storage
-        .querySingle(
-          selectFromUpdateCreatesTableResult(
-            updateHistory.historyId,
-            where = sql"""template_id_module_name = ${lengthLimited(moduleName)}
-              and template_id_entity_name = ${lengthLimited(entityName)}
-              and package_name = ${lengthLimited(packageName)}
-              and record_time > $recordTime""",
-            // TODO(#934): Order by row_id is suspicious
-            orderLimit = sql"""order by row_id asc limit 1""",
-          ).headOption,
-          s"lookup[$pqn]",
-        )
-        .value
-    } yield {
-      row.map(contractFromEvent(companion)(_))
-    }
-  }
 }

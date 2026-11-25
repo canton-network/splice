@@ -45,18 +45,13 @@ jobs:
         with:
           cache_version: 10
           test_name: python_tests
-
-      - name: Type check Python
-        if: steps.skip.outputs.skip != 'true'
-        uses: ./.github/actions/nix/run
-        with:
-          cmd: ./scripts/check-python-types.sh
+          with_sbt: false
 
       - name: Run Python unit tests
         if: steps.skip.outputs.skip != 'true'
         uses: ./.github/actions/nix/run
         with:
-          cmd: ./scripts/run-python-tests.sh
+          cmd: ./scripts/python-checks.py test
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')

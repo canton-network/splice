@@ -1,12 +1,12 @@
 name: "Save SBT Cache"
 description: "Saves the SBT cache"
 inputs:
-  cache_version:
-    description: "Version of the cache"
-    required: true
   splice_root:
     description: "Path to splice repo"
     default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
+  cache_key:
+    description: "Key to save the cache under (should be the cache_key output from the matching restore action)"
+    required: true
   load_cache_hit:
     description: "Cache hit from the restore SBT job (should be the cache_hit output from the restore SBT job)"
     required: true
@@ -21,7 +21,7 @@ runs:
         path: |
           ${{ github.repository == 'DACH-NY/canton-network-internal' && '/home/runner/.ivy2/cache' || '/github/home/.ivy2/cache' }}
           ${{ github.repository == 'DACH-NY/canton-network-internal' && '/home/runner/.sbt' || '/github/home/.sbt' }}
-        key: sbt-${{ inputs.cache_version }} job=${{ github.job }} dependencies=${{ hashFiles(format('{0}/project/Dependencies.scala', inputs.splice_root), format('{0}/project/CantonDependencies.scala', inputs.splice_root)) }}-${{ hashFiles(format('{0}/project/BuildCommon.scala', inputs.splice_root), format('{0}/project/build.properties', inputs.splice_root), format('{0}/project/Houserules.scala', inputs.splice_root), format('{0}/project/plugins.sbt', inputs.splice_root), format('{0}/build.sbt', inputs.splice_root)) }}
+        key: ${{ inputs.cache_key }}
     - name: Not storing SBT cache
       if: ${{ fromJson(inputs.load_cache_hit) }}
       shell: bash

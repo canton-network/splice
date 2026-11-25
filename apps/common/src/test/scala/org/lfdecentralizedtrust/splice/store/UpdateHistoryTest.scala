@@ -4,17 +4,20 @@ import com.daml.ledger.javaapi.data.{
   CreatedEvent,
   DamlRecord,
   ExercisedEvent,
+  Identifier,
   Int64,
   OffsetCheckpoint,
   Value,
 }
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.util.{HexString, MonadUtil}
 import com.digitalasset.daml.lf.data.Bytes
 import com.google.rpc.status.Status
 import com.google.rpc.status.Status.toJavaProto
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, AppRewardCoupon}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
+import com.digitalasset.canton.time.SimClock
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentUpdate,
   TransactionTreeUpdate,
@@ -23,9 +26,10 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
 import org.lfdecentralizedtrust.splice.util.DomainRecordTimeRange
 import com.daml.ledger.javaapi.data.Transaction
 
-import java.time.Instant
+import java.time.{Instant, LocalDate, ZoneOffset}
 import java.util.Collections
 import scala.concurrent.Future
+import scala.util.Try
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -34,6 +38,8 @@ import StoreTestBase.*
 import cats.data.NonEmptyList
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.config.NonNegativeDuration
+import org.scalatest.exceptions.TestFailedException
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 class UpdateHistoryTest extends UpdateHistoryTestBase {
 
@@ -49,6 +55,104 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
   }
 
   "UpdateHistory" should {
+
+    "createPartitions" should {
+
+      "be idempotent" in {
+        val store = mkStore()
+
+        for {
+          _ <- initStore(store)
+          _ <- createUpdateHistoryPartitions(store, time(0), partitionRunwayDays = 7)
+          _ <- create(domain1, cid1, offset1, party1, store, time(10))
+          result <- updates(store)
+        } yield result should have size 1
+      }
+    }
+
+    "analyzePartitionedTables" should {
+
+      "use ANALYZE ONLY from Postgres 18 and plain ANALYZE before" in {
+        UpdateHistory.analyzeCommand(170006) shouldBe "analyze"
+        UpdateHistory.analyzeCommand(180000) shouldBe "analyze only"
+        UpdateHistory.analyzeCommand(180004) shouldBe "analyze only"
+      }
+
+      "analyze the partitioned tables" in {
+        val store = mkStore()
+        for {
+          _ <- initStore(store)
+          _ <- store.analyzePartitionedTables()
+        } yield succeed
+      }
+    }
+
+    "partitionRunwayEnd" should {
+
+      val today = LocalDate.of(2026, 11, 24)
+      def startOf(day: LocalDate) =
+        CantonTimestamp.assertFromInstant(day.atStartOfDay(ZoneOffset.UTC).toInstant)
+
+      "be the end of the consecutive days with partitions from today on" in {
+        val days = (0L to 7L).map(today.plusDays).toSet
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today.plusDays(8))
+      }
+
+      "stop at the first day without partitions" in {
+        val days = Set(today, today.plusDays(1), today.plusDays(3))
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today.plusDays(2))
+      }
+
+      "ignore the days before today" in {
+        val days = Set(today.minusDays(2), today.minusDays(1), today)
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today.plusDays(1))
+      }
+
+      "be the start of today if today has no partitions" in {
+        val days = Set(today.minusDays(1), today.plusDays(1))
+        UpdateHistory.partitionRunwayEnd(days, today) shouldBe startOf(today)
+      }
+    }
+
+    "initialize with a connection" should {
+
+      def daysAfter(days: Long) = CantonTimestamp.Epoch.plus(java.time.Duration.ofDays(days))
+      val day0 = LocalDate.ofInstant(CantonTimestamp.Epoch.toInstant, ZoneOffset.UTC)
+
+      def mkClock(now: CantonTimestamp) = {
+        val clock = new SimClock(loggerFactory = loggerFactory)
+        clock.advanceTo(now)
+        clock
+      }
+
+      "create partitions from the first update to ingest if nothing was ingested" in {
+        val store = mkStore(clock = mkClock(daysAfter(20)))
+        for {
+          _ <- store.ingestionSink.initialize(mockLedgerConnection(daysAfter(3)))
+          days <- store.listDatesWithAllPartitions()
+        } yield {
+          store.isReady shouldBe true
+          days shouldBe (3L to 27L).map(day0.plusDays).toSet
+        }
+      }
+
+      "extend the runway from the last ingested record time after a downtime" in {
+        val clock = mkClock(CantonTimestamp.Epoch)
+        val store = mkStore(clock = clock)
+        for {
+          _ <- initStore(store, timeStart = time(0), partitionRunwayDays = 1)
+          _ <- create(domain1, cid1, offset1, party1, store, time(10))
+          _ = clock.advanceTo(daysAfter(20))
+          _ <- store.ingestionSink.initialize(mockLedgerConnection())
+          _ <- create(domain1, cid2, offset2, party1, store, daysAfter(15))
+          days <- store.listDatesWithAllPartitions()
+          result <- updates(store)
+        } yield {
+          days.filterNot(_.isBefore(day0)) shouldBe (0L to 27L).map(day0.plusDays).toSet
+          result should have size 2
+        }
+      }
+    }
 
     "ingestion" should {
 
@@ -87,25 +191,11 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
         )
       }
 
-      "handle single create and query it by contract id" in {
+      "handle single create" in {
         val store = mkStore()
         for {
           _ <- initStore(store)
-          result <- store.lookupContractById(AppRewardCoupon.COMPANION)(
-            new AppRewardCoupon.ContractId(cid1)
-          )
-          _ = result shouldBe None
           _ <- create(domain1, cid1, offset1, party1, store, time(1))
-          result <- store.lookupContractById(AppRewardCoupon.COMPANION)(
-            new AppRewardCoupon.ContractId(cid1)
-          )
-          _ = result shouldBe Some(
-            appRewardCoupon(
-              round = 0,
-              provider = party1,
-              contractId = cid1,
-            )
-          )
           updates <- updates(store)
         } yield checkUpdates(
           updates,
@@ -232,6 +322,73 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
             ExpectedExercise(cid1, domain2, "Archive"),
           ),
         )
+      }
+
+      "write interned strings of create, exercise and assignment events" in {
+        implicit val store = mkStore()
+        val c = appRewardCoupon(1, party1, contractId = cid1)
+        val templateId = c.identifier
+        val interfaceId = new Identifier("interfacePackageId", "Interface.Module", "Interface")
+        val expectedTemplateStrings = Seq(
+          "template_id_package_id" -> templateId.getPackageId,
+          "template_id_module_name" -> templateId.getModuleName,
+          "template_id_entity_name" -> templateId.getEntityName,
+          "package_name" -> getPackageName(templateId),
+        )
+        val expectedStrings = Seq(
+          "update_history_creates" -> expectedTemplateStrings,
+          "update_history_assignments" -> expectedTemplateStrings,
+          "update_history_exercises" -> (expectedTemplateStrings ++ Seq(
+            "choice" -> "Archive",
+            "interface_id_package_id" -> interfaceId.getPackageId,
+            "interface_id_module_name" -> interfaceId.getModuleName,
+            "interface_id_entity_name" -> interfaceId.getEntityName,
+          )),
+        ).flatMap { case (table, columns) =>
+          columns.map { case (column, value) => (table, column, value) }
+        }
+        for {
+          _ <- initStore(store)
+          _ <- domain1.create(c, recordTime = time(1).toInstant)
+          _ <- domain1.unassign(c -> domain2, reassignmentId1, 1, time(2))
+          _ <- domain2.assign(c -> domain1, reassignmentId1, 1, time(3))
+          _ <- domain2.exercise(
+            c,
+            Some(interfaceId),
+            "Archive",
+            com.daml.ledger.javaapi.data.Unit.getInstance(),
+            com.daml.ledger.javaapi.data.Unit.getInstance(),
+            recordTime = time(4).toInstant,
+          )
+          internedStrings <- storage
+            .query(
+              sql"select id, value from interned_strings".as[(Long, String)],
+              "internedStrings",
+            )
+            .failOnShutdown
+          storedStrings <- MonadUtil.sequentialTraverse(expectedStrings) {
+            case (table, column, _) =>
+              storage
+                .query(
+                  sql"""
+                    select #$column, #${column}_interned
+                    from #$table
+                    where history_id = ${store.historyId}
+                  """.as[(String, Long)],
+                  "storedStrings",
+                )
+                .failOnShutdown
+          }
+        } yield {
+          val strings = internedStrings.toMap
+          forAll(expectedStrings.zip(storedStrings)) { case ((table, column, expected), rows) =>
+            withClue(s"$table.$column") {
+              val (text, interned) = rows.loneElement
+              text shouldBe expected
+              strings(interned) shouldBe expected
+            }
+          }
+        }
       }
 
       // Note: we do not really want to support multiple UpdateHistory instances ingesting
@@ -709,11 +866,293 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
       }
     }
 
+    "reading across the cutover to partitioned tables" should {
+
+      "return the same results as without the cutover" in {
+        val store = mkStore(party1, migration1, participant1)
+        val unit = com.daml.ledger.javaapi.data.Unit.getInstance()
+        def archive(
+            domain: SynchronizerId,
+            contractId: String,
+            offset: Long,
+            store: UpdateHistory,
+            recordTime: CantonTimestamp,
+        ) =
+          domain.exercise(
+            appRewardCoupon(0, party1, contractId = contractId),
+            None,
+            "Archive",
+            unit,
+            unit,
+            offset,
+            recordTime.toInstant,
+            recordTime.toInstant,
+          )(store)
+        val cids = (1 to 8).map(validContractId(_))
+
+        def paginate(
+            page: Option[TimestampWithMigrationId] => Future[Seq[TreeUpdateWithMigrationId]]
+        ): Future[Seq[TreeUpdateWithMigrationId]] = {
+          def go(
+              after: Option[TimestampWithMigrationId],
+              acc: Seq[TreeUpdateWithMigrationId],
+          ): Future[Seq[TreeUpdateWithMigrationId]] =
+            for {
+              result <- page(after)
+              all <- result.lastOption match {
+                case None => Future.successful(acc)
+                case Some(last) =>
+                  go(
+                    Some(TimestampWithMigrationId(last.update.update.recordTime, last.migrationId)),
+                    acc ++ result,
+                  )
+              }
+            } yield all
+          go(None, Seq.empty)
+        }
+
+        def readEverything(
+            store: UpdateHistory,
+            updateIds: Seq[String],
+        ) = for {
+          allUpdates <- store.getAllUpdates(None, PageLimit.tryCreate(1000))
+          allUpdatesPaginated <- paginate(store.getAllUpdates(_, PageLimit.tryCreate(2)))
+          withoutImports <- store.getUpdatesWithoutImportUpdates(None, PageLimit.tryCreate(1000))
+          withoutImportsPaginated <- paginate(
+            store.getUpdatesWithoutImportUpdates(_, PageLimit.tryCreate(2))
+          )
+          before <- store.getUpdatesBefore(
+            migration1,
+            domain1,
+            time(10),
+            None,
+            PageLimit.tryCreate(1000),
+          )
+          beforeAtOrAfter <- store.getUpdatesBefore(
+            migration1,
+            domain1,
+            time(10),
+            Some(time(6)),
+            PageLimit.tryCreate(2),
+          )
+          byId <- Future.traverse(updateIds)(store.getUpdate)
+          range <- store.getRecordTimeRange(migration1)
+          previousMigration <- store.getPreviousMigrationId(migration1)
+          importUpdates <- store.getImportUpdates(migration1, "", PageLimit.tryCreate(1000))
+          lastImportUpdateId <- store.getLastImportUpdateId(migration1)
+          lowestMigrations <- Future.traverse(Seq(time(0), time(5), time(8)))(
+            store.getLowestMigrationForRecordTime
+          )
+          backfillingState <- store.getBackfillingState()
+        } yield (
+          allUpdates,
+          allUpdatesPaginated,
+          withoutImports,
+          withoutImportsPaginated,
+          before,
+          beforeAtOrAfter,
+          byId,
+          range,
+          (previousMigration, importUpdates, lastImportUpdateId, lowestMigrations),
+          backfillingState,
+        )
+
+        def countRows(table: String) =
+          storage
+            .query(sql"select count(*) from #$table".as[Int].head, "countRows")
+            .failOnShutdown
+
+        for {
+          _ <- initStore(store)
+          tx1 <- create(domain1, cids(0), validOffset(1), party1, store, time(1))
+          _ <- unassign(
+            domain1,
+            domain2,
+            cids(0),
+            validOffset(2),
+            party1,
+            1,
+            reassignmentId1,
+            store,
+            time(2),
+          )
+          _ <- assign(
+            domain2,
+            domain1,
+            cids(0),
+            validOffset(3),
+            party1,
+            1,
+            reassignmentId1,
+            store,
+            time(3),
+          )
+          tx4 <- archive(domain2, cids(0), validOffset(4), store, time(4))
+          tx5 <- create(domain1, cids(1), validOffset(5), party1, store, time(5))
+          tx6 <- create(domain1, cids(2), validOffset(6), party1, store, time(6))
+          tx7 <- archive(domain1, cids(1), validOffset(7), store, time(7))
+          tx8 <- create(domain1, cids(3), validOffset(8), party1, store, time(8))
+          _ <- unassign(
+            domain1,
+            domain2,
+            cids(3),
+            validOffset(9),
+            party1,
+            1,
+            "%08d".format(2),
+            store,
+            time(9),
+          )
+          tx9 <- archive(domain1, cids(2), validOffset(10), store, time(9).plusMillis(1))
+          updateIds = Seq(tx1, tx4, tx5, tx6, tx7, tx8, tx9).map(_.getUpdateId)
+
+          uncut <- readEverything(store, updateIds)
+          _ <- moveToLegacyTables(store.historyId, time(7))
+          _ <- forgetLastLegacyRecordTime(store.historyId)
+          cutStore = mkStore(party1, migration1, participant1)
+          cut <- readEverything(cutStore, updateIds)
+          legacyTransactions <- countRows("update_history_transactions_legacy")
+          partitionedTransactions <- countRows("update_history_transactions")
+          legacyExercises <- countRows("update_history_exercises_legacy")
+          partitionedExercises <- countRows("update_history_exercises")
+        } yield {
+          store.lastLegacyRecordTime shouldBe None
+          cutStore.lastLegacyRecordTime shouldBe Some(time(6))
+          legacyTransactions shouldBe 4
+          partitionedTransactions shouldBe 3
+          legacyExercises shouldBe 1
+          partitionedExercises shouldBe 2
+          uncut._1 should have size 10
+          cut shouldBe uncut
+        }
+      }
+
+      "return the import updates from the legacy tables" in {
+        val store1 = mkStore(party1, migration1, participant1)
+        val store2 = mkStore(party1, migration2, participant1)
+        def readImportUpdates(store: UpdateHistory) = for {
+          importUpdates <- store.getImportUpdates(migration2, "", PageLimit.tryCreate(1000))
+          lastImportUpdateId <- store.getLastImportUpdateId(migration2)
+        } yield (importUpdates, lastImportUpdateId)
+
+        for {
+          _ <- initStore(store1)
+          tx1 <- create(domain1, "c1", validOffset(1), party1, store1, time(1))
+          tx2 <- create(domain1, "c2", validOffset(2), party1, store1, time(2))
+          _ <- initStore(store2)
+          _ <- importUpdate(tx2, validOffset(1), store2)
+          _ <- importUpdate(tx1, validOffset(2), store2)
+          _ <- create(domain1, "c3", validOffset(3), party1, store2, time(3))
+
+          uncut <- readImportUpdates(store2)
+          _ <- moveToLegacyTables(store2.historyId, time(3))
+          _ <- forgetLastLegacyRecordTime(store2.historyId)
+          cutStore = mkStore(party1, migration2, participant1)
+          cut <- readImportUpdates(cutStore)
+        } yield {
+          cutStore.lastLegacyRecordTime shouldBe Some(importUpdateRecordTime)
+          uncut._1.map(_.update.update.updateId) shouldBe Seq("c1", "c2")
+          uncut._2 shouldBe Some("c2")
+          cut shouldBe uncut
+        }
+      }
+    }
+
+    "lastLegacyRecordTime" should {
+
+      "be the latest legacy record time and stay fixed once recorded" in {
+        val store1 = mkStore(party1, migration1, participant1)
+        val store2 = mkStore(party1, migration2, participant1)
+        for {
+          _ <- initStore(store1)
+          _ <- create(domain1, validContractId(1), validOffset(1), party1, store1, time(1))
+          _ <- initStore(store2)
+          _ <- create(domain1, validContractId(2), validOffset(1), party1, store2, time(2))
+          _ <- unassign(
+            domain1,
+            domain2,
+            validContractId(2),
+            validOffset(2),
+            party1,
+            1,
+            reassignmentId1,
+            store2,
+            time(3),
+          )
+          _ <- create(domain1, validContractId(3), validOffset(3), party1, store2, time(4))
+          _ <- moveToLegacyTables(store1.historyId, time(4))
+          _ <- forgetLastLegacyRecordTime(store1.historyId)
+          cutStore = mkStore(party1, migration2, participant1)
+          _ <- storage
+            .update(
+              sql"delete from update_history_unassignments_legacy".asUpdate,
+              "deleteLegacyUnassignments",
+            )
+            .failOnShutdown
+          reopenedStore = mkStore(party1, migration2, participant1)
+        } yield {
+          store1.lastLegacyRecordTime shouldBe None
+          store2.lastLegacyRecordTime shouldBe None
+          cutStore.lastLegacyRecordTime shouldBe Some(time(3))
+          reopenedStore.lastLegacyRecordTime shouldBe Some(time(3))
+        }
+      }
+
+      "do not recompute for a history without legacy updates" in {
+        val store = mkStore(party1, migration1, participant1)
+        for {
+          _ <- initStore(store)
+          _ <- create(domain1, validContractId(1), validOffset(1), party1, store, time(1))
+          // if it was recomputed, lastLegacyRecordTime would be time(2)
+          _ <- moveToLegacyTables(store.historyId, time(2))
+          reopenedStore = mkStore(party1, migration1, participant1)
+        } yield {
+          store.lastLegacyRecordTime shouldBe None
+          reopenedStore.lastLegacyRecordTime shouldBe None
+        }
+      }
+
+      "be None when the legacy tables do not exist" in {
+        val legacyTables = Seq(
+          "update_history_transactions_legacy",
+          "update_history_assignments_legacy",
+          "update_history_unassignments_legacy",
+        )
+        def renameLegacyTables(from: String => String, to: String => String) =
+          MonadUtil.sequentialTraverse(legacyTables) { table =>
+            storage.underlying
+              .update(
+                sqlu"alter table #${from(table)} rename to #${to(table)}",
+                "renameLegacyTable",
+              )
+              .failOnShutdown
+          }
+        val hidden = (table: String) => s"${table}_hidden"
+        for {
+          _ <- renameLegacyTables(identity, hidden)
+          storeAttempt = Try(mkStore(party1, migration1, participant1))
+          _ <- renameLegacyTables(hidden, identity)
+          store <- Future.fromTry(storeAttempt)
+        } yield store.lastLegacyRecordTime shouldBe None
+      }
+
+      "fail store creation when the recorded value cannot be decoded" in {
+        val key = UpdateHistory.lastLegacyRecordTimeKey(mkStore().historyId)
+        for {
+          _ <- mkKeyValueStore().setValue(key, "not a timestamp")
+        } yield {
+          val failure = loggerFactory.assertLogs(
+            the[TestFailedException] thrownBy mkStore(),
+            _.errorMessage should include(s"Failed to decode value for key '$key'"),
+          )
+          failure.getCause.getMessage should include(key)
+        }
+      }
+    }
+
     "create" should {
 
       "store the participant id in its prefixed form" in {
-        import storage.api.jdbcProfile.api.*
-
         val store = mkStore(party1, migration1, participant1)
         for {
           stored <- storage
