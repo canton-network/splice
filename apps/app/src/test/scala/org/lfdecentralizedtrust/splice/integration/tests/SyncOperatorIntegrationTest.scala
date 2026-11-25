@@ -23,8 +23,9 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 import org.lfdecentralizedtrust.splice.syncoperator.automation.UnlimitedTrafficTrigger
 import org.lfdecentralizedtrust.splice.syncoperator.automation.UnlimitedTrafficTrigger.UnlimitedTraffic
 import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorTrafficControlConfig
+import org.lfdecentralizedtrust.splice.util.TriggerTestUtil
 
-class SyncOperatorIntegrationTest extends IntegrationTest {
+class SyncOperatorIntegrationTest extends IntegrationTest with TriggerTestUtil {
 
   // Values the bootstrap does not set, to check that the trigger applies them to the synchronizer.
   private val trafficControlConfig = SyncOperatorTrafficControlConfig(
@@ -121,8 +122,8 @@ class SyncOperatorIntegrationTest extends IntegrationTest {
               .futureValue
               .map(_.mapping.participantId) should contain(bob.id)
           }
-          trigger.runOnce().futureValue shouldBe true
-          trigger.runOnce().futureValue shouldBe false
+          runUntilTaskSucceeds(trigger)
+          runExpectingNoTask(trigger)
         } finally {
           trigger.resume()
         }
@@ -137,7 +138,7 @@ class SyncOperatorIntegrationTest extends IntegrationTest {
         trigger.pause().futureValue
         try {
           eventually() {
-            trigger.runOnce().futureValue shouldBe false
+            runExpectingNoTask(trigger)
           }
         } finally {
           trigger.resume()
