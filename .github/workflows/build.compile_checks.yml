@@ -72,7 +72,7 @@ jobs:
       - name: Checks that need the build
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
-          cmd: "lintCompiled${{ steps.changes.outputs.test_config == 'true' && ' updateTestConfigForParallelRuns' || '' }}${{ steps.dar_resources_checked.outputs.cache-hit != 'true' && ' updateDarResources' || '' }}"
+          cmd: "lintCompiledJvm${{ steps.changes.outputs.npm_lint }}${{ steps.changes.outputs.test_config == 'true' && ' updateTestConfigForParallelRuns' || '' }}${{ steps.dar_resources_checked.outputs.cache-hit != 'true' && ' updateDarResources' || '' }}"
 
       - name: Verify no changes in SBT test files
         uses: ./.github/actions/nix/run

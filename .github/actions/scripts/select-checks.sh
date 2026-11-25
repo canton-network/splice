@@ -18,7 +18,10 @@ emit_all() {
       for g in "${static_groups[@]}"; do echo "$g=true"; done
       echo "sbt_cmd=$full_sbt_cmd"
       ;;
-    build) echo "test_config=true" ;;
+    build)
+      echo "test_config=true"
+      echo "npm_lint= apps-frontends/npmLint pulumi/npmLint load-tester/npmLint party-allocator/npmLint"
+      ;;
   esac
   exit 0
 }
@@ -85,6 +88,16 @@ case "$mode" in
     else
       echo "test_config=false"
     fi
+    npm_lint=""
+    if matches '^[^/]+\.(json|js|cjs|mjs)$'; then
+      npm_lint=" apps-frontends/npmLint pulumi/npmLint load-tester/npmLint party-allocator/npmLint"
+    else
+      if matches '^apps/.*\.(ts|tsx|js|jsx|cjs|mjs|json|yaml|yml|css|scss|html)$|^apps/[^/]+$|^daml/|^token-standard/'; then npm_lint+=" apps-frontends/npmLint"; fi
+      if matches '^cluster/'; then npm_lint+=" pulumi/npmLint"; fi
+      if matches '^load-tester/'; then npm_lint+=" load-tester/npmLint"; fi
+      if matches '^party-allocator/|^daml/'; then npm_lint+=" party-allocator/npmLint"; fi
+    fi
+    echo "npm_lint=$npm_lint"
     ;;
   *)
     echo "unknown mode: $mode" >&2

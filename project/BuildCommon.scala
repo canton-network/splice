@@ -238,8 +238,12 @@ object BuildCommon {
           "; lintStaticFormat ; runShellcheck ; syncpackCheck ; illegalDamlReferencesCheck ; headerCheck",
         ) ++
         addCommandAlias(
+          "lintCompiledJvm",
+          "; damlDarsLockFileCheck",
+        ) ++
+        addCommandAlias(
           "lintCompiled",
-          "; damlDarsLockFileCheck ; apps-frontends/npmLint ; pulumi/npmLint ; load-tester/npmLint ; party-allocator/npmLint",
+          "; lintCompiledJvm ; apps-frontends/npmLint ; pulumi/npmLint ; load-tester/npmLint ; party-allocator/npmLint",
         ) ++
         addCommandAlias(
           "lint",
