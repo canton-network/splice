@@ -87,6 +87,31 @@ class BuildTest(unittest.TestCase):
         )
 
 
+class TestDefinitionTest(unittest.TestCase):
+    test_file = "apps/scan/src/test/scala/FooTest.scala"
+
+    def build(self, diff: Optional[str]) -> str:
+        return select("build", modified(self.test_file), no_file, diff)["test_config"]
+
+    def test_new_class_in_existing_file(self) -> None:
+        diff = "--- a/x\n+++ b/x\n@@ -10,0 +11 @@\n+class BarTest extends StoreTestBase {\n"
+        self.assertEqual(self.build(diff), "true")
+
+    def test_class_renamed_in_file(self) -> None:
+        diff = "@@ -3 +3 @@\n-final class OldTest extends X\n+final class NewTest extends X\n"
+        self.assertEqual(self.build(diff), "true")
+
+    def test_removed_object(self) -> None:
+        self.assertEqual(self.build("@@ -5 +4,0 @@\n-  object Helpers {\n"), "true")
+
+    def test_body_change_only(self) -> None:
+        diff = "--- a/x\n+++ b/x\n@@ -20 +20 @@\n-    x shouldBe 1\n+    x shouldBe 2\n"
+        self.assertEqual(self.build(diff), "false")
+
+    def test_diff_unavailable_runs_the_check(self) -> None:
+        self.assertEqual(self.build(None), "true")
+
+
 ALL_LINTS = " apps-frontends/npmLint pulumi/npmLint load-tester/npmLint party-allocator/npmLint"
 
 

@@ -38,6 +38,9 @@ DAML_DIR = re.compile(r"^daml/")
 HEADERS = re.compile(r"\.(scala|daml|rst|ts|tsx|js|py|sh)$")
 TEST_SOURCES = re.compile(r"/src/test/")
 TEST_LISTS = re.compile(r"^test-.*\.log$")
+TEST_DEFINITION = re.compile(
+    r"^[+-](?![+-])\s*(?:(?:final|abstract|sealed|private|protected|case)\s+)*(?:class|object)\s+\w"
+)
 ROOT_JS_OR_JSON = re.compile(r"^[^/]+\.(json|js|cjs|mjs)$")
 NPM_LINT_SOURCES = {
     "apps-frontends": re.compile(
@@ -126,10 +129,18 @@ def select_static(
     return outputs
 
 
-def select_build(changes: list[Change]) -> dict[str, str]:
+def test_definitions_changed(test_diff: Optional[str]) -> bool:
+    if test_diff is None:
+        return True
+    return any(TEST_DEFINITION.search(line) for line in test_diff.splitlines())
+
+
+def select_build(changes: list[Change], test_diff: Optional[str] = "") -> dict[str, str]:
     added_removed_or_renamed = [c for c in changes if c.status[:1] in ("A", "D", "R")]
-    test_config = any_matches(TEST_SOURCES, added_removed_or_renamed) or any_matches(
-        TEST_LISTS, changes
+    test_config = (
+        any_matches(TEST_SOURCES, added_removed_or_renamed)
+        or any_matches(TEST_LISTS, changes)
+        or test_definitions_changed(test_diff)
     )
     lints: tuple[str, ...]
     if any_matches(ROOT_JS_OR_JSON, changes):
@@ -154,14 +165,19 @@ def unknown_files(
 
 
 def select(
-    mode: str, changes: list[Change], first_line: Callable[[str], Optional[str]]
+    mode: str,
+    changes: list[Change],
+    first_line: Callable[[str], Optional[str]],
+    test_diff: Optional[str] = "",
 ) -> dict[str, str]:
     unknown = unknown_files(changes, first_line)
     if any_matches(RUN_ALL, changes) or unknown:
         for path in unknown:
             print(f"No check selection rule for {path}: running all checks", file=sys.stderr)
         return all_static() if mode == "static" else all_build()
-    return select_static(changes, first_line) if mode == "static" else select_build(changes)
+    if mode == "static":
+        return select_static(changes, first_line)
+    return select_build(changes, test_diff)
 
 
 def git(*args: str) -> Optional[str]:
@@ -209,7 +225,11 @@ def main(argv: list[str]) -> int:
             print(f"Changed files relative to {base}:", file=sys.stderr)
             for c in changes:
                 print(f"  {c.status} {c.path}", file=sys.stderr)
-            outputs = select(mode, changes, read_first_line)
+            test_diff: Optional[str] = ""
+            if mode == "build" and any(TEST_SOURCES.search(c.path) for c in changes):
+                pathspec = ":(glob)**/src/test/**/*.scala"
+                test_diff = git("diff", "-U0", "--no-renames", base, "HEAD", "--", pathspec)
+            outputs = select(mode, changes, read_first_line, test_diff)
     for key, value in outputs.items():
         print(f"{key}={value}")
     return 0
