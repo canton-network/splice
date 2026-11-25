@@ -42,7 +42,9 @@ def initManually(node: InstanceReference): Unit =
       )
     }
 
-    node.health.wait_for_ready_for_initialization()
+    utils.retry_until_true(
+      node.health.is_ready_for_node_topology() || node.health.is_ready_for_initialization()
+    )
 
     if (
       node.topology.namespace_delegations
@@ -144,7 +146,7 @@ val synchronizerId =
         synchronizerOwners = sequencers,
         synchronizerThreshold = PositiveInt.tryCreate(3),
         staticSynchronizerParameters =
-          StaticSynchronizerParameters.defaultsWithoutKMS(ProtocolVersion.latest),
+          StaticSynchronizerParameters.defaultsWithoutKMS(ProtocolVersion.v36), // FIXME: Use the latest protocol version, not v36.
         mediatorRequestAmplification = SubmissionRequestAmplification.NoAmplification,
         mediatorThreshold = PositiveInt.tryCreate(2),
         identityTransactions = None,

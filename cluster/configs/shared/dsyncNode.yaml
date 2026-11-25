@@ -6,6 +6,7 @@ mediator:
       cpu: "1"
       memory: "2Gi"
 participant:
+  enableKeyDownload: false
   resources:
     limits:
       memory: "18Gi"

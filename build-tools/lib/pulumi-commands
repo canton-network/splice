@@ -14,10 +14,14 @@ function subcmd_pulumi() {
     pulumi_cmd="$2"
     if [ $pulumi_project == "sv-canton" ]; then
         if [ -z "${SPLICE_SV:-}" -a -z "${SPLICE_DSYNC_NODE:-}" ]; then
-        _error "Either SPLICE_SV or SPLICE_DSYNC_NODE must be specified for sv-canton stack"
+            _error "Either SPLICE_SV or SPLICE_DSYNC_NODE must be specified for sv-canton stack"
         fi
         if [ -z "${SPLICE_MIGRATION_ID:-}" ]; then
             _error "SPLICE_MIGRATION_ID must be specified for sv-canton stack"
+        fi
+    elif [ $pulumi_project == "dsync" ]; then
+        if [ -z "${SPLICE_DSYNC_NODE:-}" ]; then
+            _error "SPLICE_DSYNC_NODE must be specified for dsync stack"
         fi
     fi
 
