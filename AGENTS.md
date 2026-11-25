@@ -36,7 +36,7 @@ Ask before substantial refactoring to adopt a stricter rule, or leave a specific
   * Suites named `*FrontendIntegrationTest` drive the frontends through Selenium and also need `./start-frontends.sh`.
 * Do not run bare `sbt test`; use `testOnly` and leave the full suite to CI.
 * CI runs `sbt checkErrors` after tests, which fails on WARN/ERROR lines in the logs under `log/` that don't match `project/ignore-patterns/`. The logs are not rotated, so stale errors from earlier runs also show up; clear `log/` before a run you want to check. The main logs are `log/canton_network_test.clog` (test run and Splice apps) and `log/canton.clog` / `log/canton-simtime.clog` (Canton).
-* `sbt formatFix` applies scalafmt, scalafix, npm fixes and copyright headers (`make format` additionally formats cluster code). `sbt lint` runs the static checks; note that its `scalafixAll` step can rewrite files.
+* `sbt formatFix` applies scalafmt, scalafix, npm fixes and copyright headers (`make format` additionally formats cluster code). `sbt lint` runs the static checks.
 * If dependency resolution fails with a 404 for a Canton snapshot artifact (e.g. `com.daml:bindings-java:<version>-snapshot...`), the pinned snapshot has likely expired; rebase onto the latest `main` and reload direnv.
 
 ## Writing Integration Tests

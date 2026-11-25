@@ -261,7 +261,7 @@ Note that the entire command must be quoted in this case, especially if it has s
     `scalafix` is a linting and rewrite tool. This may run for a long time as it needs to do a full compile.
 - `format`: apply `scalafmt` to format source files
 - `formatFix`: apply `scalafmt`, `scalafixAll`, the npm `fix` scripts (frontends, pulumi, load-tester), and copyright headers
-- `lint`: run the static checks: `scalafmt`, `scalafix`, the npm `lint` scripts, `shellcheck`, copyright headers, `dars.lock`, illegal Daml references, and `syncpack`. Note that the `scalafixAll` step applies fixes instead of only checking
+- `lint`: run the static checks: `scalafmt`, the npm `lint` scripts, `shellcheck`, copyright headers, `dars.lock`, illegal Daml references, and `syncpack`
 - `damlBuild`: create `.dar` files for all Daml projects
 - `bundle`: create a release bundle in `apps/app/target/release/splice-node`. The release binary is loaded into your PATH automatically via `direnv`. Simply run `splice-node` to call it.
 - `checkErrors`: check test log for errors and fail if there is one. Note that if you haven't deleted your local log file in a long time, this may find very old errors.
