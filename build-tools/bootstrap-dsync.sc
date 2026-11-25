@@ -146,7 +146,7 @@ val synchronizerId =
         synchronizerOwners = sequencers,
         synchronizerThreshold = PositiveInt.tryCreate(3),
         staticSynchronizerParameters =
-          StaticSynchronizerParameters.defaultsWithoutKMS(ProtocolVersion.v36), // FIXME: Use the latest protocol version, not v36.
+          StaticSynchronizerParameters.defaultsWithoutKMS(ProtocolVersion.latest),
         mediatorRequestAmplification = SubmissionRequestAmplification.NoAmplification,
         mediatorThreshold = PositiveInt.tryCreate(2),
         identityTransactions = None,
