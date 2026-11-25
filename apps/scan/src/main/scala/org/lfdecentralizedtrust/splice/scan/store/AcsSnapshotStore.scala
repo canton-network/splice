@@ -1555,7 +1555,7 @@ object AcsSnapshotStore {
   )
 
   /** The tables and indexes of v1 ACS snapshots, which are created at runtime for each snapshot.
-    * `DbIndexSnapshotTest` creates an example snapshot with these, so changes to them show up in the index snapshot.
+    * `DbSchemaSnapshotTest` creates an example snapshot with these, so changes to them show up in the schema snapshots.
     */
   object AcsSnapshotDDL {
     def createsTableName(historyId: Long, snapshotRecordTime: CantonTimestamp): String =

@@ -81,16 +81,12 @@ class DbSchemaSnapshotTest extends StoreTestBase with SplicePostgresTest {
     } else {
       val expected = if (Files.exists(file)) Files.readString(file) else ""
       if (actual != expected) {
-        val actualLines = actual.linesIterator.toSeq
-        val expectedLines = expected.linesIterator.toSeq
-        val removed = expectedLines.diff(actualLines).map("- " + _)
-        val added = actualLines.diff(expectedLines).map("+ " + _)
         fail(
           s"""The database schema differs from $file.
              |If the change is intended, update the snapshots with:
              |  $UpdateCommand
-             |Changed lines:
-             |${(removed ++ added).mkString("\n")}""".stripMargin
+             |Changes:
+             |${describeChanges(expected, actual)}""".stripMargin
         )
       } else succeed
     }
@@ -107,11 +103,61 @@ object DbSchemaSnapshotTest {
   private val UpdateCommand =
     s"""$UpdateEnvVar=1 sbt "apps-scan/testOnly ${classOf[DbSchemaSnapshotTest].getName}""""
 
-  private def snapshotPath(name: String): Path =
-    Paths.get(sys.env.getOrElse("SPLICE_ROOT", "."), "apps/common/src/test/resources/db", name)
+  private def snapshotPath(name: String): Path = {
+    val root = sys.env.getOrElse(
+      "SPLICE_ROOT",
+      sys.error("SPLICE_ROOT is not set, run the test in the direnv environment of the repository"),
+    )
+    Paths.get(root, "apps/common/src/test/resources/db", name)
+  }
 
-  private val tablesFile: Path = snapshotPath("schema-tables.txt")
-  private val indexesFile: Path = snapshotPath("schema-indexes.txt")
+  private def tablesFile: Path = snapshotPath("schema-tables.txt")
+  private def indexesFile: Path = snapshotPath("schema-indexes.txt")
+
+  /** Describes the changes from `expected` to `actual` per block (the header, or one table),
+    * as the title of each changed block followed by its removed (`-`) and added (`+`) lines.
+    */
+  private def describeChanges(expected: String, actual: String): String = {
+    def blocks(text: String): Map[String, IndexedSeq[String]] =
+      text
+        .split("\n\n")
+        .toSeq
+        .map(_.linesIterator.toIndexedSeq)
+        .filter(_.nonEmpty)
+        .map { lines =>
+          val title = lines.headOption.fold("")(_.takeWhile(_ != ' '))
+          (if (title == "#") "(header)" else title) -> lines
+        }
+        .toMap
+    val expectedBlocks = blocks(expected)
+    val actualBlocks = blocks(actual)
+    (expectedBlocks.keySet ++ actualBlocks.keySet).toSeq.sorted
+      .flatMap { title =>
+        val expectedLines = expectedBlocks.getOrElse(title, IndexedSeq.empty)
+        val actualLines = actualBlocks.getOrElse(title, IndexedSeq.empty)
+        Option.when(expectedLines != actualLines)(
+          (s"$title:" +: diffLines(expectedLines, actualLines)).mkString("\n")
+        )
+      }
+      .mkString("\n\n")
+  }
+
+  /** A line diff based on the longest common subsequence, so that moved lines show up as removed and added. */
+  private def diffLines(expected: IndexedSeq[String], actual: IndexedSeq[String]): Seq[String] = {
+    // lcs(i)(j) is the length of the longest common subsequence of expected.drop(i) and actual.drop(j).
+    val lcs = Array.ofDim[Int](expected.size + 1, actual.size + 1)
+    for (i <- expected.indices.reverse; j <- actual.indices.reverse)
+      lcs(i)(j) =
+        if (expected(i) == actual(j)) lcs(i + 1)(j + 1) + 1
+        else math.max(lcs(i + 1)(j), lcs(i)(j + 1))
+    def go(i: Int, j: Int): List[String] =
+      if (i < expected.size && j < actual.size && expected(i) == actual(j)) go(i + 1, j + 1)
+      else if (i < expected.size && (j == actual.size || lcs(i + 1)(j) >= lcs(i)(j + 1)))
+        s"- ${expected(i)}" :: go(i + 1, j)
+      else if (j < actual.size) s"+ ${actual(j)}" :: go(i, j + 1)
+      else Nil
+    go(0, 0)
+  }
 
   // The ids of the example ACS snapshot. The tables and indexes of a snapshot are named after them;
   // the snapshot files show them as placeholders.
