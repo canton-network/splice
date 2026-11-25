@@ -54,6 +54,8 @@ export type ParticipantArgs = {
   imagePullServiceAccountName?: string;
   nodeIdentifier: string;
   enableAutoInit: boolean;
+  // Auth0 clients allowed to use the admin API: the first is the main user, the rest are additional users.
+  adminApiClients: ['validator' | 'sv' | 'dsync', ...('validator' | 'sv' | 'dsync')[]];
 };
 
 export type ParticipantOutput = {
@@ -93,6 +95,7 @@ function installParticipantChart(
     imagePullServiceAccountName,
     nodeIdentifier,
     enableAutoInit,
+    adminApiClients,
   }: ParticipantArgs,
   db: Postgres,
   customOptions?: SpliceCustomResourceOptions
@@ -119,8 +122,10 @@ function installParticipantChart(
       disableAuth: participant?.disableParticipantAdminApiAuth ?? false,
       auth: {
         ...defaultValues.adminApi?.auth,
-        user: `${getClientId(auth0, 'validator', xns.logicalName)}@clients`,
-        additionalUsers: [`${getClientId(auth0, 'sv', xns.logicalName)}@clients`],
+        user: `${getClientId(auth0, adminApiClients[0], xns.logicalName)}@clients`,
+        additionalUsers: adminApiClients
+          .slice(1)
+          .map(client => `${getClientId(auth0, client, xns.logicalName)}@clients`),
       },
     },
     ...kmsValues,

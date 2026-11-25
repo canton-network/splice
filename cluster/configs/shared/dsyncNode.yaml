@@ -7,6 +7,8 @@ mediator:
       memory: "2Gi"
 participant:
   enableKeyDownload: false
+  # TODO(splice#7780): enable once bootstrap-dsync passes admin API tokens to the remote participants
+  disableParticipantAdminApiAuth: true
   resources:
     limits:
       memory: "18Gi"

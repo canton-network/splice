@@ -54,6 +54,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       disableProtection: isSvRunbook,
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,
+      adminApiClients: ['validator', 'sv'],
       nodeIdentifier: staticConfig.onboardingName,
       enableAutoInit:
         !backupConfig.bootstrappingDumpConfig && !(isSvRunbook && participantIdentitiesFile),
