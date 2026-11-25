@@ -21,6 +21,7 @@ export function installTopologyKeyMonitor(
   config: TopologyKeyMonitorConfig,
   version: CnChartVersion,
   serviceAccountName?: string,
+  disableParticipantAdminApiAuth?: boolean,
   opts?: SpliceCustomResourceOptions
 ): InstalledHelmChart | undefined {
   if (!config.enable) {
@@ -40,6 +41,7 @@ export function installTopologyKeyMonitor(
     {
       participant: {
         address: participantAddress,
+        disableAdminApiAuth: disableParticipantAdminApiAuth ?? false,
       },
       keys: config.keys,
       expectedSynchronizerAliases: config.expectedSynchronizerAliases,

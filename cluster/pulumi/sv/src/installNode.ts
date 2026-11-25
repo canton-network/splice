@@ -61,6 +61,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       nodeIdentifier: staticConfig.onboardingName,
       enableAutoInit:
         !backupConfig.bootstrappingDumpConfig && !(isSvRunbook && participantIdentitiesFile),
+      enableTopologyKeyMonitorAccess: config.topologyKeyMonitor?.enable,
     },
     { dependsOn: [...imagePullDeps, ledgerApiUserSecret, ...(secrets ?? [])] }
   );
@@ -71,6 +72,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       config.topologyKeyMonitor,
       version,
       serviceAccountName,
+      config.participant?.disableParticipantAdminApiAuth,
       { dependsOn: [...imagePullDeps, participant.chart, ...(secrets ?? [])] }
     );
   }
