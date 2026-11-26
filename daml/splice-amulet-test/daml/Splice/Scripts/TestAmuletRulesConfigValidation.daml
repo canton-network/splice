@@ -36,25 +36,25 @@ testAmuletRulesConfigValidation = do
       newConfig = makeAmuletConfig (negate (minutes 20)) (RatePerRound 0.000020)
       baseConfig = amuletRules.configSchedule.initialValue
 
-  -- the credential registry needs a positive free period and a positive yearly price
+  -- the credential registry needs a positive free period and a positive yearly price, when set
   let currentConfig = amuletRules.configSchedule.initialValue
       withRegistry freePeriod extensionUsdPerYear = currentConfig with
         credentialRegistryConfig = Some CredentialRegistryConfig with freePeriod; extensionUsdPerYear
   submitMustFail (actAs app.dso <> readAs app.dso) $
     exerciseCmd amuletRulesCid AmuletRules_SetConfig with
-      newConfig = withRegistry (days 0) 1.0
+      newConfig = withRegistry (Some (days 0)) None
       baseConfig = currentConfig
   submitMustFail (actAs app.dso <> readAs app.dso) $
     exerciseCmd amuletRulesCid AmuletRules_SetConfig with
-      newConfig = withRegistry (days 90) 0.0
+      newConfig = withRegistry None (Some 0.0)
       baseConfig = currentConfig
   submit (actAs app.dso <> readAs app.dso) $
     exerciseCmd amuletRulesCid AmuletRules_SetConfig with
-      newConfig = withRegistry (days 90) 1.0
+      newConfig = withRegistry (Some (days 30)) None
       baseConfig = currentConfig
   [(_, amuletRules)] <- query @AmuletRules app.dso
   amuletRules.configSchedule.initialValue.credentialRegistryConfig ===
-    Some CredentialRegistryConfig with freePeriod = days 90; extensionUsdPerYear = 1.0
+    Some CredentialRegistryConfig with freePeriod = Some (days 30); extensionUsdPerYear = None
 
   pure ()
 

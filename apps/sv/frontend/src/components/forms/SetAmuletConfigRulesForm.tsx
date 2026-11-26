@@ -46,10 +46,7 @@ import { FormLayout } from './FormLayout';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { Alert, Box, Typography } from '@mui/material';
 import { ProposalSummary } from '../governance/ProposalSummary';
-import {
-  buildAmuletRulesConfigFromChanges,
-  credentialRegistryConfigError,
-} from '../../utils/buildAmuletRulesConfigFromChanges';
+import { buildAmuletRulesConfigFromChanges } from '../../utils/buildAmuletRulesConfigFromChanges';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useListDsoRulesVoteRequests } from '../../hooks';
@@ -196,13 +193,6 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
 
         if (changes.length === 0) {
           return 'Cannot submit a proposal with no configuration changes';
-        }
-
-        const credentialRegistryError = credentialRegistryConfigError(
-          configFormDataToConfigChanges(formData.config, allAmuletConfigChanges, false)
-        );
-        if (credentialRegistryError) {
-          return credentialRegistryError;
         }
 
         const conflictingChanges = changes.filter(c =>

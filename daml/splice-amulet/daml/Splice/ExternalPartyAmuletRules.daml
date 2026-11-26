@@ -30,8 +30,8 @@ import Splice.AmuletAllocation as AmuletAllocationV1
 import Splice.AmuletAllocationV2 as AmuletAllocationV2
 import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
-import Splice.Credentials (credentialExpiryReceiver, extendCredentialExpiry, updateCredentials)
-import Splice.GovernanceLock (assertInPast24Hours, lockManagerParty)
+import Splice.Credentials (updateCredentials)
+import Splice.GovernanceLock (lockManagerParty)
 import Splice.GovernanceLock.Request (governanceLock_transferFactoryV1_transferImpl)
 import Splice.DecentralizedSynchronizer (MemberTrafficPurchase(..), parseTrafficPurchaseMemo)
 import Splice.Round (OpenMiningRound(..))
@@ -148,7 +148,7 @@ template ExternalPartyAmuletRules
         meta = emptyMetadata
 
       transferFactory_transferExtraObservers arg =
-        filter (\p -> p /= lockManagerParty && p /= trafficPurchaseReceiver && p /= credentialExpiryReceiver) $
+        filter (\p -> p /= lockManagerParty && p /= trafficPurchaseReceiver) $
         transferFactoryV2_publicAsset_transferExtraObserversDefaultImpl arg
 
       transferFactory_transferImpl =
@@ -372,8 +372,6 @@ amulet_transferFactoryV1_transferImpl
   -> Update Api.Token.TransferInstructionV1.TransferInstructionResult
 amulet_transferFactoryV1_transferImpl this actors arg | arg.transfer.receiver == lockManagerParty =
   governanceLock_transferFactoryV1_transferImpl this.dso actors arg
-amulet_transferFactoryV1_transferImpl this actors arg | arg.transfer.receiver == credentialExpiryReceiver =
-  extendCredentialExpiry this.dso actors arg
 amulet_transferFactoryV1_transferImpl this actors arg = do
   let Api.Token.TransferInstructionV1.TransferFactory_Transfer {expectedAdmin, transfer, extraArgs} = arg
   let dso = this.dso

@@ -28,7 +28,7 @@ import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.GovernanceLock
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 import Splice.Types
-import Splice.Util (HasCheckedFetch(..))
+import Splice.Util (HasCheckedFetch(..), assertInPast24Hours)
 
 -- | Arguments of `createGovernanceLockTransfer`.
 data LockTransferArgs = LockTransferArgs with
