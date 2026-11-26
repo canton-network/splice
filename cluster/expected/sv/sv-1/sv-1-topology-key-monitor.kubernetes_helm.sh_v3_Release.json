@@ -48,7 +48,8 @@
       ],
       "missingSynchronizerGracePeriodSeconds": 600,
       "participant": {
-        "address": "participant"
+        "address": "participant",
+        "disableAdminApiAuth": false
       },
       "pollIntervalSeconds": 1,
       "serviceAccountName": "sv",

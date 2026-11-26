@@ -147,6 +147,23 @@ spec:
             }
             {{- end }}
         {{- end}}
+        {{- if and (not .Values.adminApi.disableAuth) .Values.enableTopologyKeyMonitorAccess }}
+        - name: ADDITIONAL_CONFIG_TOPOLOGY_KEY_MONITOR_ACCESS
+          value: |
+            canton.participants.participant.admin-api.auth-services += {
+              type = jwt-rs-256-crt
+              certificate = "/app/topology-key-monitor-access/publicKey"
+              target-audience = "topology-key-monitor-admin-api"
+              users = [{
+                user-id = "topology-key-monitor"
+                allowed-services = [
+                  "com.digitalasset.canton.topology.admin.v30.TopologyManagerReadService",
+                  "com.digitalasset.canton.admin.participant.v30.SynchronizerConnectivityService",
+                  "com.digitalasset.canton.connection.v30.ApiInfoService"
+                ]
+              }]
+            }
+        {{- end }}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}
         ports:
@@ -213,6 +230,11 @@ spec:
         {{- if .Values.pvc }}
           - name: participant-volume
             mountPath: /persistent-data
+        {{- end }}
+        {{- if and (not .Values.adminApi.disableAuth) .Values.enableTopologyKeyMonitorAccess }}
+          - name: topology-key-monitor-access
+            mountPath: /app/topology-key-monitor-access
+            readOnly: true
         {{- end }}
       {{- if or (.Values.persistence.enablePgInitContainer) (.Values.extraInitContainers) }}
       initContainers:
@@ -311,6 +333,11 @@ spec:
         - name: participant-volume
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-participant-pvc
+        {{- end }}
+        {{- if and (not .Values.adminApi.disableAuth) .Values.enableTopologyKeyMonitorAccess }}
+        - name: topology-key-monitor-access
+          configMap:
+            name: topology-key-monitor-admin-api-token-public-key
         {{- end }}
 ---
 {{-  if .Values.pvc }}

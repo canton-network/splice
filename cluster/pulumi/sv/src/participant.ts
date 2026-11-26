@@ -53,6 +53,7 @@ export type ParticipantArgs = {
   imagePullServiceAccountName?: string;
   nodeIdentifier: string;
   enableAutoInit: boolean;
+  enableTopologyKeyMonitorAccess?: boolean;
 };
 
 export type ParticipantOutput = {
@@ -91,6 +92,7 @@ function installParticipantChart(
     imagePullServiceAccountName,
     nodeIdentifier,
     enableAutoInit,
+    enableTopologyKeyMonitorAccess,
   }: ParticipantArgs,
   db: Postgres,
   customOptions?: SpliceCustomResourceOptions
@@ -145,6 +147,7 @@ function installParticipantChart(
     nodeIdentifier,
     enableAutoInit,
     pvc: persistentHeapDumpsPvc(),
+    enableTopologyKeyMonitorAccess,
   };
 
   return installSpliceHelmChart(xns, 'participant', 'splice-participant', values, version, {

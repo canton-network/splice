@@ -9,6 +9,7 @@ participant:
   adminApiPort: 5002
   # Required by the Canton remote participant config but not used by the monitor
   ledgerApiPort: 5001
+  disableAdminApiAuth: true
 
 # Key fingerprints to track (required)
 keys: []
