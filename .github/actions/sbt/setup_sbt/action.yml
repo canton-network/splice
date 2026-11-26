@@ -7,6 +7,10 @@ inputs:
   splice_root:
     description: "Path to splice repo"
     default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
+  restore_build_outputs:
+    description: "Whether to restore the frontend node_modules and the Daml artifacts"
+    required: false
+    default: "true"
 outputs:
   cache_hits:
     description: "Restore results per cache as JSON ({<cache>: {hit, key}}), to be passed to post_sbt"
@@ -36,6 +40,7 @@ runs:
         splice_root: ${{ inputs.splice_root }}
 
     - name: Restore frontend node_modules
+      if: inputs.restore_build_outputs == 'true'
       id: frontend_node_modules
       uses: ./.github/actions/cache/frontend_node_modules/restore
       with:
@@ -43,6 +48,7 @@ runs:
         splice_root: ${{ inputs.splice_root }}
 
     - name: Restore Daml artifacts
+      if: inputs.restore_build_outputs == 'true'
       id: daml
       uses: ./.github/actions/cache/daml_artifacts/restore
       with:

@@ -46,10 +46,16 @@ runs:
 
         echo "Running command with nix version $(nix --version) and nix target $target"
 
+        NIX_DEV_ENV=/tmp/nix_dev_env.sh
+
         # Attempt to build the nix env with retries to work around transient download failures
         echo "building nix env"
         MAX_RETRY_NIX_ENV=5
         NIX_ENV_TRY_COUNT=0
+        if [[ -s "$NIX_DEV_ENV" ]]; then
+          echo "Using the nix dev env from setup ($NIX_DEV_ENV)"
+          NIX_ENV_TRY_COUNT=$MAX_RETRY_NIX_ENV
+        fi
         until [ $NIX_ENV_TRY_COUNT -ge $MAX_RETRY_NIX_ENV ]
         do
           if [ $NIX_ENV_TRY_COUNT -gt 0 ]; then
@@ -73,7 +79,7 @@ runs:
           NIX_ENV_TRY_COUNT=$((NIX_ENV_TRY_COUNT+1))
         done
 
-        if [ $NIX_ENV_TRY_COUNT -ge $MAX_RETRY_NIX_ENV ]; then
+        if [ $NIX_ENV_TRY_COUNT -ge $MAX_RETRY_NIX_ENV ] && [[ ! -s "$NIX_DEV_ENV" ]]; then
           echo "Failed to build and enter the nix environment after $MAX_RETRY_NIX_ENV attempts"
           exit 1
         fi
@@ -207,7 +213,33 @@ runs:
 
         ADDITIONAL_NIX_ARGS="${{ inputs.additional_nix_args }}"
 
+        KEEP_VARS=(USER HOME TERM CI COURSIER_CACHE SBT_OPTS RUN_SPLITTED_TESTS_CMD GCP_DA_CN_DEVNET_KEY GCP_DA_CN_CI_KEY GCP_DA_CN_CI_2_KEY GCP_DA_CN_SCRATCHNET_KEY GCP_DA_CN_SCRATCHNET2_KEY GCP_DA_CN_MAINNET_KEY GCP_DA_CN_SPLICE_KEY GCP_CLUSTER_HOSTNAME CIRCLE_BRANCH TARGET_CLUSTER DA_REPO_ROOT)
+        USE_DEV_ENV=false
+        if [[ -s "$NIX_DEV_ENV" ]]; then
+          USE_DEV_ENV=true
+          read -r -a EXTRA_ARGS <<< "$ADDITIONAL_NIX_ARGS"
+          i=0
+          while [ $i -lt ${#EXTRA_ARGS[@]} ]; do
+            if [[ "${EXTRA_ARGS[$i]}" == "--keep" && $((i+1)) -lt ${#EXTRA_ARGS[@]} ]]; then
+              KEEP_VARS+=("${EXTRA_ARGS[$((i+1))]}")
+              i=$((i+2))
+            else
+              USE_DEV_ENV=false
+              break
+            fi
+          done
+        fi
+
         echo "Running actual command"
+        if [[ "$USE_DEV_ENV" == "true" ]]; then
+          ENV_ARGS=()
+          for v in "${KEEP_VARS[@]}"; do
+            if [[ -n "${!v+x}" ]]; then
+              ENV_ARGS+=("$v=${!v}")
+            fi
+          done
+          env -i "${ENV_ARGS[@]}" bash -c '. "$1" && bash "$2"' bash "$NIX_DEV_ENV" "$CMD_FILE" &
+        else
         # Run the command for real within the nix environment
         nix develop \
           path:$nix_path#$target \
@@ -233,6 +265,7 @@ runs:
           --keep DA_REPO_ROOT \
           $ADDITIONAL_NIX_ARGS \
           --command bash $CMD_FILE &
+        fi
         PID=$!
 
         wait $PID

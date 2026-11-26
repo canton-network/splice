@@ -78,6 +78,7 @@ jobs:
           cache_version: 10
           test_name: static_tests
           target: 'static_tests'
+          restore_build_outputs: "false"
           # The todo checker runs `git log main..$BRANCH`
           fetch_git_refs: history
 
