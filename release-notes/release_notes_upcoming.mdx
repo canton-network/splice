@@ -25,7 +25,7 @@
   
   - Topology Key Monitor
 
-    - Added support for participant admin API auth enabled with `enableTopologyKeyMonitorAccess: true` on the `splice-participant` chart
+    - Added support for participant admin API auth. To enable, set `enableTopologyKeyMonitorAccess: true` on the `splice-participant` chart
       and `participant.disableAdminApiAuth: false` on the `splice-topology-key-monitor` chart. If participant admin API auth is disabled
       on the participant chart then `enableTopologyKeyMonitorAccess` has no effect. `participant.disableAdminApiAuth` will be `false` by
       default starting from 0.11.0.
