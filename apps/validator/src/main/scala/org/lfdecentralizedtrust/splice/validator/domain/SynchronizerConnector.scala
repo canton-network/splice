@@ -133,7 +133,13 @@ class SynchronizerConnector(
   private def psidForSync(alias: SynchronizerAlias)(implicit
       tc: TraceContext
   ): Future[Option[PhysicalSynchronizerId]] =
-    participantAdminConnection.lookupPhysicalSynchronizerId(alias)
+    retryProvider.getValueWithRetries(
+      RetryFor.WaitingOnInitDependency,
+      "participant_physical_synchronizer_id",
+      s"physical synchronizer id for $alias",
+      participantAdminConnection.lookupPhysicalSynchronizerId(alias),
+      logger,
+    )
 
   def ensureExtraDomainsRegistered()(implicit tc: TraceContext): Future[Unit] =
     MonadUtil.sequentialTraverse_(config.domains.extra)(synchronizer =>
