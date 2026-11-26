@@ -36,7 +36,10 @@ class Auth0Util(
     retry: Auth0Retry,
 ) extends NamedLogging {
   private val auth = new AuthAPI(domain, managementApiClientId, managementApiClientSecret)
-  val api = new ManagementAPI(domain, requestManagementAPIToken())
+  val api = new ManagementAPI(
+    domain,
+    retry.retryAuth0CallsForTests(requestManagementAPIToken())(TraceContext.empty),
+  )
 
   def createUser()(implicit tc: TraceContext): Auth0User = {
     // Note that a "user already exists" error may be caused by our retries if we retry only the create-user call,
