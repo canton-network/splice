@@ -33,12 +33,20 @@ jobs:
           upload_workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER_SPLICE }}
           upload_service_account: ${{ secrets.CACHE_UPLOADER_SA }}
 
+      - name: Select checks for the changed files
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 ./.github/actions/scripts/select_checks.py build >> "$GITHUB_OUTPUT"
+
       - name: Compile and build docs
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
           # We Test/compile here as this job is the only one that saves the SBT caches
           # (it finishes fastest) and we want to ensure that they include test sources.
-          cmd: "Test/compile docs/bundle"
+          cmd: "Test/compile${{ steps.changes.outputs.docs == 'true' && ' docs/bundle' || '' }}"
 
       - name: Upload documentation artifacts
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
@@ -60,14 +68,6 @@ jobs:
           path: /tmp/dar-resources-checked
           key: dar-resources-checked-1 ${{ hashFiles('daml/dars/**', 'daml/dars.lock', 'apps/dar-resources-generator/src/**', 'apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/DarResources.scala', 'build.sbt', 'project/*.scala', 'project/*.sbt', 'project/build.properties', '.scalafmt.conf', 'nix/canton-sources.json') }}
           lookup-only: true
-
-      - name: Select checks for the changed files
-        id: changes
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: python3 ./.github/actions/scripts/select_checks.py build >> "$GITHUB_OUTPUT"
 
       - name: Checks that need the build
         uses: ./.github/actions/sbt/execute_sbt_command

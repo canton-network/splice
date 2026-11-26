@@ -90,6 +90,22 @@ class StaticTest(unittest.TestCase):
 
 
 class BuildTest(unittest.TestCase):
+    def test_docs_skipped_for_scala_only(self) -> None:
+        out = select("build", modified("apps/scan/src/main/scala/A.scala"), no_file)
+        self.assertEqual(out["docs"], "false")
+
+    def test_docs_on_daml_change(self) -> None:
+        out = select("build", modified("daml/splice-amulet/daml/Splice/Amulet.daml"), no_file)
+        self.assertEqual(out["docs"], "true")
+
+    def test_docs_on_docs_change(self) -> None:
+        out = select("build", modified("docs/src/index.rst"), no_file)
+        self.assertEqual(out["docs"], "true")
+
+    def test_docs_on_build_change(self) -> None:
+        out = select("build", modified("build.sbt"), no_file)
+        self.assertEqual(out["docs"], "true")
+
     def test_test_config_on_added_test(self) -> None:
         out = select("build", [Change("A", "apps/scan/src/test/scala/NewTest.scala")], no_file)
         self.assertEqual(out["test_config"], "true")
