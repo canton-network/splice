@@ -390,7 +390,7 @@ jobs:
           STATIC_SKIP: ${{ steps.static_only.outputs.skip }}
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          git fetch origin "$HEAD_SHA"
+          git fetch --depth=1 --filter=blob:none origin "$HEAD_SHA"
           last_commit_msg=$(git log -1 --pretty=%B "$HEAD_SHA")
           echo "Last commit message: $last_commit_msg"
           if [[ $last_commit_msg == *"[force]"* ]]; then

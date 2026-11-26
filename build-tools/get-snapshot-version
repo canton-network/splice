@@ -41,6 +41,9 @@ if [[ $git_commit_message == *"[release]"* ]]; then
 fi
 
 commit_date=$(git log -n1 --format=%cd --date=format:%Y%m%d "$sha")
+if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+    git fetch --quiet --no-tags --unshallow --filter=tree:0 origin "$sha"
+fi
 number_of_commits=$(git rev-list --count "$sha")
 commit_sha_8=$(git log -n1 --format=%h --abbrev=8 "$sha")
 
