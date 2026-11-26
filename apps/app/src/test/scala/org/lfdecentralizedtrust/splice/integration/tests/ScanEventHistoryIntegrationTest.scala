@@ -262,24 +262,19 @@ class ScanEventHistoryIntegrationTest
     startAllSync(sv1Backend, sv1ScanBackend, sv1ValidatorBackend)
 
     val _ = onboardAliceAndBob()
+    // The bootstrap rounds 0-2 open before the scan starts ingesting, so the scan cannot resolve
+    // the round_number of verdicts while one of them is the oldest open round
+    // (see ScanRewardsReferenceStore.lookupActiveOpenMiningRounds). Advance three rounds to archive them.
+    (1 to 3).foreach(_ => advanceRoundsByOneTickViaAutomation())
     val cursorBeforeTap = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
+    aliceWalletClient.tap(4)
     val updateIdFromTap = eventuallySucceeds() {
-      advanceRoundsByOneTickViaAutomation()
-      aliceWalletClient.tap(4)
-
       val eventId = withoutDevNetTopups(
         aliceWalletClient.listTransactions(beginAfterId = None, pageSize = 10)
       ).headOption
         .map(_.eventId)
         .getOrElse(fail("Expected a wallet transaction after tap"))
-      val updateId = EventId.updateIdFromEventId(eventId)
-
-      val roundO = sv1ScanBackend
-        .getEventById(updateId, Some(LedgerApiJson))
-        .flatMap(_.verdict)
-        .flatMap(_.roundNumber)
-      roundO shouldBe defined withClue "verdict round_number not populated yet (advance more)"
-      updateId
+      EventId.updateIdFromEventId(eventId)
     }
 
     // Both update, and verdict should be returned
@@ -309,6 +304,9 @@ class ScanEventHistoryIntegrationTest
       tapItem.verdict.flatMap(
         _.roundNumber
       ) shouldBe defined withClue "getEventHistory verdict round_number"
+      forAll(history.flatMap(_.verdict)) { verdict =>
+        verdict.roundNumber shouldBe defined withClue "verdict round_number after bootstrap rounds"
+      }
     }
 
     // Missing id: expect 404 -> client returns None
