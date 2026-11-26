@@ -446,10 +446,9 @@ test_tokenStandard_rejectsWeightsForDecentralizedSynchronizer = do
         ("member-id=" <> testMemberId <> "&synchronizer-id=" <> decentralizedSynchronizerId <> "&migration-id=0" <> weight)
 
 -- The memo's synchronizer selects the kind of purchase, not the choice context, which one SV's
--- Scan provides: a dedicated synchronizer in the context doesn't change a member's purchase for
--- the decentralized synchronizer.
-test_tokenStandard_memberPurchaseIgnoresDedicatedSynchronizerInContext : Script ()
-test_tokenStandard_memberPurchaseIgnoresDedicatedSynchronizerInContext = do
+-- Scan provides: a dedicated synchronizer in the context doesn't change a purchase of member traffic.
+test_tokenStandard_memberTrafficPurchaseIgnoresDedicatedSynchronizerInContext : Script ()
+test_tokenStandard_memberTrafficPurchaseIgnoresDedicatedSynchronizerInContext = do
   setup <- setupTokenStandard
   enrichedChoice <-
     trafficPurchaseTransfer setup setup.paymaster
@@ -503,7 +502,7 @@ test_tokenStandard_rejectsArchivedRegistration = do
     (exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg) >>= expectContractNotFound
 
 -- Even a dedicated synchronizer with the id of a synchronizer of the decentralized synchronizer
--- doesn't make a paymaster's purchase for it: the purchase is a member's, which needs a member.
+-- doesn't make a paymaster's purchase for it: the purchase buys member traffic, which needs a memberId.
 test_tokenStandard_rejectsPaymasterPurchaseForDecentralizedSynchronizer : Script ()
 test_tokenStandard_rejectsPaymasterPurchaseForDecentralizedSynchronizer = do
   setup <- setupTokenStandard

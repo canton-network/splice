@@ -16,7 +16,6 @@ import qualified DA.Map as Map
 import DA.Optional (fromOptional, isNone, isSome, optionalToList, whenSome)
 import DA.Set (Set)
 import qualified DA.Set as Set
-import DA.TextMap (TextMap)
 import qualified DA.TextMap as TextMap
 import DA.Traversable (forA)
 import qualified DA.Text as T
@@ -1858,7 +1857,7 @@ data MemberTrafficPurchaseResult = MemberTrafficPurchaseResult with
 -- | Validates a traffic purchase.
 --
 -- A purchase for a member of the decentralized synchronizer must be for one of the
--- `supportedSynchronizerIds` and name the member.
+-- `supportedSynchronizerIds` and give a memberId.
 --
 -- A paymaster's purchase for its dedicated synchronizer must be for a synchronizer that is not one
 -- of the `supportedSynchronizerIds`, which `fetchOptPaymasterPurchase` already selects by. The

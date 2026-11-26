@@ -101,8 +101,8 @@ data MemberTrafficPurchase = MemberTrafficPurchase with
     migrationId : Int
     trafficAmount : Int
     paymaster : Optional PaymasterPurchase
-      -- ^ A paymaster's purchase for its dedicated synchronizer. `None` for a purchase for a member
-      -- of the decentralized synchronizer.
+      -- ^ A paymaster's purchase for its dedicated synchronizer. `None` for a purchase of
+      -- member traffic on the decentralized synchronizer.
   deriving (Eq, Show)
 
 data TrafficPurchaseMemo = TrafficPurchaseMemo with

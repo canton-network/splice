@@ -40,7 +40,7 @@ data DedicatedSynchronizer_UpdateConfigResult = DedicatedSynchronizer_UpdateConf
     dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
   deriving (Serializable)
 
--- | A dedicated synchronizer that the DSO registered, with the paymaster that pays for its
+-- | A dedicated synchronizer that the SVs registered by vote, with the paymaster that pays for its
 -- traffic on the decentralized synchronizer.
 --
 -- A dedicated synchronizer runs the Splice software separately from the decentralized
