@@ -6,7 +6,7 @@
     "@canton-network/splice-pulumi-common": "1.0.0",
     "@kubernetes/client-node": "^1.4.0",
     "@types/auth0": "^3.3.11",
-    "auth0": "^6.4.0"
+    "auth0": "^7.4.0"
   },
   "scripts": {
     "fix": "npm run format:fix && npm run lint:fix",
