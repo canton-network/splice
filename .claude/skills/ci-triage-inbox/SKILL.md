@@ -23,7 +23,7 @@ One per item or group; an action may be several commands.
 | Action | When | Commands |
 |---|---|---|
 | root cause | mechanism established | comment, retitle while the title starts with `GHA Run` or `Pipeline`, `set_status.py Inbox Triaged`; `--add-assignee <owner(s)>` from the owner search (below); none when no owner is found |
-| duplicate | same failure as a parent, confirming grep done (ci-triage step 3) | `close_duplicates.py <parent> <refs>`; a recurrence comment on the parent only when it adds a fact that changes its priority or owner (e.g. the hit rate jumped, a new branch); the close already links the two |
+| duplicate | same failure as a parent, confirming grep done (ci-triage step 3) | the triage comment (nine sections, as for a root cause; `comments/<ref>.md`) on the duplicate itself, then `close_duplicates.py <parent> <ref> --comment '<one line>'`. Nothing is posted on the parent, not even a recurrence comment: it is the origin and stays as it is (the user decides about it separately); the close already links the two. The parent's script is not extended with its duplicates that arrive later: each new duplicate gets its own `ci-<ref>.sh`. The comment is posted even when the duplicate is already closed (the script posts first, closes only while open) |
 | already fixed | the fix is on main (`git merge-base --is-ancestor`) and the run predates it | comment, close as completed |
 | one-off | infra or GitHub incident that recovered, or a first hit without a pattern | external incident: comment and close (the user closes these directly); first hit: comment, `set_status.py Inbox Triaged` (`Infrequent / no repro` only after about 2 weeks without a duplicate, never for a new issue) |
 | log request | the evidence is only where no method reaches (CircleCI always) | the exact job and step to save to `log/ci-triage-export/<ref>/` on the host; the item stays in Inbox until the log is there |
@@ -151,7 +151,7 @@ happens. Do not present the next group before the user says so.
 - Record in the round README: verdict, action handed out, ran or skipped, the user's corrections.
 - Commit `<round dir name>: <refs> <verdict>` in the dataset clone, only the triage paths (ci-triage, Dataset), and
   hand it over before presenting the next commands that use the committed files.
-- A later group that is a duplicate of one already handled says so in one line and reuses its parent's action.
+- A later group that is a duplicate of one already handled says so in one line, gets its own triage comment and its own script, and does not touch the parent or its script.
 
 ## 6. End of round
 

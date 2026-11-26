@@ -134,8 +134,9 @@ to `log/ci-triage-export/<ref>/`.
      `direnv exec . .claude/skills/ci-triage/scripts/set_status.py Inbox Triaged <ref>` (recipe 12).
    - Duplicate: `direnv exec . .claude/skills/ci-triage/scripts/close_duplicates.py <parent> <ref>... --comment '<why>'` (a
      single line of plain text, inline, no body file), one line
-     per parent with all its duplicates (closing moves them to `Closed`). The duplicate close links the occurrence to the parent; add a recurrence comment on the parent only
-     when it recurs often and has neither an assignee nor an owner discussion.
+     per parent with all its duplicates (closing moves them to `Closed`). Before the close, the full triage comment (this
+     occurrence's evidence, the nine sections) goes on the duplicate itself; the close comment stays one line. Nothing is
+     posted on the parent: it is the origin, and the user decides about it (owner, priority) separately.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.
    Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no

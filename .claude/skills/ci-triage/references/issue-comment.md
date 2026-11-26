@@ -75,7 +75,8 @@ cn-test-failures issues; a splice PR or commit is `canton-network/splice#N` or a
 (not to name the commit under test, which the issue already shows).
 
 Leave out what the reader can see on the issue itself (links, the job list) and the triage process (which recipes
-ran, what was grepped). Duplicate-close comments are one sentence of plain text, the one fact that makes it the same failure, passed inline
+ran, what was grepped). A duplicate gets the full triage comment (the nine sections with this occurrence's evidence, written like any other
+comment; the Summary starts with "Same failure as #N") and nothing is posted on its parent. The close comment is one sentence of plain text, the one fact that makes it the same failure, passed inline
 with `close_duplicates.py --comment '...'` (no body file; no backticks or quotes, so it fits the shell rules). They do not
 name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
 already.
@@ -86,7 +87,7 @@ comment by that marker and updates it in place, so a reworded comment never beco
 
 Body files (shell rules for the commands: `<D>/CLAUDE.md`, Commands for the user). A comment that is a single line
 of plain text (no Markdown, backticks, quotes, backslashes or `$`) is passed inline with `--body` or `--comment`;
-duplicate-close comments are always written that way. Every other comment, and always one with a code block or a
+the one-sentence close comment is always written that way (the full duplicate comment is a body file). Every other comment, and always one with a code block or a
 log line, goes into `<round dir>/comments/<ref>.md`, is handed over (ci-triage skill, Dataset) and is posted from
 the user's host clone with `--body-file <checkout>/ci-triage/rounds/<round>/comments/<ref>.md` (or
 `close_duplicates.py --comment-file` with the same path, which accepts only such files). Never edit a log line to
