@@ -37,7 +37,7 @@ function createLedgerApiAudience(
   auth0DomainProvider: auth0.Provider
 ): ResolvedOutput<string> {
   if (isMainNet) {
-    // TODO(DACH-NY/canton-network-internal#2873): get rid of this
+    // TODO(#2873): get rid of this
     return resolvedOutput('https://ledger_api.main.digitalasset.com');
   }
   if (clusterProdLike) {
@@ -81,7 +81,7 @@ function createSvAppAudience(
   auth0DomainProvider: auth0.Provider
 ): ResolvedOutput<string> {
   if (isMainNet) {
-    // TODO(DACH-NY/canton-network-internal#2873): get rid of this
+    // TODO(#2873): get rid of this
     return resolvedOutput('https://sv.main.digitalasset.com');
   }
   if (clusterProdLike) {
@@ -111,7 +111,7 @@ function createValidatorAppAudience(
   auth0DomainProvider: auth0.Provider
 ): ResolvedOutput<string> {
   if (isMainNet) {
-    // TODO(DACH-NY/canton-network-internal#2873): get rid of this
+    // TODO(#2873): get rid of this
     return resolvedOutput('https://validator.main.digitalasset.com');
   }
   if (clusterProdLike) {
@@ -200,12 +200,12 @@ function newM2MApp(
     }
   );
 
-  // TODO(DACH-NY/canton-network-internal#2873): Of course on MainNet we use a different default audience...
+  // TODO(#2873): Of course on MainNet we use a different default audience...
   const legacyLedgerApiAud = isMainNet
     ? 'https://ledger_api.main.digitalasset.com'
     : 'https://canton.network.global';
   if (ledgerApiAud.value !== legacyLedgerApiAud) {
-    // TODO(DACH-NY/canton-network-internal#2873): For now, we also grant all apps access to the old default ledger API
+    // TODO(#2873): For now, we also grant all apps access to the old default ledger API
     // audience, to un-break it until we clean up the audiences we use.
     new auth0.ClientGrant(
       `${resourceName}LegacyGrant`,
@@ -549,7 +549,7 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
         backendClientIds: {
           // hardcoded client IDs
           // TODO(tech-debt) consider folding into main config or into `config.yaml`
-          // TODO(DACH-NY/canton-network-internal#2873): consider creating these apps in pulumi instead
+          // TODO(#2873): consider creating these apps in pulumi instead
           validator: 'cf0cZaTagQUN59C1HBL2udiIBdFh2CWq',
         },
         uiClientIds: {
@@ -582,7 +582,7 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
         backendClientIds: {
           // hardcoded client IDs
           // TODO(tech-debt) consider folding into main config or into `config.yaml`
-          // TODO(DACH-NY/canton-network-internal#2873): consider creating these apps in pulumi instead
+          // TODO(#2873): consider creating these apps in pulumi instead
           validator: 'hqpZ6TP0wGyG2yYwhH6NLpuo0MpJMQZW',
           splitwell: 'ekPlYxilradhEnpWdS80WfW63z1nHvKy',
         },
