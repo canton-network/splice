@@ -59,6 +59,8 @@ export function installTopologyKeyMonitor(
 export function installTopologyKeyMonitorAdminApiTokenSecrets(
   xns: ExactNamespace
 ): Array<pulumi.Resource> {
+  // There is no built-in rotation for this resource. It can be manually rotated by forcing recreation with:
+  // pulumi up --replace '<urn of this resource>'
   const signingKey = new tls.PrivateKey(
     `${xns.logicalName}-topology-key-monitor-admin-api-token-signing-key`,
     {
