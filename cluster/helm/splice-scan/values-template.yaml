@@ -85,6 +85,7 @@ logLevel: DEBUG
 #     region: # please provide a value as provided in the docs
 #     endpoint: # please provide a value as provided in the docs
 #     secretName: splice-app-bulk-storage-committed-credentials
+# publicUrl:
 
 # ACS snapshot pruning (needs a finite analyzable time window)
 # pruning:
