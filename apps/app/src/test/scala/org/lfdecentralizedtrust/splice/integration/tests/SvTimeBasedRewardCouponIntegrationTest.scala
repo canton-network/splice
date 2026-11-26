@@ -280,7 +280,6 @@ class SvTimeBasedRewardCouponIntegrationTest
 
     clue("Pause SV4's SvRewardCouponTrigger") {
       sv4RewardCouponTrigger.pause().futureValue
-      // TODO(#2380) Remove the pause once the scan txlog script is fixed.
     }
     clue("Pause alice reward collection trigger") {
       aliceValidatorBackend

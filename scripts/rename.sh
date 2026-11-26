@@ -1050,7 +1050,6 @@ function subcmd_founding_founder_sv1() {
     'cluster/images/**/*.conf'
     'cluster/pulumi/**/*.ts'
     docs/src/sv_operator/sv_helm.rst
-    scripts/scan-txlog/scan_txlog.py
     .envrc.vars.da
   )
   local extra_excludes=(
