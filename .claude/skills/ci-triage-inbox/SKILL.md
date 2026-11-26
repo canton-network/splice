@@ -29,6 +29,12 @@ One per item or group; an action may be several commands.
 | log request | the evidence is only where no method reaches (CircleCI always) | the exact job and step to save to `log/ci-triage-export/<ref>/` on the host; the item stays in Inbox until the log is there |
 | question | the job mapping is ambiguous, or deciding needs something only the user knows | the question; the item stays in Inbox |
 
+Before a hand-over script is given to the user, run `.claude/skills/ci-triage/scripts/lint_hand_over.py <script>`: it
+checks that every issue with a root-cause comment is retitled while its title still starts with `GHA Run` or `Pipeline`,
+that the comment file exists and ends with the hidden marker, and that the status is set (or the issue closed). Fix
+what it reports. Write the script to `/home/agent/ci-<ref>.sh` (one file per issue or group, named after the ref),
+never to a shared `ci.sh`: other sessions in the same sandbox overwrite it.
+
 Assignee: always look for the owner of every issue that goes to Triaged, and suggest all of them when there are
 several. Find them from the history, not from the failing test alone:
 - the PR that introduced the failure (the first failing sha, a bisect over the runs, the commit that changed the
