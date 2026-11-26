@@ -51,6 +51,7 @@ export type ParticipantArgs = {
   disableProtection?: boolean;
   participantAdminUserNameFrom?: k8s.types.input.core.v1.EnvVarSource;
   imagePullServiceAccountName?: string;
+  enableTopologyKeyMonitorAccess?: boolean;
 };
 
 export type ParticipantOutput = {
@@ -87,6 +88,7 @@ function installParticipantChart(
     auth0,
     participantAdminUserNameFrom,
     imagePullServiceAccountName,
+    enableTopologyKeyMonitorAccess,
   }: ParticipantArgs,
   db: Postgres,
   customOptions?: SpliceCustomResourceOptions
@@ -139,6 +141,7 @@ function installParticipantChart(
     serviceAccountName: imagePullServiceAccountName,
     resources: participant?.resources,
     pvc: persistentHeapDumpsPvc(),
+    enableTopologyKeyMonitorAccess,
   };
 
   return installSpliceHelmChart(xns, 'participant', 'splice-participant', values, version, {

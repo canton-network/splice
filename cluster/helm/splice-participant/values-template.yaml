@@ -92,3 +92,5 @@ securityContexts:
 # TODO(DACH-NY/canton-network-internal#8256): remove this when we're ready to enable admin API auth by default
 adminApi:
   disableAuth: true
+
+enableTopologyKeyMonitorAccess: false

@@ -115,6 +115,10 @@
         url = "https://github.com/pulumi/pulumi-std/releases/download/v2.3.2/pulumi-resource-std-v2.3.2-linux-amd64.tar.gz";
         sha256 = "f8fbf60e148a335eed902e20f2266ed6abce88ac453bd300acc582ebc8ee1abf";
       }
+      {
+        url = "https://github.com/pulumi/pulumi-tls/releases/download/v5.6.3/pulumi-resource-tls-v5.6.3-linux-amd64.tar.gz";
+        sha256 = "0992fed36ad12323f1acb37ece0fb5eb7419821a96df823c1b5fa0be5d42bd44";
+      }
     ];
     x86_64-darwin = [
       {
@@ -228,6 +232,10 @@
       {
         url = "https://github.com/pulumi/pulumi-std/releases/download/v2.3.2/pulumi-resource-std-v2.3.2-darwin-amd64.tar.gz";
         sha256 = "7565dfad5550c680ef7e966bc5098aa95c64d02243c81c4452db30781474dcca";
+      }
+      {
+        url = "https://github.com/pulumi/pulumi-tls/releases/download/v5.6.3/pulumi-resource-tls-v5.6.3-darwin-amd64.tar.gz";
+        sha256 = "68b8ba16ae43f513795d22b89c550a1d20556742b5c0af9eb0f137b7aad889b4";
       }
     ];
     aarch64-linux = [
@@ -343,6 +351,10 @@
         url = "https://github.com/pulumi/pulumi-std/releases/download/v2.3.2/pulumi-resource-std-v2.3.2-linux-arm64.tar.gz";
         sha256 = "78ac2d71b32529358b445ac4a4fd14a95615572a33cbc179c9009ab33b28a4ee";
       }
+      {
+        url = "https://github.com/pulumi/pulumi-tls/releases/download/v5.6.3/pulumi-resource-tls-v5.6.3-linux-arm64.tar.gz";
+        sha256 = "c95ba906616cee353a4d8d442659dde7242608b50d76a3851dd56c131f4cee4d";
+      }
     ];
     aarch64-darwin = [
       {
@@ -456,6 +468,10 @@
       {
         url = "https://github.com/pulumi/pulumi-std/releases/download/v2.3.2/pulumi-resource-std-v2.3.2-darwin-arm64.tar.gz";
         sha256 = "196203b08d5a73ce6a5da2f15dce68fc30987b7ee4fe715fd3aabf6b9a14d2c8";
+      }
+      {
+        url = "https://github.com/pulumi/pulumi-tls/releases/download/v5.6.3/pulumi-resource-tls-v5.6.3-darwin-arm64.tar.gz";
+        sha256 = "2c17c39cc5941d9b181c0b4698e7191bb9c6004f34f1a30014a18319bc55a43c";
       }
     ];
   };

@@ -13,9 +13,12 @@
         },
         "ledgerApiPort": {
           "type": "integer"
+        },
+        "disableAdminApiAuth": {
+          "type": "boolean"
         }
       },
-      "required": ["address", "adminApiPort", "ledgerApiPort"]
+      "required": ["address", "adminApiPort", "ledgerApiPort", "disableAdminApiAuth"]
     },
     "keys": {
       "type": "array",
