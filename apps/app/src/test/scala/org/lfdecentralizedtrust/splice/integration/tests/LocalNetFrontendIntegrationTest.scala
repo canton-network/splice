@@ -5,7 +5,7 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.Get
 import org.apache.pekko.http.scaladsl.model.StatusCodes
-import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, Host, OAuth2BearerToken}
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -151,14 +151,15 @@ class LocalNetFrontendIntegrationTest
         clue(s"Test $user validator") {
           implicit val actorSystem: ActorSystem = env.actorSystem
           registerHttpConnectionPoolsCleanup(env)
-          val host = "json-ledger-api.localhost"
-          val url = s"http://$host:$port"
-
           val response =
             Http()
               .singleRequest(
-                Get(s"$url/v2/state/connected-synchronizers")
-                  .withHeaders(Seq(Authorization(OAuth2BearerToken(token))))
+                Get(s"http://localhost:$port/v2/state/connected-synchronizers")
+                  .withHeaders(
+                    // java can't resolve the *.localhost domain, so we need to set the Host header manually
+                    Host("json-ledger-api.localhost"),
+                    Authorization(OAuth2BearerToken(token)),
+                  )
               )
               .futureValue
           response.status should be(StatusCodes.OK)

@@ -106,7 +106,7 @@ jobs:
   scala_test_sim_time:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-sim-time.log'
       start_canton_options: -s
       parallelism: 6
@@ -119,7 +119,7 @@ jobs:
   scala_test_resource_intensive:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-resource-intensive.log'
       start_canton_options: -w
       parallelism: 1
@@ -133,7 +133,7 @@ jobs:
     uses: ./.github/workflows/build.scala_test.yml
     with:
       # x-large because of SvReonboardingIntegrationTest, which starts additional Canton instances
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-key-download.log'
       start_canton_options: -wk
       parallelism: 1
@@ -147,7 +147,7 @@ jobs:
   scala_test_record_time_tolerance:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-medium
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-dynamic-synchronizer-params-reconciliation.log'
       start_canton_options: -s
       parallelism: 1
@@ -160,7 +160,7 @@ jobs:
   scala_test_logical_sync_upgrade:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-lsu.log'
       # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
       start_canton_options: -wk
@@ -174,7 +174,7 @@ jobs:
   scala_test_roll_forward_lsu:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-x-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-roll-forward-lsu.log'
       # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
       start_canton_options: -wk
@@ -188,7 +188,7 @@ jobs:
   scala_test_signatures:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-medium
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-signatures.log'
       start_canton_options: -w -B "scripts/bootstrap/bootstrap-canton-with-unsigned-keys.sc"
       parallelism: 1
@@ -202,7 +202,7 @@ jobs:
   scala_test_wall_clock_time:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names.log'
       start_canton_options: -w
       parallelism: 10
@@ -216,7 +216,7 @@ jobs:
   scala_test_frontend_wall_clock_time:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-frontend.log'
       start_canton_options: -w
       parallelism: 3
@@ -230,7 +230,7 @@ jobs:
   scala_test_frontend_simtime:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-frontend-sim-time.log'
       start_canton_options: -s
       parallelism: 1
@@ -244,7 +244,7 @@ jobs:
   scala_test_docker_compose:
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
-      runs_on: self-hosted-docker-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-docker-based.log'
       start_canton_options: -w
       parallelism: 2
@@ -257,7 +257,7 @@ jobs:
   scala_test_with_docker_no_canton:
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
-      runs_on: self-hosted-docker-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-docker-no-canton.log'
       parallelism: 1
       test_name: docker-no-canton
@@ -271,7 +271,7 @@ jobs:
   scala_test_with_docker_and_canton_simtime:
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
-      runs_on: self-hosted-docker-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-sim-time-docker.log'
       start_canton_options: -s
       with_canton: true
@@ -287,7 +287,7 @@ jobs:
   scala_test_app_upgrade:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-large
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-app-upgrade.log'
       start_canton_options: -w
       parallelism: 1
@@ -333,7 +333,7 @@ jobs:
   scala_test_without_canton:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-medium
+      runs_on: canton-network-splice
       test_names_file: 'test-full-class-names-non-integration.log'
       with_canton: false
       parallelism: 2
@@ -343,6 +343,62 @@ jobs:
       daml_base_version: ${{ inputs.daml_base_version }}
       protocol_version: ${{ inputs.protocol_version }}
     secrets: inherit
+
+  # split_tests splits the tests across runners by the times in the reports of passing suites. Merge the reports
+  # uploaded by the test jobs of this run into the newest cached reports, and cache them for the next runs.
+  save_test_reports:
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    needs:
+      - scala_test_sim_time
+      - scala_test_resource_intensive
+      - scala_test_key_download
+      - scala_test_record_time_tolerance
+      - scala_test_logical_sync_upgrade
+      - scala_test_roll_forward_lsu
+      - scala_test_signatures
+      - scala_test_wall_clock_time
+      - scala_test_frontend_wall_clock_time
+      - scala_test_frontend_simtime
+      - scala_test_docker_compose
+      - scala_test_with_docker_no_canton
+      - scala_test_with_docker_and_canton_simtime
+      - scala_test_app_upgrade
+      - scala_test_without_canton
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Restore the newest test reports
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/test-reports
+          key: test-reports-1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: test-reports-1-
+
+      - name: Download the test reports of this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: test-reports-*
+          path: /tmp/test-reports-of-run
+          merge-multiple: true
+
+      - name: Merge the test reports of this run
+        id: merge
+        shell: bash
+        run: |
+          mkdir -p /tmp/test-reports /tmp/test-reports-of-run
+          new=$(find /tmp/test-reports-of-run -name '*.xml' | wc -l)
+          echo "Cached test reports: $(find /tmp/test-reports -name '*.xml' | wc -l), test reports of this run: $new"
+          # The reports of this run replace the cached reports of the same suites
+          cp /tmp/test-reports-of-run/*.xml /tmp/test-reports/ 2> /dev/null || true
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+
+      - name: Save the test reports
+        # Nothing to save if no test suite passed in this run, e.g. because the tests were skipped
+        if: ${{ steps.merge.outputs.new != '0' }}
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: /tmp/test-reports
+          key: test-reports-1-${{ github.run_id }}-${{ github.run_attempt }}
 
   final_result:
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') }}

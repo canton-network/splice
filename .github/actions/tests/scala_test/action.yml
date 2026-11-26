@@ -248,7 +248,56 @@ runs:
       if: ${{ fromJson(inputs.with_docker_images) }}
       shell: bash
       run: |
-        [[ -d "$HOME/.docker" ]] && sudo chown "$(id -u):$(id -g)" "$HOME/.docker"
+        # The canton-network-splice runners have no $HOME/.docker
+        if [[ -d "$HOME/.docker" ]]; then
+          sudo chown "$(id -u):$(id -g)" "$HOME/.docker"
+        fi
+
+    # TODO(tech-debt): remove once we know why downloads in docker builds hang on the canton-network-splice runners.
+    # The self-hosted-k8s-* runners needed an MTU of 1400 for the docker network, see cluster/pulumi/gha/src/runners.ts.
+    - name: Diagnose the docker network
+      if: ${{ fromJson(inputs.with_docker_images) }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        print_mtus='for i in /sys/class/net/*; do echo "  $(basename "$i") mtu=$(cat "$i/mtu")"; done'
+        echo "Runner:"
+        sh -c "$print_mtus"
+        echo "Options of the docker bridge network:"
+        docker network inspect bridge --format '{{json .Options}}'
+        for net in bridge host; do
+          echo "Container on the $net network:"
+          docker run --rm --network "$net" alpine sh -c "$print_mtus"
+        done
+        url=https://github.com/fullstorydev/grpcurl/releases/download/v1.9.2/grpcurl_1.9.2_linux_amd64.deb
+        for net in bridge host; do
+          for attempt in 1 2 3; do
+            docker run --rm --network "$net" alpine sh -c '
+              start=$(date +%s)
+              if wget -q -T 30 -O /dev/null "$1"; then result=ok; else result=failed; fi
+              echo "Download on the $2 network, attempt $3: $result after $(($(date +%s) - start))s"
+            ' sh "$url" "$net" "$attempt"
+          done
+        done
+
+    # The localnet and docker-compose tests reach the services through *.localhost hostnames, also from the JVM of the
+    # tests, e.g. the remote apps in apps/app/src/test/resources/localnet-topology.conf. The self-hosted-k8s-* runners
+    # resolved them with hostAliases (localnetHostAliases in cluster/pulumi/gha/src/runners.ts).
+    # TODO(tech-debt): set these hostAliases on the canton-network-splice runners instead
+    - name: Resolve the localnet hostnames
+      shell: bash
+      run: |
+        for host in ans.localhost canton.localhost scan.localhost sv.localhost wallet.localhost json-ledger-api.localhost grpc-ledger-api.localhost; do
+          if grep -qE "^127\.0\.0\.1\s(.*\s)?${host//./\\.}(\s|$)" /etc/hosts; then
+            echo "$host is already in /etc/hosts"
+          elif echo "127.0.0.1 $host" | sudo tee -a /etc/hosts > /dev/null; then
+            echo "Added $host to /etc/hosts"
+          else
+            # Don't fail the job: the tests that do not use the hostname still work
+            echo "::warning::Could not add $host to /etc/hosts, tests that resolve it will fail"
+          fi
+        done
+        getent ahostsv4 wallet.localhost || echo "::warning::wallet.localhost does not resolve"
 
     # Install QEMU to support building multi-arch images
     - name: Set up QEMU
@@ -316,6 +365,21 @@ runs:
           fi
           if [[ "${{ inputs.is_frontend_test }}" == "true" ]]; then
             export VITE_DISABLE_QUERY_DEVTOOLS=true
+            # TODO(tech-debt): drop the polling once the canton-network-splice runners allow raising fs.inotify.max_user_watches.
+            # The "increase inotify limit" step cannot change it there (read-only /proc/sys), and the limit of 12288
+            # is shared by all runner pods on the node, so the file watchers fail with ENOSPC. Poll instead:
+            # chokidar (nodemon, vite) reads CHOKIDAR_*, `tsc --watch` reads TSC_WATCH*.
+            export CHOKIDAR_USEPOLLING=true
+            export CHOKIDAR_INTERVAL=1000
+            export TSC_WATCHFILE=DynamicPriorityPolling
+            export TSC_WATCHDIRECTORY=RecursiveDirectoryUsingDynamicPriorityPolling
+            # start-frontends.sh runs the frontends in windows of the tmux server that start-canton.sh already
+            # started, and these inherit the global environment of that server, not the environment of this shell
+            if tmux has-session 2>/dev/null; then
+              for var in CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL TSC_WATCHFILE TSC_WATCHDIRECTORY; do
+                tmux set-environment -g "$var" "${!var}"
+              done
+            fi
             ./start-frontends.sh ${{ inputs.start_frontend_args }}
           fi
           ${{ inputs.pre_sbt_cmd }}
@@ -338,6 +402,16 @@ runs:
       with:
         setup_sbt_cache_hits: ${{ steps.setup_sbt.outputs.cache_hits }}
         # Caches are saved by the docs job only, see post_sbt.
+
+    # The save_test_reports job of build.yml merges the reports collected by post_sbt into the cache that split_tests reads
+    - name: Upload test reports
+      if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: "test-reports-${{ inputs.test_suite_name }}-${{ inputs.runner_index }}"
+        path: /tmp/test-reports
+        if-no-files-found: ignore
+        retention-days: 1
 
     - name: Upload logs
       # We upload the logs on not success so that we also capture them for cancelled runs
