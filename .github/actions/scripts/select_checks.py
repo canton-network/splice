@@ -33,6 +33,7 @@ STATIC_FLAGS = {
 SCALAFMT = re.compile(r"(\.(scala|sbt)$|^\.scalafmt\.conf$)")
 SHELL = re.compile(r"(\.sh$|(^|/)\.envrc|^\.pre-commit-config\.yaml$)")
 SHELL_SHEBANG = re.compile(r"^#!.*\b(ba|z|da|k)?sh\b")
+PYTHON_SHEBANGS = ("#!/usr/bin/env python", "#!/usr/bin/env python3")
 PACKAGE_JSON = re.compile(r"(^|/)package\.json$")
 DAML_DIR = re.compile(r"^daml/")
 HEADERS = re.compile(r"\.(scala|daml|rst|ts|tsx|js|py|sh)$")
@@ -86,6 +87,13 @@ def is_shell_script(path: str, first_line: Callable[[str], Optional[str]]) -> bo
     return line is not None and SHELL_SHEBANG.search(line) is not None
 
 
+def is_python_script(path: str, first_line: Callable[[str], Optional[str]]) -> bool:
+    if Path(path).suffix:
+        return False
+    line = first_line(path)
+    return line is not None and line.rstrip("\r\n") in PYTHON_SHEBANGS
+
+
 def sbt_command(parts: list[str]) -> str:
     return " ".join(f"; {p}" for p in parts)
 
@@ -111,6 +119,8 @@ def select_static(
         group: "true" if any_matches(pattern, changes) else "false"
         for group, pattern in STATIC_FLAGS.items()
     }
+    if any(is_python_script(c.path, first_line) for c in changes):
+        outputs["python"] = "true"
     shell_changed = any_matches(SHELL, changes) or any(
         is_shell_script(c.path, first_line) for c in changes
     )
@@ -160,7 +170,9 @@ def unknown_files(
     return [
         c.path
         for c in changes
-        if not KNOWN.search(c.path) and not is_shell_script(c.path, first_line)
+        if not KNOWN.search(c.path)
+        and not is_shell_script(c.path, first_line)
+        and not is_python_script(c.path, first_line)
     ]
 
 

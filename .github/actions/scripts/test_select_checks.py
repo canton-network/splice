@@ -54,6 +54,23 @@ class StaticTest(unittest.TestCase):
         out = select("static", modified("build-tools/cncluster"), first_lines.get)
         self.assertEqual(out["sbt_cmd"], "; runShellcheck ; headerCheck")
 
+    def test_extensionless_python_script_in_known_dir(self) -> None:
+        first_lines = {".github/actions/scripts/foo": "#!/usr/bin/env python3\n"}
+        out = select("static", modified(".github/actions/scripts/foo"), first_lines.get)
+        self.assertEqual(out["python"], "true")
+        self.assertEqual(out["sbt_cmd"], "")
+
+    def test_extensionless_python_script_is_not_unknown(self) -> None:
+        first_lines = {"scripts/foo": "#!/usr/bin/env python\n"}
+        out = select("static", modified("scripts/foo"), first_lines.get)
+        self.assertEqual(out["python"], "true")
+        self.assertEqual(out["sbt_cmd"], "")
+
+    def test_other_python_shebang_is_not_python_checked(self) -> None:
+        first_lines = {".github/actions/scripts/foo": "#!/usr/bin/python3\n"}
+        out = select("static", modified(".github/actions/scripts/foo"), first_lines.get)
+        self.assertEqual(out["python"], "false")
+
     def test_build_change_runs_all(self) -> None:
         out = select("static", modified("project/BuildCommon.scala"), no_file)
         self.assertEqual(out["sbt_cmd"], "lintStatic")
