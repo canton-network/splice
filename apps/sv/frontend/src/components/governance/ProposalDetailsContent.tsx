@@ -706,7 +706,9 @@ const VoteItem: React.FC<VoteItemProps> = ({
             onClick={e => {
               e.stopPropagation();
               e.preventDefault();
-              navigator.clipboard.writeText(voter);
+              navigator.clipboard
+                .writeText(voter)
+                .catch(err => console.warn('Failed to copy to clipboard', err));
             }}
           >
             <ContentCopy sx={{ fontSize: '16px' }} />
@@ -732,7 +734,9 @@ const VoteItem: React.FC<VoteItemProps> = ({
               onClick={e => {
                 e.stopPropagation();
                 e.preventDefault();
-                navigator.clipboard.writeText(sanitizeUrl(url));
+                navigator.clipboard
+                  .writeText(sanitizeUrl(url))
+                  .catch(err => console.warn('Failed to copy to clipboard', err));
               }}
             >
               <ContentCopy sx={{ fontSize: '16px' }} />

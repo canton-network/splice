@@ -36,7 +36,7 @@ export const FormControls: React.FC<FormControlsProps> = props => {
 
   const handleConfirmCancel = () => {
     setCancelDialogOpen(false);
-    navigate('/governance/proposals');
+    void navigate('/governance/proposals');
   };
 
   return (
