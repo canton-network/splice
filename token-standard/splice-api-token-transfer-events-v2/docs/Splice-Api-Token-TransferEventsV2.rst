@@ -17,7 +17,7 @@ Interfaces
 
 **interface** `EventLog <type-splice-api-token-transfereventsv2-eventlog-71599_>`_
 
-  An interface for templates that can be used to report token standard v2 events\.
+  An interface for templates that can be used to report token standard V2 events\.
 
   The non\-consuming choice of this interface is used by the instrument admin to
   report token transfers\. Make sure to only consider events from the instrument
@@ -67,7 +67,7 @@ Interfaces
          - The holdings of the account that were consumed\.  They MUST be archived in the same transaction and they MUST be owned by the ``account`` specified in this change\.  Note that these MAY include holdings that were created and archived within the same transaction\. Such holding contract ids will occur in both the input and output list of holdings\.
        * - transferLegSides
          - \[`TransferLegSide <type-splice-api-token-transfereventsv2-transferlegside-2800_>`_\]
-         - The transfers that caused the change in holdings\.  Their net balance changes MUST match the change in holdings of the account\. Both sides of a transfer MUST be reported, and their ids must match\. Transfer leg ids MUST be unique for different transfer legs\.  Note that the settlement of transfers whose net balance change is zero MAY result in events that do have empty input and output holdings\.  Note also that merging and splitting of holdings MAY be reported with an empty list of transfer legs, as the merge and split actions may not be related to a (self\-)transfer of tokens\.
+         - The transfers that caused the change in holdings\.  Their net balance changes MUST match the change in holdings of the account\. Both sides of a transfer MUST be reported, and their ids must match\. Transfer leg ids MUST be unique among the transfer legs that the instrument admin settled together\.  Note that the settlement of transfers whose net balance change is zero MAY result in events that do have empty input and output holdings\.  Note also that merging and splitting of holdings MAY be reported with an empty list of transfer legs, as the merge and split actions may not be related to a (self\-)transfer of tokens\.
        * - outputHoldingCids
          - \[`ContractId <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-lf-contractid-95282>`_ Holding\]
          - The newly created holdings of the account\.

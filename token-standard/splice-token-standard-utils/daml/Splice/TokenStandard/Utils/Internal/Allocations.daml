@@ -410,7 +410,10 @@ validateNextIterationArgs name iteratedSettlementAllowed extraTransferLegSides n
     requireMatchExpected (name <> ".extraTransferLegSides", extraTransferLegSides) []
     requireMatchExpected (name <> ".nextIterationFunding", nextIterationFunding) None
   forA_ nextIterationFunding $ \fundings -> forA_ fundings $ \amount -> do
-    require' (name <> ".nextIterationFunding.amount", amount) isGreaterR ("zero", 0.0)
+    -- Zero amounts are accepted as that might be used in a future iteration
+    -- to signal that net incoming transfers of the instrument with a zero amount
+    -- are allowed (see #8631).
+    require' (name <> ".nextIterationFunding.amount", amount) isGreaterOrEqualR ("zero", 0.0)
   forA_ extraTransferLegSides $ \leg -> do
     require' (name <> ".extraTransferLegSides.amount", leg.amount) isGreaterR ("zero", 0.0)
 
@@ -435,7 +438,7 @@ fetchAndValidateAllocations admin AllocationV2.SettlementFactory_SettleBatch{..}
     requireMatchExpected ("allocation.admin", allocation.admin) admin
     -- validate finalized allocation and record extra legs
     validateNextIterationArgs "finalizedAllocation" (isSome allocation.nextIterationFunding)
-      finalizedAlloc.extraTransferLegSides allocation.nextIterationFunding
+      finalizedAlloc.extraTransferLegSides finalizedAlloc.nextIterationFunding
     let adjustedAllocView = allocationView with
           allocation = allocation with
             transferLegSides = allocation.transferLegSides ++ finalizedAlloc.extraTransferLegSides

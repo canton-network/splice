@@ -236,7 +236,7 @@ Interfaces
          - The settlement for which the allocations are settled\.
        * - transferLegs
          - \[`TransferLeg <type-splice-api-token-allocationv2-transferleg-34001_>`_\]
-         - The transfers that are to be executed as part of the settlement\.  There MUST be at least one transfer leg\. All transfer legs MUST have the same instrument admin as the one of the factory\.
+         - The transfers that are to be executed as part of the settlement\.  There MUST be at least one transfer leg\. All transfer legs MUST have the same instrument admin as the one of the factory\. Their transfer leg ids MUST be unique\.
        * - allocations
          - \[`FinalizedAllocation <type-splice-api-token-allocationv2-finalizedallocation-95818_>`_\]
          - Allocations to settle\.  They serve as proof that all transfers executed as part of settlement were authorized by both sender and receiver\.  The implementation of this choice determines the validation performed by the instrument admin when settling an allocation created by an instrument holder\.
@@ -479,13 +479,13 @@ Data Types
          - The account authorizing the transfers as part of the settlement\.
        * - transferLegSides
          - \[`TransferLegSide <type-splice-api-token-allocationv2-transferlegside-31020_>`_\]
-         - The sides of transfer legs authorized by this allocation\.
+         - The sides of transfer legs authorized by this allocation\.  Wallets MUST copy the transfer leg sides verbatim from the transfer legs of the settlement request, including their ``meta`` entries\. Registries MAY require an exact match to settle the allocation\.
        * - settlementDeadline
          - `Optional <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-prelude-optional-37153>`_ `Time <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-lf-time-63886>`_
          - The executors' and authorizer's agreed time\-to\-live for the allocation\.  After this time, if set, the allocation can no longer be settled, and the authorizer can withdraw the allocation to release the funds\.
        * - nextIterationFunding
          - `Optional <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-prelude-optional-37153>`_ (`TextMap <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-da-internal-lf-textmap-11691>`_ `Decimal <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-decimal-18135>`_)
-         - Amounts reserved for funding the next settlement iteration\.  Amounts are keyed by instrument id and MUST be positive\.  Setting this to ``None`` indicates that iterated settlement is disabled, and the allocation can only be settled once with exactly its specified transfer legs\. Setting this to an empty map indicates that iterated settlement is enabled, but that no funding for the next iteration is reserved by the authorizer\. This can be used when the authorizer expects incoming transfers in the next iteration, and thus does not need to reserve any funding\.
+         - Amounts reserved for funding the next settlement iteration\.  Amounts are keyed by instrument id and MUST be non\-negative\. An amount of ``0.0`` can be used when the authorizer expects net incoming transfers of that instrument in the next iteration, and thus does not need to reserve any funding for it\.  Setting this to ``None`` indicates that iterated settlement is disabled, and the allocation can only be settled once with exactly its specified transfer legs\. Setting this to an empty map indicates that iterated settlement is enabled, but that no funding for the next iteration is reserved by the authorizer\. This can be used when the authorizer expects incoming transfers in the next iteration, and thus does not need to reserve any funding\.
        * - committed
          - `Bool <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-bool-66265>`_
          - Whether the authorizer commits to the allocation until either  * the executors settle allocation, * the executors cancel the allocation, * the settlement deadline passed, or * the admin expires the allocation\.  If set to ``True``, then the authorizer cannot withdraw the allocation until the settlement deadline\. Use committed allocations for cases where the executors need a guarantee that the allocation will be available until settlement\.
@@ -771,6 +771,8 @@ Data Types
   The ``executors`` MUST ensure that the triple of ``(id, cid, meta)`` is unique
   across settlements\.
 
+  Wallets MUST copy the ``SettlementInfo`` verbatim from the settlement request when creating an allocation, including the order of the ``executors`` and all ``meta`` entries\. Registries MAY require an exact match to settle the allocation\.
+
   .. _constr-splice-api-token-allocationv2-settlementinfo-44883:
 
   `SettlementInfo <constr-splice-api-token-allocationv2-settlementinfo-44883_>`_
@@ -843,7 +845,7 @@ Data Types
          - Description
        * - transferLegId
          - `Text <https://docs.digitalasset.com/build/3.4/reference/daml/stdlib/Prelude.html#type-ghc-types-text-51952>`_
-         - An identifier for the transfer leg\.
+         - An identifier for the transfer leg, unique among the legs settled together\.
        * - sender
          - Account
          - The sender of the transfer\.

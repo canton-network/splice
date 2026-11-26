@@ -41,7 +41,7 @@ data TransferLegSide = TransferLegSide with
       -- ^ Additional metadata about the transfer leg, used for extensibility.
   deriving (Eq, Ord, Show, Serializable)
 
--- | An interface for templates that can be used to report token standard v2 events.
+-- | An interface for templates that can be used to report token standard V2 events.
 --
 -- The non-consuming choice of this interface is used by the instrument admin to
 -- report token transfers. Make sure to only consider events from the instrument
@@ -78,7 +78,8 @@ interface EventLog where
         --
         -- Their net balance changes MUST match the change in holdings of the account.
         -- Both sides of a transfer MUST be reported, and their ids must match.
-        -- Transfer leg ids MUST be unique for different transfer legs.
+        -- Transfer leg ids MUST be unique among the transfer legs that the
+        -- instrument admin settled together.
         --
         -- Note that the settlement of transfers whose net balance change is
         -- zero MAY result in events that do have empty input and output

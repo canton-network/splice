@@ -572,7 +572,8 @@ test_settleBatchV2_nonIterated_noNextIterationFunding = test_settleBatchV2_gener
         extraArgs = emptyExtraArgs
         actors = [provider1, provider2]
   pure $ (,) choiceArg $
-    expectMessageContains "no next iteration funding allowed when iterated settlement is disabled"
+    expectMessageContains "'finalizedAllocation.nextIterationFunding' is not equal to 'expected value'" <>
+    expectMessageContains "expected value: None"
 
 test_settleBatchV2_wrongAllocationAdmin: Script ()
 test_settleBatchV2_wrongAllocationAdmin = do
@@ -619,6 +620,20 @@ test_settleBatchV2_nextIterationFunding_wrongInstrumentId = test_settleBatchV2_g
   pure $ (,) choiceArg $
     expectMessageContains "'nextIterationFunding.instrumentId' is not equal to 'expected value'" <>
     expectMessageContains "BAD_INSTRUMENT_ID"
+
+test_settleBatchV2_nextIterationFunding_negativeAmount : Script ()
+test_settleBatchV2_nextIterationFunding_negativeAmount = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do
+  let choiceArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        transferLegs = [legV2]
+        allocations =
+          [ V2.FinalizedAllocation aliceAllocCid [TSU.senderSide legV2] (Some $ TextMap.fromList [(instrId.id, -10.0)])
+          , V2.FinalizedAllocation bobAllocCid [] None
+          ]
+        extraArgs = emptyExtraArgs
+        actors = [provider1, provider2]
+  pure $ (,) choiceArg $
+    expectMessageContains "'finalizedAllocation.nextIterationFunding.amount' is less than 'zero'"
 
 
 -- | Test overflow from the net amount of two legs being larger than the max or min decimal value.

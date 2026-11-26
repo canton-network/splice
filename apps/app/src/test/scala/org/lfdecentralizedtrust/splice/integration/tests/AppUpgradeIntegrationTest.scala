@@ -316,7 +316,8 @@ class AppUpgradeIntegrationTest
           )
 
           clue("SVs have vetted new dso governance version") {
-            eventually() {
+            // SVs first upload all DARs of the new package config before vetting them, which can take more than 20s.
+            eventually(60.seconds) {
               // dso party vetting only changes once all SVs vetted the package.
               val preferredPackages =
                 sv1Backend.participantClientWithAdminToken.ledger_api.interactive_submission

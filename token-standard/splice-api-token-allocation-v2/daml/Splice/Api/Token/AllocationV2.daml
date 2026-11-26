@@ -35,6 +35,10 @@ import Splice.Api.Token.HoldingV2 (Holding, Account)
 --
 -- The `executors` MUST ensure that the triple of `(id, cid, meta)` is unique
 -- across settlements.
+--
+-- Wallets MUST copy the `SettlementInfo` verbatim from the settlement request
+-- when creating an allocation, including the order of the `executors` and all
+-- `meta` entries. Registries MAY require an exact match to settle the allocation.
 data SettlementInfo = SettlementInfo
   with
     executors : [Party]
@@ -56,7 +60,7 @@ data SettlementInfo = SettlementInfo
 -- purpose of a settlement, which often requires the atomic execution of multiple legs.
 data TransferLeg = TransferLeg with
     transferLegId : Text
-      -- ^ An identifier for the transfer leg.
+      -- ^ An identifier for the transfer leg, unique among the legs settled together.
     sender : Account
       -- ^ The sender of the transfer.
     receiver : Account
@@ -105,6 +109,10 @@ data AllocationSpecification = AllocationSpecification with
       -- ^ The account authorizing the transfers as part of the settlement.
     transferLegSides : [TransferLegSide]
       -- ^ The sides of transfer legs authorized by this allocation.
+      --
+      -- Wallets MUST copy the transfer leg sides verbatim from the transfer
+      -- legs of the settlement request, including their `meta` entries.
+      -- Registries MAY require an exact match to settle the allocation.
     settlementDeadline : Optional Time
       -- ^ The executors' and authorizer's agreed time-to-live for the allocation.
       --
@@ -113,7 +121,10 @@ data AllocationSpecification = AllocationSpecification with
     nextIterationFunding : Optional (TextMap.TextMap Decimal)
       -- ^ Amounts reserved for funding the next settlement iteration.
       --
-      -- Amounts are keyed by instrument id and MUST be positive.
+      -- Amounts are keyed by instrument id and MUST be non-negative.
+      -- An amount of `0.0` can be used when the authorizer expects net incoming
+      -- transfers of that instrument in the next iteration, and thus does not
+      -- need to reserve any funding for it.
       --
       -- Setting this to `None` indicates that iterated settlement is disabled,
       -- and the allocation can only be settled once with exactly its specified
@@ -399,7 +410,8 @@ interface SettlementFactory where
         -- ^ The transfers that are to be executed as part of the settlement.
         --
         -- There MUST be at least one transfer leg. All transfer legs MUST have the
-        -- same instrument admin as the one of the factory.
+        -- same instrument admin as the one of the factory. Their transfer leg ids
+        -- MUST be unique.
       allocations : [FinalizedAllocation]
         -- ^ Allocations to settle.
         --
@@ -413,7 +425,9 @@ interface SettlementFactory where
         -- To minimize the risk of allocations being settled in the wrong
         -- context, implementations MUST ensure that:
         --
-        --  - the allocations were created for the `settlement` being settled
+        --  - the allocations were created for the `settlement` being settled,
+        --    which implementations MAY check by requiring an exact match of
+        --    the allocations' `settlement`
         --  - the transfer legs of the allocations authorize both send and
         --    receipt for the transfers specified in `transferLegs`
         --  - the `transferLegs` cover exactly the transfers authorized by the
