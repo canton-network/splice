@@ -6,12 +6,13 @@ its own: no packet paths or other triage-dataset references.
 Shape (Markdown, titled sections in this order, short paragraphs of one to three sentences; as short as the facts
 allow). The same sections are used in the chat presentation and in the comment. Leave a section out only when it has
 nothing to say.
-1. Summary: one line, what broke and how bad (a test or job failing, how often, whether it blocks main or a release
-   line, whether splice needs a change). State it as certain only when every link from the trigger to the failure
-   is shown in the log; otherwise say "likely" and name the unshown link in one sentence. When the code has a guard
-   against exactly this failure (a cleanup, a pause, a retry), the summary must say why the guard did not work; a
-   cause that skips the guard is incomplete (11195: blamed the suite that left vetted packages behind, missed that
-   `withNoVettedPackages` skipped the disconnected participant).
+1. Summary: exactly one line (one sentence, under about 200 characters, no line break): what broke and how bad
+   (the failing test or job, how often, whether it blocks main or a release line, whether splice needs a change).
+   Details belong in the sections below, not here. State it as certain only when every link from the trigger to
+   the failure is shown in the log; otherwise say "likely" and name the unshown link in the sections below. When
+   the code has a guard against exactly this failure (a cleanup, a pause, a retry), the sections must say why the
+   guard did not work; a cause that skips the guard is incomplete (11195: blamed the suite that left vetted
+   packages behind, missed that `withNoVettedPackages` skipped the disconnected participant).
 2. `## Test Purpose`: what the test, job or workflow step is for, in plain words (for a deploy or a workflow: what
    it applies or checks). Plain job and test names, no run ids, shas, shard numbers or which duplicate belongs to
    which job.
@@ -25,9 +26,10 @@ nothing to say.
    (`canton_network_test.clog.gz`, `canton-simtime.clog.gz`, `canton.clog.gz`) or, for the console log, the job log
    and its step ("job log, step Build Docker images"). A block that mixes files is split per file. Never quote a
    line without saying where it is.
-6. `## Reproduction Steps` (or `## Repro Rate` when it is flaky): the commands that reproduce it, with their real
-   output, when it is deterministic or can be forced (a small local setup is fine); otherwise how often it
-   happened (hits and runs of the job, first occurrence or not) and what would force it.
+6. `## Reproduction Steps`: the commands that reproduce it or force it, with their real output (a small local
+   setup is fine), and one sentence on the repro rate: hits and runs of the job, first occurrence or not, what
+   triggers it. When it cannot be forced, the section is called `## Repro Rate` and has only the rate and what
+   would force it.
 7. `## Root Cause`: the mechanism, with only the facts that settle it, one sentence each (a check that passed, the
    last good run); no timeline of the investigation, no list of runs checked.
 8. `## Fix`: the fix in one or two sentences (file and change; for a backport the PR and the release line), or why
