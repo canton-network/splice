@@ -17,6 +17,17 @@ This document goes over how to apply changes to the database schema and/or the [
   - In exceptional cases, you may need to modify an already deployed script.
     Like `git rebase -i`, Flyway has advanced commands that can be used to modify existing history, but those should be used with great care.
 
+## Schema snapshots
+
+[schema-tables.txt](/apps/common/src/test/resources/db/schema-tables.txt) and [schema-indexes.txt](/apps/common/src/test/resources/db/schema-indexes.txt)
+list the tables and indexes that result from all migrations, the indexes of `SqlIndexInitializer`, and the tables and indexes that Scan creates for each ACS snapshot (`AcsSnapshotDDL`).
+Use them to look up the current schema, e.g. to check which index serves a query.
+
+`DbSchemaSnapshotTest` fails if they are out of date. After changing any of the above, regenerate them and commit the result:
+```bash
+UPDATE_SCHEMA_SNAPSHOT=1 sbt "apps-scan/testOnly org.lfdecentralizedtrust.splice.store.db.DbSchemaSnapshotTest"
+```
+
 ## Changing the indexes
 
 For performance reasons, you might need to create, update or remove an index on the database.
