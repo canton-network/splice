@@ -26,7 +26,7 @@ sections are used in the chat presentation and in the comment. Start with the ve
 5. `## Fix`: the fix in one or two sentences (file and change; for a backport the PR and the release line), or why
    none is needed. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
 6. `## Owner`: the person(s) to assign, each with the reason (the PR or commit that introduced the failure, the
-   history of the touched files, the related functional change, a recent fix; for an external contributor the
+   history of the touched files, the related functional change, a recent fix; whether the cause is the original change or a later one, authorship alone is not ownership; for an external contributor the
    internal reviewer or merger instead; ci-triage-inbox, Assignee). Left out when no owner was found.
 Diagrams (default: yes): a diagram helps a reader grasp the failure faster in almost every case, even a simple one,
 so draw one unless the failure is plainly a one-liner with nothing to connect (a missing file, a typo). Keep it

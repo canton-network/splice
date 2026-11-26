@@ -39,7 +39,15 @@ several. Find them from the history, not from the failing test alone:
   closed issues and their fix PRs);
 - for a fix outside splice (infra, workflows, config, Canton), the history of that repository's files the same way
   (`gh api repos/<repo>/commits?path=<file>`), or the component owner.
-Name the evidence next to every suggested login (the PR or commit). External contributors: when the person found is an external contributor (not a member of the organisation; a
+Authorship alone does not make someone the owner; decide from the root cause which case it is, and say which:
+- the failure comes from a specific change (it started with that change, or after it, e.g. a new check, a refactor,
+  a bump that did not update every place): the person who made or merged that change, because the fix completes it;
+- it comes from a recent change to code that had worked: the author of the recent change, not the original author of
+  the code;
+- it comes from old, long-standing code (a latent race, an old timeout): not its original author by default, but
+  whoever maintains or recently changed that area, and the author only when still active there.
+A reviewer who only approved a change, or someone whose recent edits to the same file are unrelated to the cause, is
+not an owner. Name the evidence next to every suggested login (the PR or commit) and the case it falls under. External contributors: when the person found is an external contributor (not a member of the organisation; a
 login ending in `-da` is only a hint, check with `gh api orgs/<org>/members/<login>` or the PR's `author_association`),
 do not assign them; assign the internal owner or reviewer of that test or production change instead: the reviewers
 who approved and the person who merged the PR (`gh pr view <n> --json reviews,mergedBy,author`), the `CODEOWNERS`
