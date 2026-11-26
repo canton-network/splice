@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import org.lfdecentralizedtrust.splice.automation.Trigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   UnclaimedActivityRecord,
   UnclaimedReward,
@@ -11,7 +12,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_Cre
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.store.PageLimit
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExecuteUnclaimedRewardsBurnInstructionTrigger
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
+  ExecuteUnclaimedRewardsBurnInstructionTrigger,
+  ExpireIssuingMiningRoundTrigger,
+  ExpireRewardCouponV2Trigger,
+  ExpireRewardCouponsTrigger,
+}
 import org.lfdecentralizedtrust.splice.util.{TriggerTestUtil, WalletTestUtil}
 import com.daml.ledger.javaapi.data.Identifier
 
@@ -33,6 +39,15 @@ class UnclaimedRewardsBurnIntegrationTest
 
   private def burnTrigger(implicit env: SpliceTestConsoleEnvironment) =
     sv1Backend.dsoDelegateBasedAutomation.trigger[ExecuteUnclaimedRewardsBurnInstructionTrigger]
+
+  private def rewardProducingTriggers(implicit env: SpliceTestConsoleEnvironment): Seq[Trigger] = {
+    val automation = sv1Backend.dsoDelegateBasedAutomation
+    Seq[Trigger](
+      automation.trigger[ExpireIssuingMiningRoundTrigger],
+      automation.trigger[ExpireRewardCouponsTrigger],
+      automation.trigger[ExpireRewardCouponV2Trigger],
+    )
+  }
 
   private def poolTotal()(implicit env: SpliceTestConsoleEnvironment): BigDecimal =
     sv1Backend.participantClient.ledger_api_extensions.acs
@@ -65,7 +80,7 @@ class UnclaimedRewardsBurnIntegrationTest
     val sv1UserId = sv1WalletClient.config.ledgerApiUser
     val amountToBurn = poolTotal() + BigDecimal(15)
 
-    setTriggersWithin(triggersToPauseAtStart = Seq(burnTrigger)) {
+    setTriggersWithin(triggersToPauseAtStart = (burnTrigger: Trigger) +: rewardProducingTriggers) {
       actAndCheck(
         "Vote to burn more than the pool holds",
         voteToBurn(amountToBurn),
@@ -88,7 +103,11 @@ class UnclaimedRewardsBurnIntegrationTest
       actAndCheck(
         "Add enough unclaimed rewards to cover the burn",
         Seq(BigDecimal(12), BigDecimal(5)).foreach(amount =>
-          createUnclaimedReward(sv1ValidatorBackend.participantClientWithAdminToken, sv1UserId, amount)
+          createUnclaimedReward(
+            sv1ValidatorBackend.participantClientWithAdminToken,
+            sv1UserId,
+            amount,
+          )
         ),
       )(
         "the pool covers the burn",
@@ -103,5 +122,13 @@ class UnclaimedRewardsBurnIntegrationTest
       sv1Backend.participantClient.ledger_api_extensions.acs
         .filterJava(UnclaimedActivityRecord.COMPANION)(dsoParty) shouldBe empty
     }
+  }
+
+  "A vote request to burn a non-positive amount is rejected" in { implicit env =>
+    assertThrowsAndLogsCommandFailures(
+      voteToBurn(BigDecimal(0)),
+      _.errorMessage should include regex ("400 Bad Request .* must be positive"),
+    )
+    burnInstructions() shouldBe empty
   }
 }
