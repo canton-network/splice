@@ -82,9 +82,17 @@ function _export_auth0_env_vars {
 }
 
 function _do_start_validator {
-  "${VALIDATOR_DIR}/start.sh" \
-    "$@" \
-      || _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
+  # Retry with exponential backoff (10, 20, 40, 80 s): a registry hiccup while pulling images fails start.sh once.
+  local attempt=1 delay=10
+  until "${VALIDATOR_DIR}/start.sh" "$@"; do
+    if [ "$attempt" -ge 5 ]; then
+      _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
+    fi
+    _info "start.sh failed (attempt $attempt of 5), retrying in ${delay}s"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+    delay=$((delay * 2))
+  done
 
   containers=(validator participant nginx)
   if [ "${wallet_gateway:-0}" -eq 1 ]; then
