@@ -69,10 +69,11 @@ export async function installParticipant(
       {
         OIDC_AUTHORITY_URL: auth0Config.auth0Domain,
         OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getLedgerApiAudience(auth0Config, xns.logicalName),
-        OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(
+        OIDC_AUTHORITY_PARTICIPANT_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(
           auth0Config,
           xns.logicalName
         ),
+        VALIDATOR_CLIENT_ID: getClientId(auth0Config, 'validator', xns.logicalName),
       }
     ),
     ...loadYamlFromFile(
@@ -127,7 +128,6 @@ export async function installParticipant(
           (validatorConfig.participant?.disableParticipantAdminApiAuth ?? false),
         auth: {
           ...participantValues.adminApi?.auth,
-          user: `${getClientId(auth0Config, 'validator', xns.logicalName)}@clients`,
           additionalUsers: extraAdminApiUsers,
         },
       },

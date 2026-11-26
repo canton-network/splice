@@ -13,8 +13,10 @@ adminApi:
   auth:
     # replace OIDC_AUTHORITY_URL with your provider's OIDC URL
     jwksUrl: "https://OIDC_AUTHORITY_URL/.well-known/jwks.json"
-    # replace OIDC_AUTHORITY_LEDGER_API_AUDIENCE with the audience of your choice.
-    targetAudience: "OIDC_AUTHORITY_ADMIN_API_AUDIENCE"
+    # replace OIDC_AUTHORITY_PARTICIPANT_ADMIN_API_AUDIENCE with the audience of your choice.
+    targetAudience: "OIDC_AUTHORITY_PARTICIPANT_ADMIN_API_AUDIENCE"
+    # replace VALIDATOR_CLIENT_ID with the client ID of your Auth0 validator app application
+    user: "VALIDATOR_CLIENT_ID@clients"
 enableHealthProbes: true
 # Required for SVs: Scan serves ACS snapshots for validator recovery through the participant's repair service.
 enableRepairCommands: true
