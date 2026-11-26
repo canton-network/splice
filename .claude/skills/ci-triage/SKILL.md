@@ -140,7 +140,7 @@ to `log/ci-triage-export/<ref>/`.
      unless the user chooses `Infrequent / no repro`.
    Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no
    packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example). Titled
-   sections (Test environment, What the test does, Root cause, Fix, Owner with the reason) and a diagram in almost every
+   sections (Test environment, Test purpose, Root cause, Fix, Owner with the reason) and a diagram in almost every
    case, even a simple one, in the form that fits the issue (network under Test environment, timeline under Root cause;
    `issue-comment.md`, Shape and Diagrams).
    Every claim in the comment must be reproducible from the packet alone: each fact, count, comparison and code

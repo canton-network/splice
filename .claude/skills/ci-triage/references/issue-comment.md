@@ -13,7 +13,7 @@ sections are used in the chat presentation and in the comment. Start with the ve
 2. `## Test environment`: the architecture the failing job runs in, in two or three sentences and a diagram: which
    components (apps, nodes, sequencers, runner, cluster, stores) take part and how they are connected. Plain job and
    test names, no run ids, shas, shard numbers or which duplicate belongs to which job.
-3. `## What the test does`: what the test, job or workflow step does at the point of failure, in plain words (for a
+3. `## Test purpose`: what the test, job or workflow step is for and what it does at the point of failure, in plain words (for a
    deploy or a workflow: what it applies or checks).
 4. `## Root cause`: the mechanism, with the decisive log lines verbatim in a fenced code block (two to six lines,
    timestamps kept, secrets and long JSON trimmed with `...`), then one or two sentences interpreting them. Name the
