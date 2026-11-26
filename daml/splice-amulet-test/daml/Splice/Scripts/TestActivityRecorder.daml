@@ -17,7 +17,7 @@ testActivityRecorder = do
         appActivity = [(provider1.primaryParty, 1000)]
         assetActivity = [(provider2.primaryParty, 2000)]
 
-  -- only the DSO can record activity
+  -- only the DSO party can record activity
   submitMustFail alice.primaryParty recordActivityCmd
 
   -- recording activity consumes the freshly created recorder, so it can be done repeatedly
