@@ -34,8 +34,6 @@ class UnclaimedActivityRecordIntegrationTest
     with TriggerTestUtil
     with WalletTestUtil {
 
-  override protected def runUpdateHistorySanityCheck: Boolean = false
-
   override def environmentDefinition
       : org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition =
     EnvironmentDefinition

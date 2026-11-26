@@ -30,8 +30,6 @@ class WalletTransactionHistoryFrontendIntegrationTest
   override def walletAmuletPrice: java.math.BigDecimal =
     SpliceUtil.damlDecimal(amuletPrice.toDouble)
 
-  override protected def runUpdateHistorySanityCheck: Boolean = false
-
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)

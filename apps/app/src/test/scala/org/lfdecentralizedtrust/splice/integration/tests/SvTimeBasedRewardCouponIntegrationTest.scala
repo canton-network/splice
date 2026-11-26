@@ -278,9 +278,6 @@ class SvTimeBasedRewardCouponIntegrationTest
 
     val sv4RewardCouponTrigger = sv4Backend.dsoAutomation.trigger[ReceiveSvRewardCouponTrigger]
 
-    clue("Pause SV4's SvRewardCouponTrigger") {
-      sv4RewardCouponTrigger.pause().futureValue
-    }
     clue("Pause alice reward collection trigger") {
       aliceValidatorBackend
         .userWalletAutomation(aliceValidatorWalletClient.config.ledgerApiUser)

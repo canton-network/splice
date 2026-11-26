@@ -42,8 +42,6 @@ class DevelopmentFundCouponIntegrationTest
 
   private val unclaimedDevelopmentFundCouponsThreshold = 3
 
-  override protected def runUpdateHistorySanityCheck: Boolean = false
-
   override def environmentDefinition
       : org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition =
     EnvironmentDefinition
