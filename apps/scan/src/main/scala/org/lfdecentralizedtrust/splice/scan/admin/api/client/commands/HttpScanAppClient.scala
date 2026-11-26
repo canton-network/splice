@@ -92,6 +92,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   transferinstructionv2,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -3066,6 +3067,91 @@ object HttpScanAppClient {
         )
         .toSeq
       Right((results, response.nextPageToken))
+    }
+  }
+
+  /** A vote result as served by `/v1/admin/sv/voteresults`. */
+  final case class VoteResultV1(
+      recordTime: CantonTimestamp,
+      synchronizerId: String,
+      updateId: String,
+      eventNumber: Int,
+      dsoRulesContractId: DsoRules.ContractId,
+      voteResult: DsoRules_CloseVoteRequestResult,
+      // TODO(#8080): decode the DsoRules once they are served
+  )
+
+  private def toHttpFilters(filters: VoteResultsFilters): definitions.VoteResultsFiltersV1 =
+    definitions.VoteResultsFiltersV1(
+      actionName = filters.actionName,
+      accepted = filters.accepted,
+      requester = filters.requester,
+      effectiveFrom = filters.effectiveFrom.map(java.time.OffsetDateTime.parse),
+      effectiveTo = filters.effectiveTo.map(java.time.OffsetDateTime.parse),
+    )
+
+  case class ListVoteRequestResultsV1(
+      filters: VoteResultsFilters,
+      pageSize: Int,
+      pageToken: Option[String] = None,
+  ) extends InternalBaseCommand[
+        http.ListVoteRequestResultsV1Response,
+        (Seq[VoteResultV1], Option[String]),
+      ] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.ListVoteRequestResultsV1Response] =
+      client.listVoteRequestResultsV1(
+        body = definitions.ListVoteResultsRequestV1(
+          filters = Some(toHttpFilters(filters)),
+          pageSize = pageSize,
+          pageToken = pageToken,
+        ),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.ListVoteRequestResultsV1Response.OK(response) =>
+      Right(
+        (
+          response.voteResults.map { r =>
+            VoteResultV1(
+              recordTime = CantonTimestamp.assertFromInstant(r.recordTime.toInstant),
+              synchronizerId = r.synchronizerId,
+              updateId = r.updateId,
+              eventNumber = r.eventNumber,
+              dsoRulesContractId = new DsoRules.ContractId(r.dsoRulesContractId),
+              voteResult = decoder.decodeValue(
+                DsoRules_CloseVoteRequestResult.valueDecoder(),
+                DsoRules_CloseVoteRequestResult._packageId,
+                "Splice.DsoRules",
+                "DsoRules_CloseVoteRequestResult",
+              )(r.voteResult),
+            )
+          },
+          response.nextPageToken,
+        )
+      )
+    }
+  }
+
+  case class CountVoteRequestResultsV1(
+      filters: VoteResultsFilters
+  ) extends InternalBaseCommand[http.CountVoteRequestResultsV1Response, Long] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.CountVoteRequestResultsV1Response] =
+      client.countVoteRequestResultsV1(body = toHttpFilters(filters), headers = headers)
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.CountVoteRequestResultsV1Response.OK(response) =>
+      Right(response.count)
     }
   }
 
