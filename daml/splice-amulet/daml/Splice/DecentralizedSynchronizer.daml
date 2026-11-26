@@ -11,7 +11,7 @@ import DA.Text as T
 import qualified DA.TextMap as TextMap
 import DA.Time
 
-import Splice.Amulet.DedicatedSynchronizer (PaymasterPurchase)
+import Splice.Amulet.DedicatedSynchronizer (PaymasterPurchaseReceipt)
 
 import Splice.Types
 import Splice.Util
@@ -100,7 +100,7 @@ data MemberTrafficPurchase = MemberTrafficPurchase with
     synchronizerId : Text
     migrationId : Int
     trafficAmount : Int
-    paymaster : Optional PaymasterPurchase
+    paymaster : Optional PaymasterPurchaseReceipt
       -- ^ A paymaster's purchase for its dedicated synchronizer. `None` for a purchase of
       -- member traffic on the decentralized synchronizer.
   deriving (Eq, Show)

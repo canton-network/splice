@@ -330,7 +330,7 @@ template AmuletRules
         csum <- summarizeAndValidateContext eventLogCid context dso
           (getDevelopmentFundManagerBlacklist configUsd) provider provider
         let trafficConfig = trafficPurchaseConfigFromAmuletConfig configUsd contextMiningRound
-        paymaster <- fetchOptPaymasterPurchase dso trafficConfig provider synchronizerId trafficAmount optPaymasterTrafficPurchase
+        paymaster <- fetchOptPaymasterPurchaseReceipt dso trafficConfig provider synchronizerId trafficAmount optPaymasterTrafficPurchase
         result <- buyMemberTraffic eventLogCid csum trafficConfig
           MemberTrafficPurchase with
             provider
@@ -1860,7 +1860,7 @@ data MemberTrafficPurchaseResult = MemberTrafficPurchaseResult with
 -- `supportedSynchronizerIds` and give a memberId.
 --
 -- A paymaster's purchase for its dedicated synchronizer must be for a synchronizer that is not one
--- of the `supportedSynchronizerIds`, which `fetchOptPaymasterPurchase` already selects by. The
+-- of the `supportedSynchronizerIds`, which `fetchOptPaymasterPurchaseReceipt` already selects by. The
 -- paymaster pays for the synchronizer as a whole, so the purchase's `memberId` must be empty, and a
 -- dedicated synchronizer has no migrations, so the migration id must be 0.
 --
@@ -1900,8 +1900,8 @@ validateBuyMemberTrafficInputs trafficConfig purchase = do
 -- `PaymasterTrafficPurchase` alone. Traffic for one of the `supportedSynchronizerIds` is for a
 -- member of the decentralized synchronizer, and must not come with a paymaster's purchase. Traffic
 -- for any other synchronizer is a paymaster's purchase for its dedicated synchronizer, and needs one.
-fetchOptPaymasterPurchase : Party -> TrafficPurchaseConfig -> Party -> Text -> Int -> Optional PaymasterTrafficPurchase -> Update (Optional PaymasterPurchase)
-fetchOptPaymasterPurchase dso trafficConfig provider synchronizerId trafficAmount optPaymasterTrafficPurchase
+fetchOptPaymasterPurchaseReceipt : Party -> TrafficPurchaseConfig -> Party -> Text -> Int -> Optional PaymasterTrafficPurchase -> Update (Optional PaymasterPurchaseReceipt)
+fetchOptPaymasterPurchaseReceipt dso trafficConfig provider synchronizerId trafficAmount optPaymasterTrafficPurchase
   | synchronizerId `elem` trafficConfig.supportedSynchronizerIds = do
       whenSome optPaymasterTrafficPurchase $ \_ ->
         failWithStatus (mkPaymasterPurchaseForDecentralizedSynchronizerFailure synchronizerId)
@@ -1909,7 +1909,7 @@ fetchOptPaymasterPurchase dso trafficConfig provider synchronizerId trafficAmoun
   | otherwise = case optPaymasterTrafficPurchase of
       None -> failWithStatus (mkUnknownSynchronizerFailure synchronizerId)
       Some paymasterTrafficPurchase ->
-        Some <$> fetchPaymasterPurchase dso provider synchronizerId trafficAmount paymasterTrafficPurchase
+        Some <$> fetchPaymasterPurchaseReceipt dso provider synchronizerId trafficAmount paymasterTrafficPurchase
 
 -- | Burn amulet to buy extra traffic on a synchronizer, for a member of the decentralized
 -- synchronizer or, given a paymaster's purchase, for a dedicated synchronizer as a whole.

@@ -442,7 +442,7 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
               optAppActivityWeight = purchaseMemo.appActivityWeight
               optAssetActivityWeight = purchaseMemo.assetActivityWeight)
             optDedicatedSynchronizerCid
-    paymaster <- fetchOptPaymasterPurchase dso trafficConfig transfer.sender purchaseMemo.synchronizerId trafficAmount optPaymasterTrafficPurchase
+    paymaster <- fetchOptPaymasterPurchaseReceipt dso trafficConfig transfer.sender purchaseMemo.synchronizerId trafficAmount optPaymasterTrafficPurchase
     let purchase = MemberTrafficPurchase with
           provider = transfer.sender
           memberId = purchaseMemo.memberId

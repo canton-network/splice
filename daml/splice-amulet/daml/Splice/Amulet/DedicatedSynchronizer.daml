@@ -97,8 +97,9 @@ data PaymasterTrafficPurchase = PaymasterTrafficPurchase with
       -- the config's `maxAssetActivityWeight`. Defaults to the max.
   deriving (Eq, Show, Serializable)
 
--- | A paymaster's traffic purchase for its dedicated synchronizer, and the activity it earns.
-data PaymasterPurchase = PaymasterPurchase with
+-- | The receipt of a paymaster's traffic purchase for its dedicated synchronizer: the paymaster,
+-- and the activity the purchase earns it.
+data PaymasterPurchaseReceipt = PaymasterPurchaseReceipt with
     paymaster : Party
     appActivity : Int
       -- ^ App activity to grant the paymaster for this purchase, in traffic bytes.
@@ -108,10 +109,10 @@ data PaymasterPurchase = PaymasterPurchase with
 
 -- | Fetches the dedicated synchronizer for a paymaster's purchase of `trafficAmount` bytes of
 -- traffic for `synchronizerId` by `provider`, and resolves the activity the purchase earns.
-fetchPaymasterPurchase : Party -> Party -> Text -> Int -> PaymasterTrafficPurchase -> Update PaymasterPurchase
-fetchPaymasterPurchase dso provider synchronizerId trafficAmount purchase = do
+fetchPaymasterPurchaseReceipt : Party -> Party -> Text -> Int -> PaymasterTrafficPurchase -> Update PaymasterPurchaseReceipt
+fetchPaymasterPurchaseReceipt dso provider synchronizerId trafficAmount purchase = do
   dedicatedSynchronizer <- fetchReferenceData (ForDso with dso) purchase.dedicatedSynchronizerCid
-  case resolvePaymasterPurchase dedicatedSynchronizer provider synchronizerId trafficAmount
+  case resolvePaymasterPurchaseReceipt dedicatedSynchronizer provider synchronizerId trafficAmount
          purchase.optAppActivityWeight purchase.optAssetActivityWeight of
     Left failureStatus -> failWithStatus failureStatus
     Right paymasterPurchase -> pure paymasterPurchase
@@ -120,12 +121,12 @@ fetchPaymasterPurchase dso provider synchronizerId trafficAmount purchase = do
 -- and resolves the activity that `trafficAmount` purchased bytes earn the paymaster. Each byte
 -- earns the requested weight, capped at the config's max, in app and in asset activity, and each
 -- total is rounded down.
-resolvePaymasterPurchase : DedicatedSynchronizer -> Party -> Text -> Int -> Optional Decimal -> Optional Decimal -> Either FailureStatus PaymasterPurchase
-resolvePaymasterPurchase dedicatedSynchronizer provider synchronizerId trafficAmount optAppActivityWeight optAssetActivityWeight = do
+resolvePaymasterPurchaseReceipt : DedicatedSynchronizer -> Party -> Text -> Int -> Optional Decimal -> Optional Decimal -> Either FailureStatus PaymasterPurchaseReceipt
+resolvePaymasterPurchaseReceipt dedicatedSynchronizer provider synchronizerId trafficAmount optAppActivityWeight optAssetActivityWeight = do
   checkPurchase
   appActivityWeight <- resolveWeight "app activity weight" optAppActivityWeight config.maxAppActivityWeight
   assetActivityWeight <- resolveWeight "asset activity weight" optAssetActivityWeight config.maxAssetActivityWeight
-  pure PaymasterPurchase with
+  pure PaymasterPurchaseReceipt with
     paymaster = config.paymaster
     appActivity = weighted appActivityWeight
     assetActivity = weighted assetActivityWeight

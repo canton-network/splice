@@ -36,13 +36,13 @@ testDedicatedSynchronizer = DedicatedSynchronizer with
   synchronizerId = testSynchronizerId
   config = testConfig
 
-resolve : Int -> Optional Decimal -> Optional Decimal -> Either FailureStatus PaymasterPurchase
+resolve : Int -> Optional Decimal -> Optional Decimal -> Either FailureStatus PaymasterPurchaseReceipt
 resolve trafficAmount optAppActivityWeight optAssetActivityWeight =
-  resolvePaymasterPurchase testDedicatedSynchronizer testPaymaster testSynchronizerId trafficAmount
+  resolvePaymasterPurchaseReceipt testDedicatedSynchronizer testPaymaster testSynchronizerId trafficAmount
     optAppActivityWeight optAssetActivityWeight
 
-activityFor : Int -> Int -> Either FailureStatus PaymasterPurchase
-activityFor appActivity assetActivity = Right PaymasterPurchase with
+activityFor : Int -> Int -> Either FailureStatus PaymasterPurchaseReceipt
+activityFor appActivity assetActivity = Right PaymasterPurchaseReceipt with
   paymaster = testPaymaster
   appActivity
   assetActivity
@@ -90,13 +90,13 @@ test_resolvePaymasterPurchase_rejectsNegativeWeight = script do
 
 test_resolvePaymasterPurchase_rejectsNonPaymaster : Script ()
 test_resolvePaymasterPurchase_rejectsNonPaymaster = script do
-  let result = resolvePaymasterPurchase testDedicatedSynchronizer (testParty "other") testSynchronizerId 1_000_000
+  let result = resolvePaymasterPurchaseReceipt testDedicatedSynchronizer (testParty "other") testSynchronizerId 1_000_000
         None None
   failureErrorId result === Some "splice.lfdecentralizedtrust.org/not-paymaster"
 
 test_resolvePaymasterPurchase_rejectsOtherSynchronizer : Script ()
 test_resolvePaymasterPurchase_rejectsOtherSynchronizer = script do
-  let result = resolvePaymasterPurchase testDedicatedSynchronizer testPaymaster "other-synchronizer::1220dede" 1_000_000
+  let result = resolvePaymasterPurchaseReceipt testDedicatedSynchronizer testPaymaster "other-synchronizer::1220dede" 1_000_000
         None None
   failureErrorId result === Some "splice.lfdecentralizedtrust.org/dedicated-synchronizer-mismatch"
 
