@@ -82,7 +82,16 @@ jobs:
           # The todo checker runs `git log main..$BRANCH`
           fetch_git_refs: history
 
+      - name: Select checks for the changed files
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 ./.github/actions/scripts/select_checks.py static >> "$GITHUB_OUTPUT"
+
       - name: Check Grafana Dashboards
+        if: steps.changes.outputs.grafana == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-grafana-dashboards.sh
@@ -93,21 +102,25 @@ jobs:
           cmd: ./scripts/check-trailing-whitespace.sh
 
       - name: Type check Python
+        if: steps.changes.outputs.python == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/python-checks.py check
 
       - name: Run Daml warts check
+        if: steps.changes.outputs.daml == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-daml-warts.sh
 
       - name: Run Daml return types check
+        if: steps.changes.outputs.daml == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-daml-return-types.sh
 
       - name: Run Daml interface implementations check
+        if: steps.changes.outputs.daml == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-daml-interface-impls.sh
@@ -128,29 +141,34 @@ jobs:
           CIRCLE_PULL_REQUEST: ${{ github.event.pull_request.number }}
 
       - name: Lint GHA
+        if: steps.changes.outputs.gha == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/actionlint.sh
 
       - name: Security audit GHA with zizmor
+        if: steps.changes.outputs.gha == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/zizmor.sh
 
       - name: Check that docker base images are pinned by digest
+        if: steps.changes.outputs.base_images == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-base-images.sh
 
       - name: Check that npm packages are properly namespaced
+        if: steps.changes.outputs.npm_names == 'true'
         uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-npm-package-names.py
 
       - name: SBT-based static checks
+        if: steps.changes.outputs.sbt_cmd != ''
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
-          cmd: "lintStatic"
+          cmd: ${{ steps.changes.outputs.sbt_cmd }}
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')

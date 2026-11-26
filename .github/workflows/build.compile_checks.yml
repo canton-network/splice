@@ -61,10 +61,18 @@ jobs:
           key: dar-resources-checked-1 ${{ hashFiles('daml/dars/**', 'daml/dars.lock', 'apps/dar-resources-generator/src/**', 'apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/DarResources.scala', 'build.sbt', 'project/*.scala', 'project/*.sbt', 'project/build.properties', '.scalafmt.conf', 'nix/canton-sources.json') }}
           lookup-only: true
 
+      - name: Select checks for the changed files
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 ./.github/actions/scripts/select_checks.py build >> "$GITHUB_OUTPUT"
+
       - name: Checks that need the build
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
-          cmd: "lintCompiled updateTestConfigForParallelRuns${{ steps.dar_resources_checked.outputs.cache-hit != 'true' && ' updateDarResources' || '' }}"
+          cmd: "lintCompiledJvm${{ steps.changes.outputs.npm_lint }}${{ steps.changes.outputs.test_config == 'true' && ' updateTestConfigForParallelRuns' || '' }}${{ steps.dar_resources_checked.outputs.cache-hit != 'true' && ' updateDarResources' || '' }}"
 
       - name: Verify no changes in SBT test files
         uses: ./.github/actions/nix/run
