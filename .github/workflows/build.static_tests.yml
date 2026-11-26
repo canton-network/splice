@@ -87,6 +87,7 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 ./.github/actions/scripts/select_checks.py static >> "$GITHUB_OUTPUT"
 
       - name: Check Grafana Dashboards
