@@ -70,7 +70,8 @@ import org.lfdecentralizedtrust.splice.store.{
   StoreTestBase,
   VoteResultsFilters,
 }
-import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Contract, ResourceTemplateDecoder, TemplateJsonDecoder}
+import com.digitalasset.canton.daml.lf.value.json.ApiCodecCompressed
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import org.slf4j.event.Level
 import slick.dbio.DBIO
@@ -208,6 +209,111 @@ class DbVotesStoreTest
         } yield {
           contractIds should have size voteFixtures.flatMap(_.votes).size.toLong
           all(contractIds.map(_._2)) shouldBe Some(dsoRulesCid)
+        }
+      }
+    }
+
+    "listVoteResults" should {
+      "return the same vote results as listVoteRequestResults, with the data that identifies them" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          page <- stores.votesStore.listVoteResults(DbVotesStore.Filters(), PageLimit.Max, None)
+          resultsPage <- stores.votesStore.listVoteRequestResults(
+            VoteResultsFilters(),
+            PageLimit.Max,
+            None,
+          )
+          rows <- listAllRows(stores.votesStore)
+        } yield {
+          page.resultsInPage should have size voteFixtures.flatMap(_.votes).size.toLong
+          page.resultsInPage.map(r =>
+            DsoRules_CloseVoteRequestResult.fromJson(r.choiceResult)
+          ) shouldBe resultsPage.resultsInPage
+          page.nextPageToken.map(token => (token.recordTime, token.eventNumber)) shouldBe
+            page.resultsInPage.lastOption.map(r => (r.recordTime, r.eventNumber))
+          page.resultsInPage.map(r =>
+            (
+              r.recordTime,
+              r.synchronizerId,
+              r.updateId,
+              r.eventNumber,
+              r.contractId,
+              r.choiceResult,
+            )
+          ) should contain theSameElementsAs rows.map(r =>
+            (
+              CantonTimestamp.ofEpochMicro(r.recordTime),
+              r.synchronizerId,
+              r.updateId,
+              r.eventNumber,
+              r.contractId,
+              r.choiceResult,
+            )
+          )
+        }
+      }
+
+      "page in the same order as listVoteRequestResults" in {
+        def go(
+            votesStore: DbVotesStore,
+            after: Option[DbVotesStore.VoteResultsPageToken],
+            acc: Seq[DbVotesStore.ServedVoteResult],
+        ): Future[Seq[DbVotesStore.ServedVoteResult]] =
+          votesStore
+            .listVoteResults(DbVotesStore.Filters(), PageLimit.tryCreate(2), after)
+            .flatMap { page =>
+              if (page.resultsInPage.isEmpty) Future.successful(acc)
+              else go(votesStore, page.nextPageToken, acc ++ page.resultsInPage)
+            }
+        for {
+          stores <- mkStores()
+          // Ingested in the opposite order of the record times
+          _ <- ingestAll(stores, voteFixtures.reverse)
+          v0Pages <- listAllPages(stores.votesStore, VoteResultsFilters(), pageSize = 2)
+          paged <- go(stores.votesStore, None, Seq.empty)
+        } yield {
+          v0Pages.flatten should have size voteFixtures.flatMap(_.votes).size.toLong
+          paged.map(r => DsoRules_CloseVoteRequestResult.fromJson(r.choiceResult)) shouldBe
+            v0Pages.flatten
+        }
+      }
+
+      "round trip the page token, and reject invalid ones" in {
+        val token = DbVotesStore.VoteResultsPageToken(
+          CantonTimestamp.assertFromLong(3L),
+          CantonTimestamp.assertFromLong(2L),
+          1,
+        )
+        DbVotesStore.VoteResultsPageToken.tryDecodeFromBase64(token.encodeToBase64) shouldBe token
+        forAll(
+          Seq("not base64!", "e30=", java.util.Base64.getEncoder.encodeToString("42".getBytes))
+        ) { invalid =>
+          inside(scala.util.Try(DbVotesStore.VoteResultsPageToken.tryDecodeFromBase64(invalid))) {
+            case scala.util.Failure(e: StatusRuntimeException) =>
+              e.getStatus.getCode shouldBe Status.Code.INVALID_ARGUMENT
+          }
+        }
+      }
+
+      // /v1/admin/sv/voteresults serves the stored JSON, /v0/admin/sv/voteresults re-encodes the decoded result
+      "store the JSON in the same format as /v0/admin/sv/voteresults encodes it" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          page <- stores.votesStore.listVoteResults(DbVotesStore.Filters(), PageLimit.Max, None)
+        } yield {
+          page.resultsInPage should have size voteFixtures.flatMap(_.votes).size.toLong
+          forAll(page.resultsInPage) { row =>
+            val v0Encoding = ApiCodecCompressed
+              .apiValueToJsValue(
+                Contract.javaValueToLfValue(
+                  DsoRules_CloseVoteRequestResult.fromJson(row.choiceResult).toValue
+                )
+              )
+              .compactPrint
+            io.circe.parser.parse(row.choiceResult) shouldBe io.circe.parser.parse(v0Encoding)
+          }
         }
       }
     }

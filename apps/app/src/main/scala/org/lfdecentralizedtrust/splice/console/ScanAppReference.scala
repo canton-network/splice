@@ -823,6 +823,34 @@ abstract class ScanAppReference(
     }
   }
 
+  @Help.Summary("Count vote results")
+  def countVoteRequestResults(filters: VoteResultsFilters): Long =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.CountVoteRequestResults(filters)
+      )
+    }
+
+  @Help.Summary("List vote results from the votes store (experimental)")
+  def listVoteRequestResultsV1(
+      filters: VoteResultsFilters,
+      pageSize: Int,
+      pageToken: Option[String] = None,
+  ): (Seq[HttpScanAppClient.VoteResultV1], Option[String]) =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.ListVoteRequestResultsV1(filters, pageSize, pageToken)
+      )
+    }
+
+  @Help.Summary("Count vote results in the votes store (experimental)")
+  def countVoteRequestResultsV1(filters: VoteResultsFilters): Long =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.CountVoteRequestResultsV1(filters)
+      )
+    }
+
   @Help.Summary(
     "List the BFT sequencers"
   )
