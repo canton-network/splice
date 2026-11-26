@@ -431,6 +431,20 @@ spec:
             - name: SPLICE_APP_EXPIRED_REWARD_COUPON_NUM_BATCHES
               value: {{ .Values.delegatelessAutomationExpiredRewardCouponNumBatches | quote }}
             {{- end }}
+            {{- with .Values.unavailablePartiesBackoff }}
+            {{- with .baseIgnoreDuration }}
+            - name: SPLICE_APP_UNAVAILABLE_PARTIES_BASE_IGNORE_DURATION
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .baseIgnoreDurationJitter }}
+            - name: SPLICE_APP_UNAVAILABLE_PARTIES_BASE_IGNORE_DURATION_JITTER
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .maxIgnoreDuration }}
+            - name: SPLICE_APP_UNAVAILABLE_PARTIES_MAX_IGNORE_DURATION
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
             {{- if and .Values.synchronizers .Values.synchronizers.skipInitialization }}
             - name: ADDITIONAL_CONFIG_SYNCHRONIZER_INITIALIZATION
               value: canton.sv-apps.sv.skip-synchronizer-initialization = true

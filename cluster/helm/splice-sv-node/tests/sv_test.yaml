@@ -81,6 +81,34 @@ tests:
           path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_VALIDATOR_AUTH_JWKS_READ_TIMEOUT')].value
           value: "44s"
 
+  - it: "sets the unavailable parties backoff parameters"
+    set:
+      unavailablePartiesBackoff:
+        baseIgnoreDuration: "15m"
+        baseIgnoreDurationJitter: "3m"
+        maxIgnoreDuration: "12h"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_UNAVAILABLE_PARTIES_BASE_IGNORE_DURATION')].value
+          value: "15m"
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_UNAVAILABLE_PARTIES_BASE_IGNORE_DURATION_JITTER')].value
+          value: "3m"
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_UNAVAILABLE_PARTIES_MAX_IGNORE_DURATION')].value
+          value: "12h"
+
+  - it: "does not set the unavailable parties backoff parameters by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_UNAVAILABLE_PARTIES_BASE_IGNORE_DURATION')]
+
   - it: "sets extra-beneficiaries"
     set:
       extraBeneficiaries:

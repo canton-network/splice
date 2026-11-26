@@ -29,6 +29,7 @@ class DbUnavailablePartiesStore(
     clock: Clock,
     protectedParties: Set[PartyId] = Set.empty,
     val loggerFactory: NamedLoggerFactory,
+    baseJitter: NonNegativeFiniteDuration = NonNegativeFiniteDuration.Zero,
 )(implicit
     val ec: ExecutionContext,
     val loggingContext: ErrorLoggingContext,
@@ -41,6 +42,7 @@ class DbUnavailablePartiesStore(
 
   private val baseMicros = baseDuration.underlying.toMicros
   private val maxMicros = maxIgnoreDuration.underlying.toMicros
+  private val jitterMicros = baseJitter.underlying.toMicros
 
   override def addParties(
       parties: Seq[PartyId]
@@ -77,7 +79,8 @@ class DbUnavailablePartiesStore(
   }
 
   /** Adds or updates parties only outside the ignore window.
-    *  a. For new parties, it sets updated_at to now and the ignore_duration to base_duration.
+    *  a. For new parties, it sets updated_at to now and the ignore_duration to base_duration plus a random jitter
+    *     in [0, baseJitter), capped at max_ignore_duration, so that parties marked together do not all become eligible again at the same time.
     *  b. For existing parties, it updates updated_at to now and doubles the ignore_duration (up to max_ignore_duration)
     */
   private[splice] def addPartiesAt(parties: Seq[PartyId], nowMicros: Long)(implicit
@@ -91,7 +94,7 @@ class DbUnavailablePartiesStore(
         .update(
           sql"""insert into dso_unavailable_parties
                   (party, updated_at, ignore_duration, store_id)
-                select u.party, $nowMicros, $baseMicros, $storeId
+                select u.party, $nowMicros, least($baseMicros + (random() * $jitterMicros)::bigint, $maxMicros), $storeId
                 from unnest($partyArray) as u(party)
                 on conflict (store_id, party) do update
                   set updated_at = excluded.updated_at,
@@ -141,6 +144,7 @@ object DbUnavailablePartiesStore {
       clock: Clock,
       protectedParties: Set[PartyId],
       loggerFactory: NamedLoggerFactory,
+      baseJitter: NonNegativeFiniteDuration = NonNegativeFiniteDuration.Zero,
   )(implicit
       ec: ExecutionContext,
       lc: ErrorLoggingContext,
@@ -158,6 +162,7 @@ object DbUnavailablePartiesStore {
           clock,
           protectedParties,
           loggerFactory,
+          baseJitter,
         )
       )
 }

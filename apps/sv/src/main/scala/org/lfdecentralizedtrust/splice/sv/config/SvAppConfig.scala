@@ -763,6 +763,8 @@ final case class RangeConfig(
 
 final case class UnavailablePartiesBackoffParameters(
     baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
+    // random jitter in [0, baseIgnoreDurationJitter) added to the base duration of newly ignored parties
+    baseIgnoreDurationJitter: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(2),
     // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
     maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
 )
