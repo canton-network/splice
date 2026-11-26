@@ -23,10 +23,10 @@ nothing to say.
    six lines, timestamps kept, secrets and long JSON trimmed with `...`) and a timeline diagram when the order of
    events matters. Name the log file each block comes from, in the sentence before the block or in a comment line
    above it, so that a reader can verify it by hand: the file as it is named in the job's artifact
-   (`canton_network_test.clog.gz`, `canton-simtime.clog.gz`, `canton.clog.gz`) or, for the console log, the job log
-   and its step ("job log, step Build Docker images"). A block that mixes files is split per file. Never quote a
+   (`canton_network_test.clog.gz`, `canton-simtime.clog.gz`, `canton.clog.gz`) or, for the console log, the file name in the run's log archive (`gh api repos/<repo>/actions/runs/<run>/logs`,
+   `unzip -l`; e.g. `0_trigger_cimain _ trigger_cluster_test.txt`) with the job id and the step. A block that mixes files is split per file. Never quote a
    line without saying where it is. Make the source the first line inside the code block, as a comment line
-   (`# canton_network_test.clog.gz` or `# job log: <job name> (job <id>), step "<step>"`), so that it stays with the
+   (`# log file: canton_network_test.clog.gz` or, for a console log, `# log file: <file name in the run's log archive> (job <id>, step "<step>")`), so that it stays with the
    lines when someone copies them. Before handing over the comment, check that every code block with log lines
    starts with such a line.
 6. `## Reproduction Steps`: the commands that reproduce it or force it, with their real output (a small local
