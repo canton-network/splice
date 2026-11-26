@@ -82,8 +82,8 @@ function _export_auth0_env_vars {
 }
 
 function _do_start_validator {
-  # Retry with exponential backoff (10, 20, 40, 80 s): a registry hiccup while pulling images fails start.sh once.
-  local attempt=1 delay=10
+  # retry with exponential backoff (2, 4, 8, 16 s)
+  local attempt=1 delay=2
   until "${VALIDATOR_DIR}/start.sh" "$@"; do
     if [ "$attempt" -ge 5 ]; then
       _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
