@@ -95,7 +95,7 @@ def is_python_script(path: str, first_line: Callable[[str], Optional[str]]) -> b
 
 
 def sbt_command(parts: list[str]) -> str:
-    return " ".join(f"; {p}" for p in parts)
+    return " ".join(parts)
 
 
 def npm_lint_command(projects: tuple[str, ...]) -> str:

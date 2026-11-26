@@ -28,7 +28,7 @@ class ParseTest(unittest.TestCase):
 class StaticTest(unittest.TestCase):
     def test_scala_only(self) -> None:
         out = select("static", modified("apps/scan/src/main/scala/A.scala"), no_file)
-        self.assertEqual(out["sbt_cmd"], "; lintStaticFormat ; headerCheck")
+        self.assertEqual(out["sbt_cmd"], "lintStaticFormat headerCheck")
         groups = ("python", "daml", "gha", "grafana", "base_images", "npm_names")
         self.assertEqual([g for g in groups if out[g] == "true"], [])
 
@@ -39,22 +39,22 @@ class StaticTest(unittest.TestCase):
     def test_python(self) -> None:
         out = select("static", modified("scripts/foo.py"), no_file)
         self.assertEqual(out["python"], "true")
-        self.assertEqual(out["sbt_cmd"], "; headerCheck")
+        self.assertEqual(out["sbt_cmd"], "headerCheck")
 
     def test_daml(self) -> None:
         out = select("static", modified("daml/splice-amulet/daml/Splice/Amulet.daml"), no_file)
         self.assertEqual(out["daml"], "true")
-        self.assertEqual(out["sbt_cmd"], "; illegalDamlReferencesCheck ; headerCheck")
+        self.assertEqual(out["sbt_cmd"], "illegalDamlReferencesCheck headerCheck")
 
     def test_package_json(self) -> None:
         out = select("static", modified("apps/package.json"), no_file)
         self.assertEqual(out["npm_names"], "true")
-        self.assertEqual(out["sbt_cmd"], "; syncpackCheck")
+        self.assertEqual(out["sbt_cmd"], "syncpackCheck")
 
     def test_extensionless_shell_script(self) -> None:
         first_lines = {"build-tools/cncluster": "#!/usr/bin/env bash\n"}
         out = select("static", modified("build-tools/cncluster"), first_lines.get)
-        self.assertEqual(out["sbt_cmd"], "; runShellcheck ; headerCheck")
+        self.assertEqual(out["sbt_cmd"], "runShellcheck headerCheck")
 
     def test_extensionless_python_script_in_known_dir(self) -> None:
         first_lines = {".github/actions/scripts/foo": "#!/usr/bin/env python3\n"}
