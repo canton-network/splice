@@ -230,7 +230,8 @@ class DbVotesStoreTest
           page.resultsInPage.map(r =>
             DsoRules_CloseVoteRequestResult.fromJson(r.choiceResult)
           ) shouldBe resultsPage.resultsInPage
-          page.nextPageToken shouldBe resultsPage.nextPageToken
+          page.nextPageToken.map(token => (token.recordTime, token.eventNumber)) shouldBe
+            page.resultsInPage.lastOption.map(r => (r.recordTime, r.eventNumber))
           page.resultsInPage.map(r =>
             (
               r.recordTime,
@@ -250,6 +251,47 @@ class DbVotesStoreTest
               r.choiceResult,
             )
           )
+        }
+      }
+
+      "page in the same order as listVoteRequestResults" in {
+        def go(
+            votesStore: DbVotesStore,
+            after: Option[DbVotesStore.VoteResultsPageToken],
+            acc: Seq[DbVotesStore.ServedVoteResult],
+        ): Future[Seq[DbVotesStore.ServedVoteResult]] =
+          votesStore.listVoteResults(VoteResultsFilters(), PageLimit.tryCreate(2), after).flatMap {
+            page =>
+              if (page.resultsInPage.isEmpty) Future.successful(acc)
+              else go(votesStore, page.nextPageToken, acc ++ page.resultsInPage)
+          }
+        for {
+          stores <- mkStores()
+          // Ingested in the opposite order of the record times
+          _ <- ingestAll(stores, voteFixtures.reverse)
+          v0Pages <- listAllPages(stores.votesStore, VoteResultsFilters(), pageSize = 2)
+          paged <- go(stores.votesStore, None, Seq.empty)
+        } yield {
+          v0Pages.flatten should have size voteFixtures.flatMap(_.votes).size.toLong
+          paged.map(r => DsoRules_CloseVoteRequestResult.fromJson(r.choiceResult)) shouldBe
+            v0Pages.flatten
+        }
+      }
+
+      "round trip the page token, and reject invalid ones" in {
+        val token = DbVotesStore.VoteResultsPageToken(
+          CantonTimestamp.assertFromLong(3L),
+          CantonTimestamp.assertFromLong(2L),
+          1,
+        )
+        DbVotesStore.VoteResultsPageToken.tryDecodeFromBase64(token.encodeToBase64) shouldBe token
+        forAll(
+          Seq("not base64!", "e30=", java.util.Base64.getEncoder.encodeToString("42".getBytes))
+        ) { invalid =>
+          inside(scala.util.Try(DbVotesStore.VoteResultsPageToken.tryDecodeFromBase64(invalid))) {
+            case scala.util.Failure(e: StatusRuntimeException) =>
+              e.getStatus.getCode shouldBe Status.Code.INVALID_ARGUMENT
+          }
         }
       }
 

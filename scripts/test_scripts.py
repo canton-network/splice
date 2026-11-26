@@ -61,10 +61,11 @@ class FakeScan:
             raise self.module.ScanUnavailable(f"HTTP {self.v1_status}")
         if self.v1 is None:
             return None
-        start, limit = body.get("page_token", 0), body["page_size"]
+        # Opaque string tokens, like the real endpoint
+        start, limit = int(body.get("page_token", "token-0").removeprefix("token-")), body["page_size"]
         items = [{"update_id": f"update-{r['request']['trackingCid']}", "event_number": 0, "vote_result": r}
                  for r in self.v1[start:start + limit]]
-        return {"vote_results": items, "next_page_token": start + len(items) if items else None}
+        return {"vote_results": items, "next_page_token": f"token-{start + len(items)}" if items else None}
 
 
 class CheckAcsSnapshotsVotesTest(unittest.TestCase):

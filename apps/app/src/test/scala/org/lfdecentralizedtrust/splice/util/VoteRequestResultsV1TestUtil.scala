@@ -66,7 +66,7 @@ trait VoteRequestResultsV1TestUtil extends TestCommon {
       filters: VoteResultsFilters,
   ): Seq[VoteResultV1] = {
     @tailrec
-    def go(pageToken: Option[Long], acc: Seq[VoteResultV1]): Seq[VoteResultV1] = {
+    def go(pageToken: Option[String], acc: Seq[VoteResultV1]): Seq[VoteResultV1] = {
       val (page, next) = scan.listVoteRequestResultsV1(filters, comparisonPageSize, pageToken)
       next match {
         case Some(_) => go(next, acc ++ page)

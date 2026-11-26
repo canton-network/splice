@@ -40,7 +40,6 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
   HistoricalVotesStore,
   Limit,
-  ResultsPage,
   UpdateHistory,
   VoteResultsFilters,
 }
@@ -56,6 +55,8 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
   implicit val tc: TraceContext = TraceContext.empty
 
   private val recordTime = CantonTimestamp.assertFromInstant(Instant.parse("2026-01-02T03:04:05Z"))
+
+  private val pageToken = DbVotesStore.VoteResultsPageToken(recordTime, recordTime, 3)
 
   private val voteResult = {
     val at = Instant.parse("2026-01-01T00:00:00Z")
@@ -104,10 +105,12 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
     when(votesStore.isBackfillingComplete()(any[TraceContext]))
       .thenReturn(Future.successful(backfillingComplete))
     when(
-      votesStore.listVoteResults(any[VoteResultsFilters], any[Limit], any[Option[Long]])(
-        any[TraceContext]
-      )
-    ).thenReturn(Future.successful(ResultsPage(rows, Some(42L))))
+      votesStore.listVoteResults(
+        any[VoteResultsFilters],
+        any[Limit],
+        any[Option[DbVotesStore.VoteResultsPageToken]],
+      )(any[TraceContext])
+    ).thenReturn(Future.successful(DbVotesStore.VoteResultsPage(rows, Some(pageToken))))
     when(votesStore.countVoteRequestResults(any[VoteResultsFilters])(any[TraceContext]))
       .thenReturn(Future.successful(rows.size.toLong))
 
@@ -172,7 +175,11 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
         Status.Code.UNAVAILABLE,
       )
       verify(votesStore, never)
-        .listVoteResults(any[VoteResultsFilters], any[Limit], any[Option[Long]])(any[TraceContext])
+        .listVoteResults(
+          any[VoteResultsFilters],
+          any[Limit],
+          any[Option[DbVotesStore.VoteResultsPageToken]],
+        )(any[TraceContext])
     }
 
     "serve the vote results, with the vote result as stored" in {
@@ -183,7 +190,7 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
         )
         .futureValue
       inside(response) { case ScanResource.ListVoteRequestResultsV1ResponseOK(page) =>
-        page.nextPageToken shouldBe Some(42L)
+        page.nextPageToken shouldBe Some(pageToken.encodeToBase64)
         val result = page.voteResults.loneElement
         result.recordTime shouldBe recordTime.toInstant.atOffset(ZoneOffset.UTC)
         result.synchronizerId shouldBe "sync::1220"
@@ -219,7 +226,7 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
             )
           ),
           pageSize = 10,
-          pageToken = Some(7L),
+          pageToken = Some(pageToken.encodeToBase64),
         )
       )(tc)
         .futureValue
@@ -234,8 +241,18 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
           )
         ),
         any[Limit],
-        eqTo(Some(7L)),
+        eqTo(Some(pageToken)),
       )(any[TraceContext])
+    }
+
+    "fail with INVALID_ARGUMENT for an invalid page token" in {
+      val (h, _) = handler(backfillingComplete = true)
+      assertGrpcError(
+        h.listVoteRequestResultsV1(ScanResource.ListVoteRequestResultsV1Response)(
+          listRequest().copy(pageToken = Some("42"))
+        )(tc),
+        Status.Code.INVALID_ARGUMENT,
+      )
     }
   }
 

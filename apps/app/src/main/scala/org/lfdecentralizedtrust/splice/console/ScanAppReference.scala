@@ -835,8 +835,8 @@ abstract class ScanAppReference(
   def listVoteRequestResultsV1(
       filters: VoteResultsFilters,
       pageSize: Int,
-      pageToken: Option[Long] = None,
-  ): (Seq[HttpScanAppClient.VoteResultV1], Option[Long]) =
+      pageToken: Option[String] = None,
+  ): (Seq[HttpScanAppClient.VoteResultV1], Option[String]) =
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.ListVoteRequestResultsV1(filters, pageSize, pageToken)

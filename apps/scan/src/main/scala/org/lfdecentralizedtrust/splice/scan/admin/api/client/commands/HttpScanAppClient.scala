@@ -3093,10 +3093,10 @@ object HttpScanAppClient {
   case class ListVoteRequestResultsV1(
       filters: VoteResultsFilters,
       pageSize: Int,
-      pageToken: Option[Long] = None,
+      pageToken: Option[String] = None,
   ) extends InternalBaseCommand[
         http.ListVoteRequestResultsV1Response,
-        (Seq[VoteResultV1], Option[Long]),
+        (Seq[VoteResultV1], Option[String]),
       ] {
 
     override def submitRequest(

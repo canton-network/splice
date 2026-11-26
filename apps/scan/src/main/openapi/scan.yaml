@@ -3839,9 +3839,8 @@ components:
         page_token:
           description: |
             Cursor for pagination. To request the next page of results, pass the `next_page_token` of the previous
-            response, together with the same filters.
-          type: integer
-          format: int64
+            response, together with the same filters. The cursor is opaque.
+          type: string
 
     ListVoteResultsResponseV1:
       description: |
@@ -3859,8 +3858,7 @@ components:
             Cursor for the next page of results. Pass this as `page_token` in the next request.
             Absent if this page is empty, which means that there are no more pages.
             A page that is not empty always has a cursor, even if it is the last one.
-          type: integer
-          format: int64
+          type: string
 
     VoteResultV1:
       description: |

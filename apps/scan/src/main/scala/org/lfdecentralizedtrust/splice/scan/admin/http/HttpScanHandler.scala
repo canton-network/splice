@@ -2181,13 +2181,13 @@ class HttpScanHandler(
           .listVoteResults(
             body.filters.fold(VoteResultsFilters())(voteResultsFiltersV1),
             PageLimit.tryCreate(body.pageSize),
-            body.pageToken,
+            body.pageToken.map(DbVotesStore.VoteResultsPageToken.tryDecodeFromBase64),
           )
           .map { page =>
             ScanResource.ListVoteRequestResultsV1Response.OK(
               definitions.ListVoteResultsResponseV1(
                 page.resultsInPage.map(encodeVoteResultV1).toVector,
-                page.nextPageToken,
+                page.nextPageToken.map(_.encodeToBase64),
               )
             )
           }
