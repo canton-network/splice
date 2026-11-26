@@ -104,7 +104,7 @@ Do not repeat an agent's work in the main thread. Start presenting as soon as th
 
 ## 4. Present one group at a time
 
-Use the sections of the comment (`ci-triage/references/issue-comment.md`, Shape), in this order, with a diagram in
+Write in the style of the comment (`issue-comment.md`, Style): short, direct sentences, one idea each. Use the sections of the comment (`ci-triage/references/issue-comment.md`, Shape), in this order, with a diagram in
 Test Environment and Actual Behavior in almost every case, even a simple one (Mermaid, rendered by the host, syntax
 checked):
 1. `## Summary`: one line, what broke and how bad (run, job, test, the failing assertion or flagged line verbatim).

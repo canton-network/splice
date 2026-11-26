@@ -38,6 +38,15 @@ nothing to say.
    history of the touched files, the related functional change, a recent fix; whether the cause is the original
    change or a later one, authorship alone is not ownership; for an external contributor the internal reviewer or
    merger instead; ci-triage-inbox, Assignee). Left out when no owner was found.
+Style: write for a quick read. Simple, direct sentences: one idea per sentence, about 20 words at most, active voice,
+plain words, the subject first. No chains of clauses joined by commas, semicolons or "which"; split them. A fix or a
+list of steps is a short numbered list or a small code block, not one long sentence. Keep the facts and the names
+(files, steps, tests, PRs): shortening must not lose context. Example, not "In `cluster_tests.yml`, step "Trigger
+cluster test": keep only the successful response in `result`, for example write the body to a file with `curl -o` and
+use the file (or take `tail -n 1` of `$result`) before the `echo`", but: "File: `cluster_tests.yml`, step `Trigger
+cluster test`. Keep only the successful response. Write the body to a file with `curl -o`. Read `result` from that
+file." The same style applies to the chat presentation.
+
 Diagrams (default: yes): a diagram helps a reader grasp the failure faster in almost every case, even a simple one,
 so draw one unless the failure is plainly a one-liner with nothing to connect (a missing file, a typo). Keep it
 small: three to eight boxes. There is no fixed recipe; pick the form that makes the failure clearest:
