@@ -46,7 +46,7 @@ jobs:
         with:
           # We Test/compile here as this job is the only one that saves the SBT caches
           # (it finishes fastest) and we want to ensure that they include test sources.
-          cmd: "Test/compile${{ steps.changes.outputs.docs == 'true' && ' docs/bundle' || '' }}"
+          cmd: "Test/compile docs/metricsReference${{ steps.changes.outputs.docs == 'true' && ' docs/bundle' || '' }}"
 
       - name: Upload documentation artifacts
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

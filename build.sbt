@@ -215,6 +215,9 @@ lazy val `tools` = project
     excludeTranscodeConflictingDependencies,
   )
 
+lazy val metricsReference =
+  taskKey[File]("Generate the metrics reference page from the metric definitions in the apps")
+
 lazy val docs = project
   .in(file("docs"))
   .dependsOn(`apps-common`)
@@ -265,28 +268,29 @@ lazy val docs = project
       cacheDamlDocs(
         damlSources.toSet
       ).toSeq
-      import scala.sys.process._
-      val classPath = (`apps-metrics-docs` / Runtime / dependencyClasspath).value.files
-      val cacheMetricsDocs = FileFunction.cached(cacheDir) { _ =>
-        val metricsReferencePath = srcDir / "deployment" / "observability" / "metrics_reference.rst"
-        // This seems to be the easiest way to run a target from another SBT project and has the advantage
-        // that it is much faster than the approach taken by Canton of running the target from bundle with a console script.
-        runCommand(
-          Seq(
-            "java",
-            "-cp",
-            classPath.mkString(":"),
-            "org.lfdecentralizedtrust.splice.metrics.MetricsDocs",
-            metricsReferencePath.toString,
-          ),
-          log,
-          None,
-          Some(baseDir),
-        )
-        Set.empty
-      }
-      cacheMetricsDocs(Set()).toSeq
+      metricsReference.value
+      Seq.empty[File]
     }.taskValue,
+    metricsReference := {
+      val metricsReferencePath =
+        sourceDirectory.value / "deployment" / "observability" / "metrics_reference.rst"
+      val classPath = (`apps-metrics-docs` / Runtime / dependencyClasspath).value.files
+      // This seems to be the easiest way to run a target from another SBT project and has the advantage
+      // that it is much faster than the approach taken by Canton of running the target from bundle with a console script.
+      runCommand(
+        Seq(
+          "java",
+          "-cp",
+          classPath.mkString(":"),
+          "org.lfdecentralizedtrust.splice.metrics.MetricsDocs",
+          metricsReferencePath.toString,
+        ),
+        streams.value.log,
+        None,
+        Some(baseDirectory.value),
+      )
+      metricsReferencePath
+    },
     bundle := {
       (Compile / resources).value
       val baseDir = baseDirectory.value
