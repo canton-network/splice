@@ -22,6 +22,13 @@
     - Removed the `/v0/scan-proxy/transfer-command-counter/{party}` and `/v0/scan-proxy/transfer-command/status`
       endpoints. Most of the deprecated TransferCommand functionality has already been removed in splice 0.8.0,
       this removes the remaining parts.
+  
+  - Topology Key Monitor
+
+    - Added support for participant admin API auth. To enable, set `enableTopologyKeyMonitorAccess: true` on the `splice-participant` chart
+      and `participant.disableAdminApiAuth: false` on the `splice-topology-key-monitor` chart. If participant admin API auth is disabled
+      on the participant chart then `enableTopologyKeyMonitorAccess` has no effect. `participant.disableAdminApiAuth` will be `false` by
+      default starting from 0.11.0.
 
 ## Upcoming for next minor release (template):
 

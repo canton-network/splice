@@ -71,6 +71,10 @@ spec:
               value: {{ .Values.slowQueryThresholdSeconds | quote }}
             - name: TOPOLOGY_KEY_MONITOR_MISSING_SYNCHRONIZER_GRACE_PERIOD
               value: {{ .Values.missingSynchronizerGracePeriodSeconds | quote }}
+            {{- if not .Values.participant.disableAdminApiAuth }}
+            - name: TOPOLOGY_KEY_MONITOR_ADMIN_API_TOKEN
+{{ include "splice-util-lib.secret" (dict "secretName" "topology-key-monitor-admin-api-token" "secretKey" "token" "optional" false) | indent 14 }}
+            {{- end }}
           volumeMounts:
             - name: topology-key-monitor-config
               mountPath: /app/topology-key-monitor
@@ -113,6 +117,9 @@ data:
         address = {{ .Values.participant.address | quote }}
         port = {{ .Values.participant.ledgerApiPort }}
       }
+      {{- if not .Values.participant.disableAdminApiAuth }}
+      admin-api-token = ${TOPOLOGY_KEY_MONITOR_ADMIN_API_TOKEN}
+      {{- end }}
     }
   topology-key-monitor.sc: |
 {{ .Files.Get "files/topology-key-monitor.sc" | indent 4 }}

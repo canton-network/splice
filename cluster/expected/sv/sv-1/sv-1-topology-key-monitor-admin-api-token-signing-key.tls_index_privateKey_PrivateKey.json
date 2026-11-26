@@ -1,0 +1,11 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "algorithm": "RSA",
+    "rsaBits": 2048
+  },
+  "name": "sv-1-topology-key-monitor-admin-api-token-signing-key",
+  "provider": "",
+  "type": "tls:index/privateKey:PrivateKey"
+}

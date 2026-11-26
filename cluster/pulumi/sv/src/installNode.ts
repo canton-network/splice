@@ -8,6 +8,7 @@ import {
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
   installTopologyKeyMonitor,
+  installTopologyKeyMonitorAdminApiTokenSecrets,
 } from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
@@ -32,6 +33,11 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
     await installSvApps(xns, staticConfig, config, auth0Client, []);
   }
   const version = config.versionOverride ?? activeVersion;
+  const secrets =
+    !(config.participant?.disableParticipantAdminApiAuth ?? false) &&
+    config.topologyKeyMonitor?.enable
+      ? installTopologyKeyMonitorAdminApiTokenSecrets(xns)
+      : undefined;
   const participant = await installParticipant(
     {
       xns,
@@ -42,8 +48,9 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       disableProtection: staticConfig.nodeName === svRunbookConfig.nodeName,
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,
+      enableTopologyKeyMonitorAccess: config.topologyKeyMonitor?.enable,
     },
-    { dependsOn: [...imagePullDeps, ledgerApiUserSecret] }
+    { dependsOn: [...imagePullDeps, ledgerApiUserSecret, ...(secrets ?? [])] }
   );
   if (config.topologyKeyMonitor) {
     installTopologyKeyMonitor(
@@ -52,7 +59,8 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       config.topologyKeyMonitor,
       version,
       serviceAccountName,
-      { dependsOn: [...imagePullDeps, participant.chart] }
+      config.participant?.disableParticipantAdminApiAuth,
+      { dependsOn: [...imagePullDeps, participant.chart, ...(secrets ?? [])] }
     );
   }
 }

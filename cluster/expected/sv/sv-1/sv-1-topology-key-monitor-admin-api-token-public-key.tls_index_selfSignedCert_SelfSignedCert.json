@@ -1,0 +1,21 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "allowedUses": [
+      "digital_signature"
+    ],
+    "earlyRenewalHours": 2160,
+    "privateKeyPem": {
+      "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+      "value": null
+    },
+    "subject": {
+      "commonName": "splice-topology-key-monitor"
+    },
+    "validityPeriodHours": 8760
+  },
+  "name": "sv-1-topology-key-monitor-admin-api-token-public-key",
+  "provider": "",
+  "type": "tls:index/selfSignedCert:SelfSignedCert"
+}

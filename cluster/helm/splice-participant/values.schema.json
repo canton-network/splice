@@ -6,7 +6,8 @@
     "imageRepo",
     "participantAdminUserNameFrom",
     "persistence",
-    "imageName"
+    "imageName",
+    "enableTopologyKeyMonitorAccess"
   ],
   "properties": {
     "securityContexts": {
@@ -284,6 +285,9 @@
           }
         }
       ]
+    },
+    "enableTopologyKeyMonitorAccess": {
+      "type": "boolean"
     }
   }
 }
