@@ -80,6 +80,10 @@ with `close_duplicates.py --comment '...'` (no body file; no backticks or quotes
 name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
 already.
 
+Every body file ends with a hidden marker line `<!-- ci-triage:<ref> -->`. The hand-over script finds its own earlier
+comment by that marker and updates it in place, so a reworded comment never becomes a second comment on the issue.
+(Searching for a phrase of the text breaks as soon as the text changes: 11775 got two copies that way.)
+
 Body files (shell rules for the commands: `<D>/CLAUDE.md`, Commands for the user). A comment that is a single line
 of plain text (no Markdown, backticks, quotes, backslashes or `$`) is passed inline with `--body` or `--comment`;
 duplicate-close comments are always written that way. Every other comment, and always one with a code block or a
