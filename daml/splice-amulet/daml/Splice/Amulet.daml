@@ -722,12 +722,7 @@ template UnclaimedActivityRecord
 
 -- | Template for recording activities via special governance or
 -- operational processes (e.g., the reporting of app activity on a dSync).
---
--- An `ActivityRecorder` is never meant to be stored on ledger. Code that
--- wants to record activity creates a fresh `ActivityRecorder` and immediately
--- exercises its consuming `ActivityRecorder_DsoRecordActivity` choice using
--- `createAndExercise`. Thereby any code acting with the authority of the DSO
--- party can record activity without depending on any other contracts.
+-- Meant to be used create-and-exercise style.
 template ActivityRecorder with
     dso : Party
   where
