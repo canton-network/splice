@@ -1201,6 +1201,72 @@ paths:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/CountVoteResultsResponse"
 
+  /v1/admin/sv/voteresults:
+    post:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "listVoteRequestResultsV1"
+      description: |
+        **EXPERIMENTAL**: This endpoint is experimental and subject to change, do not rely on it yet.
+        It is meant to replace `/v0/admin/sv/voteresults`, which will be deprecated once this endpoint is validated.
+
+        Lists the results of closed vote requests, i.e., of exercised `DsoRules_CloseVoteRequest` choices,
+        that match the request filters. Results are ordered by effective date, descending:
+        the effectiveAt of an accepted vote, or the completedAt of the result otherwise.
+
+        Fails with 503 Service Unavailable until this Scan holds all vote results since the start of the network.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ListVoteResultsRequestV1"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ListVoteResultsResponseV1"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+        "503":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/503"
+
+  /v1/admin/sv/voteresults/count:
+    post:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "countVoteRequestResultsV1"
+      description: |
+        **EXPERIMENTAL**: This endpoint is experimental and subject to change, do not rely on it yet.
+        It is meant to replace `/v0/admin/sv/voteresults/count`, which will be deprecated once this endpoint is validated.
+
+        Counts the vote results that `/v1/admin/sv/voteresults` lists for the same filters.
+
+        Fails with 503 Service Unavailable until this Scan holds all vote results since the start of the network.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/VoteResultsFiltersV1"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CountVoteResultsResponseV1"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+        "503":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/503"
+
   /v0/admin/sv/previous-sv-reward-weight:
     post:
       tags: [internal, scan]
@@ -3721,6 +3787,142 @@ components:
           description: |
             The JSON-encoded `DsoRules_CloseVoteRequestResult`, as stored by the Scan that serves it.
           type: object
+
+    VoteResultsFiltersV1:
+      description: |
+        **EXPERIMENTAL**: subject to change.
+
+        Filters for vote results. A vote result is returned if it matches all filters that are set.
+      type: object
+      properties:
+        action_name:
+          description: |
+            Only return vote results whose action name contains this string, e.g., `SRARC_AddSv`.
+          type: string
+        accepted:
+          description: |
+            Only return vote results that were accepted (`true`), or that were rejected or expired (`false`).
+          type: boolean
+        requester:
+          description: |
+            Only return vote results whose requester name contains this string.
+          type: string
+        effective_from:
+          description: |
+            Only return vote results whose effectiveAt is at or after this time.
+            Vote results without an effectiveAt (rejected or expired ones) never match.
+          type: string
+          format: date-time
+        effective_to:
+          description: |
+            Only return vote results whose effectiveAt is at or before this time.
+            Vote results without an effectiveAt (rejected or expired ones) never match.
+          type: string
+          format: date-time
+
+    ListVoteResultsRequestV1:
+      description: |
+        **EXPERIMENTAL**: subject to change.
+      type: object
+      required:
+        - page_size
+      properties:
+        filters:
+          $ref: "#/components/schemas/VoteResultsFiltersV1"
+        page_size:
+          description: |
+            The maximum number of vote results returned for this request.
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1000
+        page_token:
+          description: |
+            Cursor for pagination. To request the next page of results, pass the `next_page_token` of the previous
+            response, together with the same filters. The cursor is opaque.
+          type: string
+
+    ListVoteResultsResponseV1:
+      description: |
+        **EXPERIMENTAL**: subject to change.
+      type: object
+      required:
+        - vote_results
+      properties:
+        vote_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoteResultV1"
+        next_page_token:
+          description: |
+            Cursor for the next page of results. Pass this as `page_token` in the next request.
+            Absent if this page is empty, which means that there are no more pages.
+            A page that is not empty always has a cursor, even if it is the last one.
+          type: string
+
+    VoteResultV1:
+      description: |
+        **EXPERIMENTAL**: subject to change. Properties may be added, changed or removed.
+
+        The result of a closed vote request, i.e., of an exercised `DsoRules_CloseVoteRequest` choice.
+      type: object
+      required:
+        - record_time
+        - synchronizer_id
+        - update_id
+        - event_number
+        - dso_rules_contract_id
+        - vote_result
+      properties:
+        record_time:
+          description: |
+            The record time of the transaction in which the vote request was closed.
+          type: string
+          format: date-time
+        synchronizer_id:
+          description: |
+            The synchronizer of the transaction in which the vote request was closed.
+          type: string
+        update_id:
+          description: |
+            The update id of the transaction in which the vote request was closed.
+          type: string
+        event_number:
+          description: |
+            The number of the `DsoRules_CloseVoteRequest` exercise event within the transaction.
+            Identical across Scans: events are numbered by traversing the transaction in order.
+          type: integer
+          format: int32
+        dso_rules_contract_id:
+          description: |
+            The contract id of the DsoRules on which the `DsoRules_CloseVoteRequest` choice was exercised,
+            i.e., of the DsoRules at the time the vote request was closed.
+          type: string
+        vote_result:
+          description: |
+            The `DsoRules_CloseVoteRequestResult` of the choice, in the compact Daml JSON encoding.
+            Optional fields without a value may be encoded as `null` or omitted.
+          type: object
+        dso_rules:
+          description: |
+            **EXPERIMENTAL**: not populated yet, and its format may change.
+
+            The payload of the DsoRules with contract id `dso_rules_contract_id`, e.g., for mapping the SV names
+            in the vote result to SV party ids.
+          type: object
+
+    CountVoteResultsResponseV1:
+      description: |
+        **EXPERIMENTAL**: subject to change.
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          description: |
+            The number of vote results matching the request filters.
+          type: integer
+          format: int64
 
     EventHistoryRequest:
       type: object

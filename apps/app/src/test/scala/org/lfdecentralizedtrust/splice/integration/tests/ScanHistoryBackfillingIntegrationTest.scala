@@ -32,6 +32,7 @@ import org.lfdecentralizedtrust.splice.store.{
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 import org.lfdecentralizedtrust.splice.util.{
   EventId,
+  VoteRequestResultsV1TestUtil,
   TriggerTestUtil,
   UpdateHistoryTestUtil,
   WalletTestUtil,
@@ -59,7 +60,8 @@ class ScanHistoryBackfillingIntegrationTest
     with WalletTestUtil
     with HasActorSystem
     with HasExecutionContext
-    with TriggerTestUtil {
+    with TriggerTestUtil
+    with VoteRequestResultsV1TestUtil {
 
   override protected def runEventHistorySanityCheck: Boolean = false
 
@@ -312,6 +314,11 @@ class ScanHistoryBackfillingIntegrationTest
         .futureValue should be(TxLogBackfillingState.NotInitialized)
       listVotesStoreResults(sv2ScanBackend) should have size (1)
       listVotesStoreResults(sv2ScanBackend) shouldBe listVotesStoreResults(sv1ScanBackend)
+      // The v1 endpoint serves the votes as soon as the votes store is backfilled, even though SV2 has
+      // backfilled neither its update history nor its txlog yet (unlike v0, which serves the incomplete txlog)
+      val sv1VoteResults = listAllVoteRequestResultsV1(sv1ScanBackend, VoteResultsFilters())
+      sv1VoteResults.map(_.voteResult) shouldBe listVotesStoreResults(sv1ScanBackend)
+      listAllVoteRequestResultsV1(sv2ScanBackend, VoteResultsFilters()) shouldBe sv1VoteResults
     }
 
     clue(s"First few items in SV1s history do not exist in SV2s history") {
@@ -611,6 +618,10 @@ class ScanHistoryBackfillingIntegrationTest
           .listVoteRequestResults(VoteResultsFilters(), 100)
           ._1
       }
+    }
+
+    clue("The votes store serves the same vote results as the txlog on both scans") {
+      checkVoteRequestResultsV1(Seq(sv1ScanBackend, sv2ScanBackend)) should have size (1)
     }
 
   }

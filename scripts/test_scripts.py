@@ -3,10 +3,11 @@
 
 # TODO(#8086): add real unit tests for scripts/*.py; this is only a smoke test
 
-from typing import override
+from typing import Any, Optional, override
+import argparse
 import importlib.util
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -36,6 +37,83 @@ class CheckAcsSnapshotsTest(unittest.TestCase):
         module = load_script("check-acs-snapshots.py")
         self.assertEqual(module.parse_duration("30s"), timedelta(seconds=30))
         self.assertEqual(module.parse_duration("2h"), timedelta(hours=2))
+
+
+def vote_result(tracking_cid: str, completed_at: str) -> dict[str, Any]:
+    return {"request": {"trackingCid": tracking_cid, "requester": "sv1"}, "completedAt": completed_at}
+
+
+class FakeScan:
+    """Serves the vote results endpoints from fixed lists of vote results, paged by index."""
+
+    def __init__(self, module: Any, v0: list[dict[str, Any]], v1: Optional[list[dict[str, Any]]],
+                 v1_status: int = 200) -> None:
+        self.module, self.url, self.v0, self.v1, self.v1_status = module, "https://fake", v0, v1, v1_status
+
+    def request(self, method: str, path: str, fail_fast: Any = (), **kwargs: Any) -> Optional[dict[str, Any]]:
+        body = kwargs["json"]
+        if path == "/v0/admin/sv/voteresults":
+            start, limit = body.get("pageToken", 0), body["limit"]
+            page = self.v0[start:start + limit]
+            return {"dso_rules_vote_results": page, "next_page_token": start + len(page) if page else None}
+        assert path == "/v1/admin/sv/voteresults"
+        if self.v1_status in fail_fast:
+            raise self.module.ScanUnavailable(f"HTTP {self.v1_status}")
+        if self.v1 is None:
+            return None
+        # Opaque string tokens, like the real endpoint
+        start, limit = int(body.get("page_token", "token-0").removeprefix("token-")), body["page_size"]
+        items = [{"update_id": f"update-{r['request']['trackingCid']}", "event_number": 0, "vote_result": r}
+                 for r in self.v1[start:start + limit]]
+        return {"vote_results": items, "next_page_token": f"token-{start + len(items)}" if items else None}
+
+
+class CheckAcsSnapshotsVotesTest(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        self.module = load_script("check-acs-snapshots.py")
+        self.args = argparse.Namespace(page_size=2, max_tracked_ids=100, progress_interval=1000)
+        self.cutoff = datetime(2026, 1, 10, tzinfo=timezone.utc)
+        self.results = [vote_result(f"00cid{i}", f"2026-01-0{i}T00:00:00Z") for i in range(1, 6)]
+        self.late = vote_result("00late", "2026-01-11T00:00:00.123456Z")
+
+    def fetch(self, scan: FakeScan) -> Any:
+        return self.module.fetch_votes(scan, self.args, self.cutoff)
+
+    def test_pages_through_both_versions_and_ignores_votes_after_the_cutoff(self) -> None:
+        votes = self.fetch(FakeScan(self.module, [self.late] + self.results, [self.late] + self.results[::-1]))
+        self.assertEqual(votes.v0.count, 5)
+        assert votes.v1 is not None
+        self.assertEqual(votes.v1.count, 5)
+        self.assertIsNone(votes.v0.error)
+        self.assertTrue(self.module.compare_vote_versions({"scan": votes}))
+
+    def test_ignores_null_fields_when_comparing_versions(self) -> None:
+        with_null = [dict(r, newOptionalField=None) for r in self.results]
+        votes = self.fetch(FakeScan(self.module, with_null, self.results))
+        self.assertTrue(self.module.compare_vote_versions({"scan": votes}))
+
+    def test_reports_vote_results_that_differ_between_versions(self) -> None:
+        votes = self.fetch(FakeScan(self.module, self.results, self.results[:-1]))
+        self.assertFalse(self.module.compare_vote_versions({"scan": votes}))
+
+    def test_skips_v1_on_scans_that_do_not_serve_it(self) -> None:
+        for scan in [FakeScan(self.module, self.results, self.results, v1_status=503),
+                     FakeScan(self.module, self.results, None)]:
+            votes = self.fetch(scan)
+            self.assertIsNone(votes.v1)
+            self.assertIsNotNone(votes.v1_unavailable)
+            self.assertEqual(votes.v0.count, 5)
+            self.assertTrue(self.module.compare_vote_versions({"scan": votes}))
+
+    def test_compares_v1_across_scans_including_the_order(self) -> None:
+        same = self.fetch(FakeScan(self.module, self.results, self.results))
+        reordered = self.fetch(FakeScan(self.module, self.results, self.results[::-1]))
+        assert same.v1 is not None and reordered.v1 is not None
+        self.assertTrue(self.module.compare_digests("votes_v1", "vote results",
+                                                    {"a": same.v1, "b": same.v1}, 100))
+        self.assertFalse(self.module.compare_digests("votes_v1", "vote results",
+                                                     {"a": same.v1, "b": reordered.v1}, 100))
 
 
 class BumpWalletGatewayVersionTest(unittest.TestCase):

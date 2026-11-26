@@ -37,7 +37,7 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
-import org.lfdecentralizedtrust.splice.util.{Codec, TriggerTestUtil}
+import org.lfdecentralizedtrust.splice.util.{Codec, VoteRequestResultsV1TestUtil, TriggerTestUtil}
 
 import com.digitalasset.canton.console.CommandFailure
 
@@ -47,7 +47,18 @@ import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.*
 
-class SvStateManagementIntegrationTest extends SvIntegrationTestBase with TriggerTestUtil {
+class SvStateManagementIntegrationTest
+    extends SvIntegrationTestBase
+    with TriggerTestUtil
+    with VoteRequestResultsV1TestUtil {
+
+  private def checkVoteResultsFromVotesStore()(implicit env: SpliceTestConsoleEnvironment): Unit =
+    clue("The votes store serves the same vote results as the txlog") {
+      // SV2's scan backfills the vote results from SV1's scan before serving them.
+      eventually(timeUntilSuccess = 1.minute) {
+        checkVoteRequestResultsV1(Seq(sv1ScanBackend, sv2ScanBackend)) should not be empty
+      }
+    }
 
   override protected def runTokenStandardCliSanityCheck: Boolean = false
 
@@ -131,6 +142,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
         ) shouldBe 1L withClue "vote result count"
       },
     )
+    checkVoteResultsFromVotesStore()
   }
 
   "VoteRequest expires with no definitive outcome." in { implicit env =>
@@ -172,6 +184,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
           .outcome shouldBe a[VRO_Expired]
       },
     )
+    checkVoteResultsFromVotesStore()
   }
 
   "VoteRequest expires with a definitive outcome." in { implicit env =>
@@ -213,6 +226,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
           .outcome shouldBe a[VRO_Rejected]
       },
     )
+    checkVoteResultsFromVotesStore()
   }
 
   "SVs can update their AmuletPriceVote contracts" in { implicit env =>
@@ -609,6 +623,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
         )
       }
     }
+    checkVoteResultsFromVotesStore()
 
   }
 
