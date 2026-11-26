@@ -53,6 +53,58 @@ class DbUnavailablePartiesStoreTest
 
   "DbUnavailablePartiesStore" should {
 
+    "ensureParties" should {
+
+      "ignore new parties for the maximum duration" in {
+        for {
+          store <- mkStore()
+          _ <- store.ensurePartiesAt(Seq(userParty(1)), atSeconds(0))
+          justBefore <- store.listPartiesAt(atSeconds(4) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(4))
+        } yield {
+          justBefore should contain(userParty(1))
+          atExpiry shouldBe empty
+        }
+      }
+
+      "leave parties that are still ignored untouched" in {
+        for {
+          store <- mkStore()
+          _ <- store.ensurePartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- store.ensurePartiesAt(Seq(userParty(1)), atSeconds(2))
+          atOriginalExpiry <- store.listPartiesAt(atSeconds(4))
+        } yield atOriginalExpiry shouldBe empty
+      }
+
+      "ignore expired parties again" in {
+        for {
+          store <- mkStore()
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          _ <- store.ensurePartiesAt(Seq(userParty(1)), atSeconds(2))
+          stillIgnored <- store.listPartiesAt(atSeconds(6) - 1)
+        } yield stillIgnored should contain(userParty(1))
+      }
+    }
+
+    "removeOtherStores" should {
+
+      "only remove the entries of other stores" in {
+        for {
+          store <- mkStore()
+          otherStore <- mkStore(storeDescriptor2)
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- otherStore.addPartiesAt(Seq(userParty(2)), atSeconds(0))
+          removed <- store.removeOtherStores()
+          own <- store.listPartiesAt(atSeconds(0))
+          other <- otherStore.listPartiesAt(atSeconds(0))
+        } yield {
+          removed should be >= 1
+          own should contain(userParty(1))
+          other shouldBe empty
+        }
+      }
+    }
+
     "addParties" should {
 
       "be a no-op for an empty sequence" in {

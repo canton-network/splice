@@ -108,6 +108,39 @@ class DbUnavailablePartiesStore(
         .map(_.discard)
     }
 
+  override def ensureParties(
+      parties: Seq[PartyId]
+  )(implicit tc: TraceContext): Future[Unit] =
+    ensurePartiesAt(parties, clock.now.toMicros)
+
+  private[splice] def ensurePartiesAt(parties: Seq[PartyId], nowMicros: Long)(implicit
+      tc: TraceContext
+  ): Future[Unit] =
+    if (parties.isEmpty) Future.unit
+    else {
+      val partyArray = parties.distinct.toArray
+      storage
+        .update(
+          sql"""insert into dso_unavailable_parties
+                  (party, updated_at, ignore_duration, store_id)
+                select u.party, $nowMicros, $maxMicros, $storeId
+                from unnest($partyArray) as u(party)
+                on conflict (store_id, party) do update
+                  set updated_at = excluded.updated_at,
+                      ignore_duration = excluded.ignore_duration
+                  where dso_unavailable_parties.updated_at + dso_unavailable_parties.ignore_duration <= excluded.updated_at
+             """.asUpdate,
+          "ensureParties",
+        )
+        .map(_.discard)
+    }
+
+  override def removeOtherStores()(implicit tc: TraceContext): Future[Int] =
+    storage.update(
+      sql"""delete from dso_unavailable_parties where store_id <> $storeId""".asUpdate,
+      "removeOtherStores",
+    )
+
   // Removes specific parties from the table upon successful transaction processing.
   def removeParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Seq[PartyId]] =
     if (parties.isEmpty) Future.successful(Seq.empty)
