@@ -53,6 +53,7 @@ runs:
             mkdir -p "${HOME}/tmp"
             ABS_TMP_DIR="${HOME}/tmp"
             export SBT_OPTS="${SBT_OPTS} -Djava.io.tmpdir=${ABS_TMP_DIR}"
+            export SBT_OPTS="${SBT_OPTS} -Dsbt.task.timings=true -Dsbt.task.timings.on.shutdown=false -Dsbt.task.timings.threshold=200"
 
             run_sbt() {
               export ${{ inputs.extra_env_vars }}
