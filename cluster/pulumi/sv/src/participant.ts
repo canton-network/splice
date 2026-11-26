@@ -121,7 +121,6 @@ function installParticipantChart(
       disableAuth: participant?.disableParticipantAdminApiAuth ?? false,
       auth: {
         ...defaultValues.adminApi?.auth,
-        user: `${getClientId(auth0, 'validator', xns.logicalName)}@clients`,
         additionalUsers: [`${getClientId(auth0, 'sv', xns.logicalName)}@clients`],
       },
     },
@@ -164,7 +163,11 @@ function loadDefaultParticipantValues(
       MIGRATION_ID: `${migrationId}`,
       OIDC_AUTHORITY_URL: auth0.auth0Domain,
       OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getLedgerApiAudience(auth0, xns.logicalName),
-      OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(auth0, xns.logicalName),
+      OIDC_AUTHORITY_PARTICIPANT_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(
+        auth0,
+        xns.logicalName
+      ),
+      VALIDATOR_CLIENT_ID: getClientId(auth0, 'validator', xns.logicalName),
     }
   );
 }
