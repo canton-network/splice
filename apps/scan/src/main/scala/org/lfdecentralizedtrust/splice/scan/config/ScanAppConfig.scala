@@ -176,7 +176,7 @@ case class AnalyzableTimeWindowConfig(
     duration: NonNegativeDuration = AnalyzableTimeWindowConfig.UnlimitedAtw
 ) {
   require(
-    duration.duration > AnalyzableTimeWindowConfig.MinimumAtw.duration,
+    duration.duration >= AnalyzableTimeWindowConfig.MinimumAtw.duration,
     s"The analyzable time window must be at least ${AnalyzableTimeWindowConfig.MinimumAtw}",
   )
 }
