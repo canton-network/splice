@@ -55,6 +55,9 @@ import {
   CantonBftSynchronizerNode,
   configForSv,
   installLoopback,
+  installScanBulkStorage,
+  scanBulkStorageDependencies,
+  scanBulkStorageValues,
   svsConfig,
   svRunbookConfig,
   SynchronizerNodes,
@@ -391,6 +394,11 @@ async function installSvAndValidator(
         : {}),
     },
   };
+  // The runbook SV is reset daily (its stacks are torn down), so its buckets are emptied and deleted with it:
+  // every day it joins with empty buckets, as a new SV would.
+  const bulkStorageBuckets = svConfig.scanApp?.bulkStorage
+    ? installScanBulkStorage(xns, svConfig.scanApp.bulkStorage, true)
+    : undefined;
   const scanValues: ChartValues = {
     ...defaultScanValues,
     ...persistenceForPostgres(appsPg, defaultScanValues),
@@ -405,6 +413,7 @@ async function installSvAndValidator(
       .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
       .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
+    ...scanBulkStorageValues(bulkStorageBuckets),
     pvc: persistentHeapDumpsPvc(),
     participantClient: {
       adminApi: {
@@ -426,7 +435,10 @@ async function installSvAndValidator(
     fixedTokens() ? scanValuesWithFixedTokens : scanValues,
     activeVersion,
     {
-      dependsOn: imagePullDeps.concat(svAppSecrets).concat([appsPg]),
+      dependsOn: imagePullDeps
+        .concat(svAppSecrets)
+        .concat([appsPg])
+        .concat(scanBulkStorageDependencies(bulkStorageBuckets)),
     }
   );
 

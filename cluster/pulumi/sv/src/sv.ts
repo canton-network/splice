@@ -31,6 +31,7 @@ import {
   coreSvsToDeploy,
   initialRound,
   installScanBulkStorage,
+  scanBulkStorageDependencies,
   installLoopback,
   SingleSvConfiguration,
   StaticSvConfig,
@@ -203,16 +204,7 @@ export async function installSvApps(
     .concat(participantBootstrapDumpSecret ? [participantBootstrapDumpSecret] : [])
     .concat(loopback)
     .concat(imagePullDeps)
-    .concat(
-      config.bulkStorageBuckets
-        ? [
-            config.bulkStorageBuckets.staging.secret,
-            config.bulkStorageBuckets.staging.bucket,
-            config.bulkStorageBuckets.committed.secret,
-            config.bulkStorageBuckets.committed.bucket,
-          ]
-        : []
-    )
+    .concat(scanBulkStorageDependencies(config.bulkStorageBuckets))
     .concat(extraDependsOn);
 
   const appsPostgres = await installAppsPostgres(xns, config);

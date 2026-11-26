@@ -3,7 +3,7 @@
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import { ExactNamespace } from '@canton-network/splice-pulumi-common';
+import { ChartValues, ExactNamespace } from '@canton-network/splice-pulumi-common';
 import {
   ClusterBasename,
   GcpRegion,
@@ -24,7 +24,8 @@ export type BulkStorageBuckets = {
 
 export function installScanBulkStorage(
   xns: ExactNamespace,
-  bulkStorageConfig: BulkStorageConfig
+  bulkStorageConfig: BulkStorageConfig,
+  forceDestroy: boolean = false
 ): BulkStorageBuckets | undefined {
   if (!bulkStorageConfig.enabled) {
     return;
@@ -50,6 +51,7 @@ export function installScanBulkStorage(
   const staging = new gcp.storage.Bucket(stagingBucketName, {
     name: stagingBucketName,
     location: GcpRegion,
+    ...(forceDestroy ? { forceDestroy: true } : {}),
   });
   new gcp.storage.BucketIAMMember(
     `${stagingBucketName}-sa-role`,
@@ -63,6 +65,7 @@ export function installScanBulkStorage(
   const committed = new gcp.storage.Bucket(committedBucketName, {
     name: committedBucketName,
     location: GcpRegion,
+    ...(forceDestroy ? { forceDestroy: true } : {}),
   });
   new gcp.storage.BucketIAMMember(
     `${committedBucketName}-sa-role-creator`,
@@ -117,4 +120,37 @@ export function installScanBulkStorage(
       secret,
     },
   };
+}
+
+// Helm values of the splice-scan chart for the buckets created by installScanBulkStorage.
+export function scanBulkStorageValues(buckets: BulkStorageBuckets | undefined): ChartValues {
+  if (!buckets) {
+    return {};
+  }
+  const values = (b: BulkStorageBucket) => ({
+    region: b.region,
+    bucketName: b.bucket.name,
+    endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
+    secretName: b.secret.metadata.name,
+  });
+  return {
+    bulkStorage: {
+      staging: values(buckets.staging),
+      committed: values(buckets.committed),
+    },
+  };
+}
+
+// The resources the splice-scan chart needs before it starts with bulk storage.
+export function scanBulkStorageDependencies(
+  buckets: BulkStorageBuckets | undefined
+): pulumi.Resource[] {
+  return buckets
+    ? [
+        buckets.staging.secret,
+        buckets.staging.bucket,
+        buckets.committed.secret,
+        buckets.committed.bucket,
+      ]
+    : [];
 }
