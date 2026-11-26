@@ -25,7 +25,10 @@ nothing to say.
    above it, so that a reader can verify it by hand: the file as it is named in the job's artifact
    (`canton_network_test.clog.gz`, `canton-simtime.clog.gz`, `canton.clog.gz`) or, for the console log, the job log
    and its step ("job log, step Build Docker images"). A block that mixes files is split per file. Never quote a
-   line without saying where it is.
+   line without saying where it is. Make the source the first line inside the code block, as a comment line
+   (`# canton_network_test.clog.gz` or `# job log: <job name> (job <id>), step "<step>"`), so that it stays with the
+   lines when someone copies them. Before handing over the comment, check that every code block with log lines
+   starts with such a line.
 6. `## Reproduction Steps`: the commands that reproduce it or force it, with their real output (a small local
    setup is fine), and one sentence on the repro rate: hits and runs of the job, first occurrence or not, what
    triggers it. When it cannot be forced, the section is called `## Repro Rate` and has only the rate and what
