@@ -107,7 +107,7 @@ Do not repeat an agent's work in the main thread. Start presenting as soon as th
 Use the sections of the comment (`ci-triage/references/issue-comment.md`, Shape), in this order, with a diagram in
 Test Environment and Actual Behavior in almost every case, even a simple one (Mermaid, rendered by the host, syntax
 checked):
-1. Summary: one line, what broke and how bad (run, job, test, the failing assertion or flagged line verbatim).
+1. `## Summary`: one line, what broke and how bad (run, job, test, the failing assertion or flagged line verbatim).
 2. Test Purpose.
 3. Test Environment: the architecture the job runs in (network diagram, failing part marked).
 4. Expected Behavior.

@@ -6,7 +6,7 @@ its own: no packet paths or other triage-dataset references.
 Shape (Markdown, titled sections in this order, short paragraphs of one to three sentences; as short as the facts
 allow). The same sections are used in the chat presentation and in the comment. Leave a section out only when it has
 nothing to say.
-1. Summary: exactly one line (one sentence, under about 200 characters, no line break): what broke and how bad
+1. `## Summary`: exactly one line (one sentence, under about 200 characters, no line break): what broke and how bad
    (the failing test or job, how often, whether it blocks main or a release line, whether splice needs a change).
    Details belong in the sections below, not here. State it as certain only when every link from the trigger to
    the failure is shown in the log; otherwise say "likely" and name the unshown link in the sections below. When
