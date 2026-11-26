@@ -185,7 +185,10 @@ def select(
     unknown = unknown_files(changes, first_line)
     if any_matches(RUN_ALL, changes) or unknown:
         for path in unknown:
-            print(f"No check selection rule for {path}: running all checks", file=sys.stderr)
+            print(
+                f"::notice file={path}::No check selection rule for {path}: running all checks",
+                file=sys.stderr,
+            )
         return all_static() if mode == "static" else all_build()
     if mode == "static":
         return select_static(changes, first_line)

@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import contextlib
+import io
 import unittest
 from typing import Optional
 
@@ -65,6 +67,16 @@ class StaticTest(unittest.TestCase):
         out = select("static", modified("scripts/foo"), first_lines.get)
         self.assertEqual(out["python"], "true")
         self.assertEqual(out["sbt_cmd"], "")
+
+    def test_unknown_file_runs_all_with_notice(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            out = select("static", modified("apps/scan/src/main/proto/x.proto"), no_file)
+        self.assertEqual(out["sbt_cmd"], "lintStatic")
+        self.assertIn(
+            "::notice file=apps/scan/src/main/proto/x.proto::No check selection rule",
+            stderr.getvalue(),
+        )
 
     def test_other_python_shebang_is_not_python_checked(self) -> None:
         first_lines = {".github/actions/scripts/foo": "#!/usr/bin/python3\n"}
