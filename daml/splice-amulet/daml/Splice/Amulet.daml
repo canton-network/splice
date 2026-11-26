@@ -720,20 +720,20 @@ template UnclaimedActivityRecord
         unclaimedRewardCid <- create UnclaimedReward with dso; amount
         pure UnclaimedActivityRecord_DsoExpireResult with unclaimedRewardCid
 
-data ActivityRecorderKey = ActivityRecorderKey with
-    dso : Party
-  deriving (Eq, Serializable)
-
 -- | Template for recording activities via special governance or
 -- operational processes (e.g., the reporting of app activity on a dSync).
+--
+-- An `ActivityRecorder` is never meant to be stored on ledger. Code that
+-- wants to record activity creates a fresh `ActivityRecorder` and immediately
+-- exercises its consuming `ActivityRecorder_DsoRecordActivity` choice using
+-- `createAndExercise`. Thereby any code acting with the authority of the DSO
+-- party can record activity without depending on any other contracts.
 template ActivityRecorder with
     dso : Party
   where
     signatory dso
-    key (ActivityRecorderKey with dso) : ActivityRecorderKey
-    maintainer key.dso
 
-    nonconsuming choice ActivityRecorder_DsoRecordActivity : ActivityRecorder_DsoRecordActivityResult
+    choice ActivityRecorder_DsoRecordActivity : ActivityRecorder_DsoRecordActivityResult
       with
         appActivity : [(Party, Int)]
           -- ^ App activities to record for the given featured app parties, denominated in traffic bytes.

@@ -113,6 +113,8 @@
       - Added a new template `ActivityRecorder` in `splice-amulet` to support extra activity reporting
         by dedicated synchronizers, as specified by the
         [CIP-0104 App Activity Recording Extension Hook](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md#app-activity-recording-extension-hook).
+        Activity is recorded by creating a fresh `ActivityRecorder` and exercising its consuming
+        `ActivityRecorder_DsoRecordActivity` choice.
 
     - The deprecated `splice-postgres` Helm chart has been removed. Run Splice against a PostgreSQL
       instance that you provision yourself; see the [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration).
