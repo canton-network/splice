@@ -96,14 +96,18 @@ Do not repeat an agent's work in the main thread. Start presenting as soon as th
 
 ## 4. Present one group at a time
 
-In at most one screen, in this order:
+Use the sections of the comment (`ci-triage/references/issue-comment.md`, Shape), with a diagram in each of the first
+three in almost every case, even a simple one (Mermaid, rendered by the host, syntax checked):
 1. What failed: run, job, test and the failing assertion or flagged line, verbatim.
-2. Cause: the mechanism in a few sentences with the two or three log lines that prove it (verbatim, with
-   timestamps); what is verified and what is not.
-3. Why this and not something else: the family and duplicate check, the alternatives ruled out.
-4. Fix, as the comment states it (file, change, owner), or why none is needed; the proposed lesson in one line or
+2. Test environment: the architecture the job runs in (network diagram, failing part marked).
+3. What the test does at the point of failure.
+4. Root cause: the mechanism in a few sentences with the two or three log lines that prove it (verbatim, with
+   timestamps, each with its log file name) and a timeline diagram when the order matters; what is verified and what
+   is not. Why this and not something else: the family and duplicate check, the alternatives ruled out.
+5. Fix, as the comment states it (file, change), or why none is needed; the proposed lesson in one line or
    "Lesson: none".
-5. The suggested action: its commands in one fenced block, after re-checking the live state of its refs and after
+6. Owner(s) with the reason for each, or none found.
+7. The suggested action: its commands in one fenced block, after re-checking the live state of its refs and after
    committing and handing over every file the commands use (body files, packets), so the user has them; then the
    full body of every comment in a `~~~` fence, also when it is posted from a body file and also when it is
    unchanged from an earlier message (the user sometimes posts by hand with changed wording).

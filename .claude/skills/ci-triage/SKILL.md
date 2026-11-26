@@ -139,9 +139,10 @@ to `log/ci-triage-export/<ref>/`.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.
    Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no
-   packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example). A
-   diagram only when it makes the failure clearer much faster than the text, in the form that fits the issue (network,
-   timeline, both or another; `issue-comment.md`, Diagrams); none for single-step failures such as a download 403.
+   packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example). Titled
+   sections (Test environment, What the test does, Root cause, Fix, Owner with the reason) and a diagram in almost every
+   case, even a simple one, in the form that fits the issue (network under Test environment, timeline under Root cause;
+   `issue-comment.md`, Shape and Diagrams).
    Every claim in the comment must be reproducible from the packet alone: each fact, count, comparison and code
    reference has a packet section with the command and its verbatim output (a code claim: `git show <sha>:<file>`
    with the lines). A search result is listed per hit with one line on why it is or is not the same failure (title
