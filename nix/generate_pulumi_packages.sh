@@ -46,6 +46,7 @@ plugins=(
   "pulumi/random=4.19.0"
   "pulumi/std=2.2.0"
   "pulumi/auth0=3.36.0"
+  "pulumi/tls=5.6.3"
 )
 
 function genSrc() {
