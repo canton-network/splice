@@ -22,18 +22,27 @@ One per item or group; an action may be several commands.
 
 | Action | When | Commands |
 |---|---|---|
-| root cause | mechanism established | comment, retitle while the title starts with `GHA Run` or `Pipeline`, `set_status.py Inbox Triaged`; `--add-assignee` when there are one or two clear candidates (below) |
+| root cause | mechanism established | comment, retitle while the title starts with `GHA Run` or `Pipeline`, `set_status.py Inbox Triaged`; `--add-assignee <owner(s)>` from the owner search (below); none when no owner is found |
 | duplicate | same failure as a parent, confirming grep done (ci-triage step 3) | `close_duplicates.py <parent> <refs>`; a recurrence comment on the parent only when it adds a fact that changes its priority or owner (e.g. the hit rate jumped, a new branch); the close already links the two |
 | already fixed | the fix is on main (`git merge-base --is-ancestor`) and the run predates it | comment, close as completed |
 | one-off | infra or GitHub incident that recovered, or a first hit without a pattern | external incident: comment and close (the user closes these directly); first hit: comment, `set_status.py Inbox Triaged` (`Infrequent / no repro` only after about 2 weeks without a duplicate, never for a new issue) |
 | log request | the evidence is only where no method reaches (CircleCI always) | the exact job and step to save to `log/ci-triage-export/<ref>/` on the host; the item stays in Inbox until the log is there |
 | question | the job mapping is ambiguous, or deciding needs something only the user knows | the question; the item stays in Inbox |
 
-Assignee: suggest one (or two) only when the evidence points at a person: the PR that introduced the failure (the
-first failing sha, a bisect over the runs, the commit that changed the failing code), the author of the code or test
-the fix touches when git blame shows one clear owner, or the owner of the component when the fix is outside splice
-(infra, Canton). Name the evidence next to the suggestion. Otherwise leave it unassigned: the issue then goes to the
-fix agent (Triaged without assignee).
+Assignee: always look for the owner of every issue that goes to Triaged, and suggest all of them when there are
+several. Find them from the history, not from the failing test alone:
+- the PR that introduced the failure (the first failing sha, a bisect over the runs, the commit that changed the
+  failing code or config);
+- the history of the files the fix touches (`git log`, `git blame`: who wrote and who recently changed them), the
+  related functional changes (the PR that added the feature, check, workflow step or config the failure is about),
+  and recent fixes of the same area or failure family (`git log -S`, `known-families.md`, `evidence/INDEX.tsv`,
+  closed issues and their fix PRs);
+- for a fix outside splice (infra, workflows, config, Canton), the history of that repository's files the same way
+  (`gh api repos/<repo>/commits?path=<file>`), or the component owner.
+Name the evidence next to every suggested login (the PR or commit). Prefer people active on the code recently over
+the original author of old code; skip bots and release-merge commits. If no owner can be found after this search,
+leave the issue unassigned: it then goes to the fix agent (Triaged without assignee). Never guess a login. Duplicates
+are not assigned; the parent is.
 
 Without a root cause after a reasonable effort (about 30 minutes of agent work per group), say what was found and
 what would decide it, and suggest root cause with an owner (recurring) or one-off (first hit). Do not hold an item
