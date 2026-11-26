@@ -315,7 +315,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
                     sys.error("Initial round should already be set when doing an LSU")
                 }
               case None =>
-                logger.debug(
+                logger.info(
                   "No SV onboarding config was found, setting the initial round to 0."
                 )
                 setInitialRound(connection, 0L)

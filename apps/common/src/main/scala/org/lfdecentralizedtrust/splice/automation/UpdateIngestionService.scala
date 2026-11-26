@@ -73,7 +73,7 @@ class UpdateIngestionService(
         case IngestionStart.UpdateHistoryInitAtLatestPrunedOffset =>
           for {
             participantBegin <- connection.latestPrunedOffset()
-            _ = logger.debug(
+            _ = logger.info(
               s"Starting ingestion from participant begin at $participantBegin"
             )
             /** * This only applies to UpdateHistory. Does not load any ACS. Anything before the latest pruned offset:
@@ -89,7 +89,7 @@ class UpdateIngestionService(
         case IngestionStart.InitializeAcsAtLatestOffset =>
           for {
             acsOffset <- connection.ledgerEnd()
-            _ = logger.debug(s"Starting ingestion from ledger end at $acsOffset")
+            _ = logger.info(s"Starting ingestion from ledger end at $acsOffset")
             _ <- ingestAcsAndInFlight(acsOffset)
           } yield acsOffset
       }

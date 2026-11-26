@@ -65,7 +65,7 @@ class AcsSnapshotBulkStorageWriterFromDb(
   ): Boolean = {
     val ret = storageConfig.shouldDumpSnapshotToBulkStorage(snapshot.timestamp)
     if (ret) {
-      logger.debug(s"Dumping snapshot at timestamp ${snapshot.timestamp} to bulk storage")
+      logger.info(s"Dumping snapshot at timestamp ${snapshot.timestamp} to bulk storage")
     } else {
       logger.info(
         s"Skipping snapshot at timestamp ${snapshot.timestamp} for bulk storage, not required per the configured period of ${storageConfig.bulkAcsSnapshotPeriodHours}"
@@ -88,7 +88,7 @@ class AcsSnapshotBulkStorageWriterFromDb(
         loggerFactory,
       )
       .map { case (ts, keys) =>
-        logger.debug(
+        logger.info(
           s"Successfully dumped snapshot from migration ${ts.migrationId}, timestamp ${ts.timestamp} to bulk storage, with object keys: $keys"
         )
         ts

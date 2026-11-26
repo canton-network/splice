@@ -802,7 +802,7 @@ class AcsSnapshotStore(
             and record_time = ${CantonTimestamp.MinValue}
         """).toActionBuilder.asUpdate
     } yield {
-      logger.debug(
+      logger.info(
         s"Initialized incremental snapshot $snapshotId at $recordTime from import updates. ACS: $insertedRows."
       )
     }
@@ -929,7 +929,7 @@ class AcsSnapshotStore(
         where snapshot_id = ${snapshot.snapshotId}
       """
     } yield {
-      logger.debug(
+      logger.info(
         s"Saved incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime} with $copiedCreateRows create rows and $copiedStakeholderRows stakeholder rows." +
           s" Next snapshot target record time: $nextSnapshotTargetRecordTime"
       )
@@ -1053,7 +1053,7 @@ class AcsSnapshotStore(
         where snapshot_id = ${snapshot.snapshotId}
       """
     } yield {
-      logger.debug(
+      logger.info(
         s"Saved incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime} with $copiedRows rows." +
           s" Next snapshot target record time: $nextSnapshotTargetRecordTime"
       )
