@@ -70,6 +70,22 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
       }
     }
 
+    "ensurePartitionsFor" should {
+
+      "create the missing partitions of the days in a range, also before the ingested ones" in {
+        def daysAfter(days: Long) = CantonTimestamp.Epoch.plus(java.time.Duration.ofDays(days))
+        val day0 = LocalDate.ofInstant(CantonTimestamp.Epoch.toInstant, ZoneOffset.UTC)
+        val store = mkStore()
+        for {
+          _ <- initStore(store, timeStart = daysAfter(10), partitionRunwayDays = 1)
+          _ <- store.ensurePartitionsFor(daysAfter(3).plusSeconds(3600), daysAfter(5))
+          // A range whose days all have partitions already
+          _ <- store.ensurePartitionsFor(daysAfter(4), daysAfter(5).plusSeconds(3600))
+          days <- store.listDatesWithAllPartitions()
+        } yield days.filterNot(_.isBefore(day0)) shouldBe Set(3L, 4L, 5L, 10L).map(day0.plusDays)
+      }
+    }
+
     "analyzePartitionedTables" should {
 
       "use ANALYZE ONLY from Postgres 18 and plain ANALYZE before" in {

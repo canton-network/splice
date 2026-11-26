@@ -256,9 +256,33 @@ class BulkStorage(
     loggerFactory,
   )
 
+  private val updateHistoryLoadProgress =
+    new UpdateHistoryLoadFromBulkStorage.Progress(
+      kvProvider,
+      historyMetrics.BulkStorage.updateHistoryLoadedUpTo,
+      loggerFactory,
+    )
+  val updateHistoryLoad: Option[UpdateHistoryLoadFromBulkStorage] =
+    Option.when(appConfig.updateHistoryLoad.enabled)(
+      new UpdateHistoryLoadFromBulkStorage(
+        appConfig.updateHistoryLoad,
+        storageConfig,
+        updateHistory,
+        new UpdateHistoryLoadFromBulkStorage.BucketCommittedSegments(
+          reader,
+          committedConnection,
+          appConfig.updateHistoryLoad,
+        ),
+        historyReadiness,
+        updateHistoryLoadProgress,
+        historyMetrics.BulkStorage.updateHistoryLoadedUpdates,
+        loggerFactory,
+      )
+    )
+
   // Services are only started once initialization has completed.
   private lazy val services =
-    (backfilling.toList ++ Seq[PekkoRetryableService[?]](
+    (backfilling.toList ++ updateHistoryLoad.toList ++ Seq[PekkoRetryableService[?]](
       acsStaging,
       acsCommitted,
       updatesStaging,
@@ -277,6 +301,7 @@ class BulkStorage(
           _ <- updatesStagingProgress.reset
           _ <- updatesCommittedProgress.reset
           _ <- backfillingProgress.resetCompletion()
+          _ <- updateHistoryLoadProgress.reset
           _ <- deleteLegacyKeys()
         } yield ()
       } else Future.unit

@@ -86,6 +86,20 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
     }
   }
 
+  "loading update history from bulk storage" should {
+    "be rejected without bulk storage buckets" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+      |canton.scan-apps.sv1Scan.bulk-storage.update-history-load.enabled = true
+     """.stripMargin
+      )
+      val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(
+        "update-history-load.enabled needs both the staging and the committed bucket"
+      )
+    }
+  }
+
   "rate limiting config" should {
 
     def perClientIpOf(cfg: SpliceConfig) =

@@ -135,6 +135,7 @@ class UpdateHistory private (
   private val state = new AtomicReference[State](State.empty())
 
   def lastIngestedRecordTime: Option[CantonTimestamp] = state.get().lastIngestedRecordTime
+  def analyzableTimeWindowIsUnlimited: Boolean = !analyzableTimeWindowDuration.duration.isFinite
   def startAnalyzableTimeWindow: Option[CantonTimestamp] =
     lastIngestedRecordTime.flatMap { latestRecordTime =>
       Option.when(analyzableTimeWindowDuration.duration.isFinite) {
@@ -964,12 +965,33 @@ class UpdateHistory private (
     logger.info(
       s"Deleting updates before $recordTime on domain $synchronizerId from store $storeName with id $historyId"
     )
-    val filterCondition = sql"""
+    deleteUpdatesWhere(sql"""
       domain_id = $synchronizerId and
       migration_id = $migrationId and
       history_id = $historyId and
-      record_time < $recordTime"""
+      record_time < $recordTime""")
+  }
 
+  /** Deletes all updates of all migrations and domains with a record time
+    * before the given time. Like [[deleteUpdatesBefore]], only from the
+    * partitioned tables.
+    */
+  def deleteUpdatesOfAllMigrationsBefore(
+      recordTime: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Unit] = {
+    logger.info(
+      s"Deleting updates of all migrations before $recordTime from store $storeName with id $historyId"
+    )
+    // Each table's (history_id, migration_id, record_time) index with a skip
+    // scan on migration_id, in the partitions before recordTime only.
+    deleteUpdatesWhere(sql"""
+      history_id = $historyId and
+      record_time < $recordTime""")
+  }
+
+  private def deleteUpdatesWhere(
+      filterCondition: SQLActionBuilder
+  )(implicit tc: TraceContext): Future[Unit] = {
     val deleteAction = for {
       numCreates <- (
         sql"delete from update_history_creates where " ++ filterCondition
@@ -1982,7 +2004,7 @@ class UpdateHistory private (
         and record_time > ${CantonTimestamp.MinValue}
       """
     }
-    val tables = updateTables.flatMap(historyTablesToQuery(_))
+    val tables = updateTables.forgetNE.flatMap(historyTablesToQuery(_))
     NonEmpty.from(tables.map(t => sql"(" ++ rangeForTable(t) ++ sql")")) match {
       case None => Future.successful(None)
       case Some(ranges) =>
@@ -2078,7 +2100,7 @@ class UpdateHistory private (
     }
 
     MonadUtil
-      .sequentialTraverse(updateTables.flatMap(historyTablesToQuery(_)))(previousId)
+      .sequentialTraverse(updateTables.forgetNE.flatMap(historyTablesToQuery(_)))(previousId)
       .map(_.flatten.minOption)
   }
 
@@ -2478,6 +2500,84 @@ class UpdateHistory private (
       setBackfillingImportUpdatesComplete()
   }
 
+  /** The earliest record time after `after` of an update stored in the current
+    * migration.
+    */
+  def getEarliestRecordTimeAfter(after: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[Option[CantonTimestamp]] = {
+    def minForTable(table: String): SQLActionBuilder =
+      sql"""
+        select min(record_time) as min_record_time
+        from #$table
+        where history_id = $historyId
+        and migration_id = $domainMigrationId
+        and record_time > $after
+      """
+    // One statement, the min of the per-table mins. Per table, an
+    // index-only scan of updt_hist_*_hi_mi_rt_di with LIMIT 1: a few
+    // pages, also when nothing matches. No table scan.
+    storage.query(
+      (sql"select min(min_record_time) from (" ++ unionAllUpdateTables(minForTable) ++
+        sql") all_mins").toActionBuilder.as[Option[CantonTimestamp]].head,
+      "getEarliestRecordTimeAfter",
+    )
+  }
+
+  /** Which of `updateIds` are stored in the given migration with a record time
+    * between `fromRecordTime` and `toRecordTime` (inclusive).
+    */
+  def getStoredUpdateIds(
+      migrationId: Long,
+      fromRecordTime: CantonTimestamp,
+      toRecordTime: CantonTimestamp,
+      updateIds: Seq[String],
+  )(implicit tc: TraceContext): Future[Set[String]] =
+    if (updateIds.isEmpty) Future.successful(Set.empty)
+    else {
+      def storedInTable(table: String): SQLActionBuilder =
+        sql"""
+          select update_id
+          from #$table
+          where history_id = $historyId
+          and migration_id = $migrationId
+          and record_time >= $fromRecordTime
+          and record_time <= $toRecordTime
+          and update_id = any(${updateIds.toArray[String]})
+        """
+      // One statement over the three tables. Per table, a range scan of
+      // updt_hist_*_hi_mi_rt_di filtering on update_id, or, for wide
+      // ranges and generic plans, one probe per id of an index on
+      // update_id. No table scan; the cost is bounded by the ids and by
+      // the rows in the range, which callers keep to one batch.
+      storage
+        .query(
+          unionAllUpdateTables(storedInTable).as[String],
+          "getStoredUpdateIds",
+        )
+        .map(_.toSet)
+    }
+
+  /** Creates the update history partitions covering record times from
+    * `fromRecordTime` to `toRecordTime`, for writers that insert before the
+    * record times of live ingestion (#6253, #8481).
+    */
+  def ensurePartitionsFor(
+      fromRecordTime: CantonTimestamp,
+      toRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Unit] = {
+    val days = Iterator
+      .iterate(dayOf(fromRecordTime))(_.plusDays(1))
+      .takeWhile(!_.isAfter(dayOf(toRecordTime)))
+      .toSeq
+    for {
+      existing <- listDatesWithAllPartitions()
+      missing = days.filterNot(existing)
+      _ <- MonadUtil.sequentialTraverse(missing)(createPartitions)
+      _ <- if (missing.nonEmpty) analyzePartitionedTables() else Future.unit
+    } yield ()
+  }
+
   lazy val destinationHistory: HistoryBackfilling.DestinationHistory[
     UpdateHistoryResponse
   ] & ImportUpdatesBackfilling.DestinationImportUpdates[UpdateHistoryResponse] =
@@ -2619,7 +2719,8 @@ object UpdateHistory {
     } yield result
   }
 
-  private val updateTables = Seq(
+  private val updateTables: NonEmpty[Seq[String]] = NonEmpty(
+    Seq,
     "update_history_transactions",
     "update_history_assignments",
     "update_history_unassignments",
@@ -2673,6 +2774,13 @@ object UpdateHistory {
 
   def unionAll(queries: NonEmpty[Seq[SQLActionBuilderChain]]): SQLActionBuilderChain =
     queries.reduceLeft(_ ++ sql" union all " ++ _)
+
+  /** `forTable` of each update table (transactions, assignments,
+    * unassignments), each in parentheses, combined with `union all`. Only the
+    * partitioned tables, not the legacy ones.
+    */
+  private def unionAllUpdateTables(forTable: String => SQLActionBuilder): SQLActionBuilder =
+    unionAll(updateTables.map(table => sql"(" ++ forTable(table) ++ sql")")).toActionBuilder
 
   // `atOrAfter` or `before` are never expanded into boolean
   // subexpressions by consumers of this type that generate SQL; you

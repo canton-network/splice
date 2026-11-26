@@ -171,6 +171,9 @@ spec:
                 access-key-id = ${SPLICE_APP_BULK_STORAGE_COMMITTED_ACCESS_KEY_ID}
                 secret-access-key = ${SPLICE_APP_BULK_STORAGE_COMMITTED_SECRET_ACCESS_KEY}
               }
+              {{- with .updateHistoryLoad }}
+              update-history-load.enabled = {{ .enabled }}
+              {{- end }}
             }
         - name: SPLICE_APP_BULK_STORAGE_STAGING_ACCESS_KEY_ID
           {{- if (($.Values.bulkStorage.staging).secretOverrides).accessKey }}

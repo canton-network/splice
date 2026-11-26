@@ -507,6 +507,34 @@ class UpdateHistoryBulkStorageTest
         })
         .futureValue
 
+      clue(
+        "The first committed segment after a time, and a committed segment's objects in one encoding"
+      ) {
+        def ts(s: String) = CantonTimestamp.tryFromInstant(Instant.parse(s))
+        def seg(from: String, to: String) = UpdatesSegment(ts(from), ts(to))
+        reader.getCommittedSegmentAfter(CantonTimestamp.MinValue).futureValue shouldBe Some(
+          seg("2015-10-20T00:00:00Z", "2015-10-21T00:00:00Z")
+        )
+        reader.getCommittedSegmentAfter(ts("2015-10-21T00:00:00Z")).futureValue shouldBe Some(
+          seg("2015-10-21T00:00:00Z", "2015-10-22T00:00:00Z")
+        )
+        reader.getCommittedSegmentAfter(ts("2015-10-23T12:00:00Z")).futureValue shouldBe Some(
+          seg("2015-10-23T00:00:00Z", "2015-10-24T00:00:00Z")
+        )
+        // The segment 2015-10-24 to 2015-10-25 has objects, but the committed
+        // segment progress has not reached it
+        reader.getCommittedSegmentAfter(ts("2015-10-24T00:00:00Z")).futureValue shouldBe None
+        val protobufJson = ScanStorageConfig.Encoding.ProtobufJson
+        reader
+          .getCommittedUpdateObjectsInSegment(
+            seg("2015-10-21T00:00:00Z", "2015-10-22T00:00:00Z"),
+            protobufJson,
+          )
+          .futureValue should contain theSameElementsAs d21.filter(
+          protobufJson.storageKeyRegex("updates").matches
+        )
+      }
+
       // A wider range than the data
       val res1 = getCommitted("2015-10-10T00:00:00Z", "2015-10-30T00:00:00Z", 20, None).futureValue
       res1.objects.map(_.key) should contain theSameElementsInOrderAs d20 ++ d21 ++ d22 ++ d23
