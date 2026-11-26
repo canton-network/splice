@@ -26,10 +26,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   TransferPreapproval,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRules}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.{
-  MemberTraffic,
-  RegisteredSynchronizer,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer
+import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
@@ -479,10 +477,10 @@ class DbScanStore private (
       )
     }
 
-  override def lookupRegisteredSynchronizer(
+  override def lookupDedicatedSynchronizer(
       synchronizerId: SynchronizerId
   )(implicit tc: TraceContext): Future[
-    Option[ContractWithState[RegisteredSynchronizer.ContractId, RegisteredSynchronizer]]
+    Option[ContractWithState[DedicatedSynchronizer.ContractId, DedicatedSynchronizer]]
   ] = waitUntilAcsIngested {
     (for {
       row <- storage
@@ -491,7 +489,7 @@ class DbScanStore private (
             ScanTables.acsTableName,
             acsStoreId,
             domainMigrationId,
-            RegisteredSynchronizer.COMPANION,
+            DedicatedSynchronizer.COMPANION,
             // indexed by scan_acs_store_sid_mid_pn_tid_rsi
             additionalWhere = sql"""
                 and registered_synchronizer_id = $synchronizerId
@@ -500,9 +498,9 @@ class DbScanStore private (
             // time and contract id rather than by the store's ingestion order.
             orderLimit = sql"order by created_at desc, contract_id desc limit 1",
           ).headOption,
-          "lookupRegisteredSynchronizer",
+          "lookupDedicatedSynchronizer",
         )
-    } yield contractWithStateFromRow(RegisteredSynchronizer.COMPANION)(row)).value
+    } yield contractWithStateFromRow(DedicatedSynchronizer.COMPANION)(row)).value
   }
 
   override def lookupFeaturedAppRight(

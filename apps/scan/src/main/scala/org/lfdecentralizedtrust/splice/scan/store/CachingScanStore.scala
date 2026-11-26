@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   TransferPreapproval,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRules}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.RegisteredSynchronizer
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
@@ -181,10 +181,10 @@ class CachingScanStore(
   ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
     store.listGovernanceLocksByKey(key, limit)
 
-  override def lookupRegisteredSynchronizer(synchronizerId: SynchronizerId)(implicit
+  override def lookupDedicatedSynchronizer(synchronizerId: SynchronizerId)(implicit
       tc: TraceContext
-  ): Future[Option[ContractWithState[RegisteredSynchronizer.ContractId, RegisteredSynchronizer]]] =
-    store.lookupRegisteredSynchronizer(synchronizerId)
+  ): Future[Option[ContractWithState[DedicatedSynchronizer.ContractId, DedicatedSynchronizer]]] =
+    store.lookupDedicatedSynchronizer(synchronizerId)
 
   override def listVoteRequestResults(
       filters: VoteResultsFilters,

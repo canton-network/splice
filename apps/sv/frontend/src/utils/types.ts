@@ -102,11 +102,11 @@ export interface RegisterSynchronizerProposal extends RegistrationFields {
 
 /** The vote pins a registration contract, not a synchronizer id. */
 export interface ArchiveSynchronizerRegistrationProposal {
-  registeredSynchronizerCid: string;
+  dedicatedSynchronizerCid: string;
 }
 
 export interface UpdateSynchronizerRegistrationProposal {
-  registeredSynchronizerCid: string;
+  dedicatedSynchronizerCid: string;
   newFields: RegistrationFields;
 }
 

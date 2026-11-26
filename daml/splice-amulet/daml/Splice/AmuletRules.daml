@@ -33,6 +33,7 @@ import Splice.TokenStandard.Utils
 
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
+import Splice.Amulet.DedicatedSynchronizer
 import Splice.Amulet.RewardAccountingV2
 import Splice.Amulet.TokenApiUtils
 import Splice.AmuletConfig
@@ -318,9 +319,9 @@ template AmuletRules
         -- Party that the sender expects to represent the DSO party of the AmuletRules contract they are calling.
         -- Must always be set to protect from malicious delegees swapping the AmuletRules contract out for
         -- one under their control.
-        optDSyncTrafficPurchase : Optional DSyncTrafficPurchase
-        -- A paymaster's purchase for its registered dedicated synchronizer. `None` buys traffic for a
-        -- member of the decentralized synchronizer.
+        optPaymasterTrafficPurchase : Optional PaymasterTrafficPurchase
+        -- A paymaster's purchase for its dedicated synchronizer. Must be given for a synchronizer
+        -- that is not part of the decentralized synchronizer, and must not be given for one that is.
       controller provider
       do
         checkExpectedDso dso expectedDso
@@ -330,14 +331,15 @@ template AmuletRules
         csum <- summarizeAndValidateContext eventLogCid context dso
           (getDevelopmentFundManagerBlacklist configUsd) provider provider
         let trafficConfig = trafficPurchaseConfigFromAmuletConfig configUsd contextMiningRound
-        optPaymasterPurchase <- forA optDSyncTrafficPurchase (fetchPaymasterPurchase dso)
-        result <- buyMemberTraffic eventLogCid csum trafficConfig optPaymasterPurchase
+        paymaster <- fetchOptPaymasterPurchase dso trafficConfig provider synchronizerId trafficAmount optPaymasterTrafficPurchase
+        result <- buyMemberTraffic eventLogCid csum trafficConfig
           MemberTrafficPurchase with
             provider
             memberId
             synchronizerId
             migrationId
             trafficAmount
+            paymaster
           (trafficCost trafficConfig csum.amuletPrice trafficAmount)
           inputs
           (IssueValidatorRewardCoupon contextMiningRound.round)
@@ -1151,80 +1153,6 @@ mkInsufficientTopupAmountFailure requestedAmount minAmount =
       , ("minTopupAmount", show minAmount)
       ])
 
-mkNotPaymasterFailure : Party -> Party -> Text -> FailureStatus
-mkNotPaymasterFailure provider paymaster synchronizerId =
-  mkFailureStatus
-    (spliceErrorId "not-paymaster")
-    InvalidGivenCurrentSystemStateOther
-    ("Only the paymaster " <> partyToText paymaster <> " may buy traffic for registered synchronizer "
-      <> synchronizerId <> ", not " <> partyToText provider)
-    (TextMap.fromList
-      [ ("provider", partyToText provider)
-      , ("paymaster", partyToText paymaster)
-      , ("synchronizerId", synchronizerId)
-      ])
-
-mkRegisteredSynchronizerMismatchFailure : Text -> Text -> FailureStatus
-mkRegisteredSynchronizerMismatchFailure registeredSynchronizerId synchronizerId =
-  mkFailureStatus
-    (spliceErrorId "registered-synchronizer-mismatch")
-    InvalidGivenCurrentSystemStateOther
-    ("The registration is for synchronizer " <> registeredSynchronizerId <> ", not for " <> synchronizerId)
-    (TextMap.fromList
-      [ ("registeredSynchronizerId", registeredSynchronizerId)
-      , ("synchronizerId", synchronizerId)
-      ])
-
-mkRegisteredRequiredSynchronizerFailure : Text -> FailureStatus
-mkRegisteredRequiredSynchronizerFailure synchronizerId =
-  mkFailureStatus
-    (spliceErrorId "registered-required-synchronizer")
-    InvalidGivenCurrentSystemStateOther
-    ("Synchronizer " <> synchronizerId <> " is a required synchronizer, so a registration can't buy traffic for it")
-    (TextMap.fromList [("synchronizerId", synchronizerId)])
-
-mkInvalidMigrationIdFailure : Text -> Int -> FailureStatus
-mkInvalidMigrationIdFailure synchronizerId migrationId =
-  mkFailureStatus
-    (spliceErrorId "invalid-migration-id")
-    InvalidIndependentOfSystemState
-    ("Traffic for registered synchronizer " <> synchronizerId <> " must be bought with migration id 0, not "
-      <> show migrationId)
-    (TextMap.fromList [("synchronizerId", synchronizerId), ("migrationId", show migrationId)])
-
-mkInvalidMemberIdFailure : Text -> Text -> FailureStatus
-mkInvalidMemberIdFailure message memberId =
-  mkFailureStatus
-    (spliceErrorId "invalid-member-id")
-    InvalidIndependentOfSystemState
-    message
-    (TextMap.fromList [("memberId", memberId)])
-
-mkInvalidActivityWeightFailure : Text -> Decimal -> Decimal -> FailureStatus
-mkInvalidActivityWeightFailure weightName weight maxWeight =
-  mkFailureStatus
-    (spliceErrorId "invalid-activity-weight")
-    InvalidGivenCurrentSystemStateOther
-    ("The " <> weightName <> " " <> show weight <> " must be between 0.0 and the registration's max of "
-      <> show maxWeight)
-    (TextMap.fromList
-      [ ("weightName", weightName)
-      , ("weight", show weight)
-      , ("maxWeight", show maxWeight)
-      ])
-
--- | A token-standard purchase's memo gives activity weights, but its choice context has no
--- registration. A direct purchase can't, as its weights are part of its `DSyncTrafficPurchase`.
-mkActivityWeightWithoutRegistrationFailure : Optional Decimal -> Optional Decimal -> FailureStatus
-mkActivityWeightWithoutRegistrationFailure optAppActivityWeight optAssetActivityWeight =
-  mkFailureStatus
-    (spliceErrorId "activity-weight-without-registration")
-    InvalidIndependentOfSystemState
-    "Activity weights are only given for a registered synchronizer"
-    (TextMap.fromList $
-      map (\weight -> ("appActivityWeight", show weight)) (optionalToList optAppActivityWeight) <>
-      map (\weight -> ("assetActivityWeight", show weight)) (optionalToList optAssetActivityWeight))
-
 mkMaximumInputsExceededFailure : FailureStatus
 mkMaximumInputsExceededFailure =
   mkFailureStatus
@@ -1251,12 +1179,6 @@ mkInsufficientFundsFailure missingAmount =
         <> requiredAmount
         <> " to complete this transfer.")
       (TextMap.fromList [("requiredAmount", requiredAmount)])
-
-spliceErrorId : Text -> Text
-spliceErrorId t = "splice.lfdecentralizedtrust.org/" <> t
-
-mkFailureStatus : Text -> FailureCategory -> Text -> TextMap Text -> FailureStatus
-mkFailureStatus errorId category message' meta = FailureStatus with message = message'; ..
 
 checkTransferConstraints: Transfer -> TransferSummary -> TransferConfigV2 unit -> Either FailureStatus ()
 checkTransferConstraints transfer summary transferConfigAmulet
@@ -1933,78 +1855,70 @@ data MemberTrafficPurchaseResult = MemberTrafficPurchaseResult with
     trafficCostUsd : Decimal
     meta : Metadata
 
--- | Validates a traffic purchase, with the paymaster's purchase for a registered synchronizer if
--- the traffic is for one.
+-- | Validates a traffic purchase.
 --
--- Without a registration, the traffic is for a member of the decentralized synchronizer: the
--- synchronizer must be one of the `supportedSynchronizerIds` and the purchase's `memberId` must not be empty.
+-- A purchase for a member of the decentralized synchronizer must be for one of the
+-- `supportedSynchronizerIds` and name the member.
 --
--- With a registration, the registration replaces the `supportedSynchronizerIds` check. The provider
--- must be its paymaster and the synchronizer its synchronizer, which must not be one of the
--- `supportedSynchronizerIds`, so that a registration can't stand in for the decentralized
--- synchronizer. The paymaster pays for the synchronizer as a whole, so the purchase's `memberId`
--- must be empty, and a registered synchronizer has no migrations, so the migration id must be 0. The
--- activity weights must not be negative or above the registration's max.
+-- A paymaster's purchase for its dedicated synchronizer must be for a synchronizer that is not one
+-- of the `supportedSynchronizerIds`, which `fetchOptPaymasterPurchase` already selects by. The
+-- paymaster pays for the synchronizer as a whole, so the purchase's `memberId` must be empty, and a
+-- dedicated synchronizer has no migrations, so the migration id must be 0.
 --
 -- Both purchases must be for at least the `minTrafficTopupAmount`.
-validateBuyMemberTrafficInputs : TrafficPurchaseConfig -> Optional PaymasterPurchase -> MemberTrafficPurchase -> Either FailureStatus ()
-validateBuyMemberTrafficInputs trafficConfig optPaymasterPurchase purchase = do
-  case optPaymasterPurchase of
+validateBuyMemberTrafficInputs : TrafficPurchaseConfig -> MemberTrafficPurchase -> Either FailureStatus ()
+validateBuyMemberTrafficInputs trafficConfig purchase = do
+  case purchase.paymaster of
     None -> validateMemberPurchase
-    Some paymasterPurchase -> validatePaymasterPurchase paymasterPurchase
+    Some _ -> validatePaymasterPurchase
   validateTopupAmount
   where
-    isSupported synchronizerId = synchronizerId `elem` trafficConfig.supportedSynchronizerIds
+    isSupported = purchase.synchronizerId `elem` trafficConfig.supportedSynchronizerIds
     validateMemberPurchase
-      | not (isSupported purchase.synchronizerId) =
+      | not isSupported =
           Left $ mkUnknownSynchronizerFailure purchase.synchronizerId
       | T.isEmpty purchase.memberId =
           Left $ mkInvalidMemberIdFailure
             ("Traffic for synchronizer " <> purchase.synchronizerId <> " needs a memberId")
             purchase.memberId
       | otherwise = Right ()
-    validatePaymasterPurchase PaymasterPurchase{..}
-      | purchase.provider /= registration.paymaster =
-          Left $ mkNotPaymasterFailure purchase.provider registration.paymaster registration.synchronizerId
-      | purchase.synchronizerId /= registration.synchronizerId =
-          Left $ mkRegisteredSynchronizerMismatchFailure registration.synchronizerId purchase.synchronizerId
-      | isSupported registration.synchronizerId =
-          Left $ mkRegisteredRequiredSynchronizerFailure registration.synchronizerId
+    validatePaymasterPurchase
+      | isSupported =
+          Left $ mkPaymasterPurchaseForDecentralizedSynchronizerFailure purchase.synchronizerId
       | purchase.migrationId /= 0 =
-          Left $ mkInvalidMigrationIdFailure registration.synchronizerId purchase.migrationId
+          Left $ mkInvalidMigrationIdFailure purchase.synchronizerId purchase.migrationId
       | not (T.isEmpty purchase.memberId) =
           Left $ mkInvalidMemberIdFailure
-            ("Traffic for registered synchronizer " <> registration.synchronizerId <> " must have an empty memberId")
+            ("Traffic for dedicated synchronizer " <> purchase.synchronizerId <> " must have an empty memberId")
             purchase.memberId
-      | not (isAllowedWeight appActivityWeight registration.maxAppActivityWeight) =
-          Left $ mkInvalidActivityWeightFailure "app activity weight" appActivityWeight registration.maxAppActivityWeight
-      | not (isAllowedWeight assetActivityWeight registration.maxAssetActivityWeight) =
-          Left $ mkInvalidActivityWeightFailure "asset activity weight" assetActivityWeight registration.maxAssetActivityWeight
       | otherwise = Right ()
-    isAllowedWeight : Decimal -> Decimal -> Bool
-    isAllowedWeight weight maxWeight = 0.0 <= weight && weight <= maxWeight
     validateTopupAmount
       | purchase.trafficAmount < trafficConfig.minTrafficTopupAmount =
           Left $ mkInsufficientTopupAmountFailure purchase.trafficAmount trafficConfig.minTrafficTopupAmount
       | otherwise = Right ()
 
--- | Fetches the registration of a synchronizer for a paymaster's purchase. The activity weights
--- default to the registration's max.
-fetchPaymasterPurchase : Party -> DSyncTrafficPurchase -> Update PaymasterPurchase
-fetchPaymasterPurchase dso DSyncTrafficPurchase{..} = do
-  registration <- fetchReferenceData (ForDso dso) registeredSynchronizerCid
-  pure PaymasterPurchase with
-    registration
-    appActivityWeight = fromOptional registration.maxAppActivityWeight optAppActivityWeight
-    assetActivityWeight = fromOptional registration.maxAssetActivityWeight optAssetActivityWeight
+-- | Selects the kind of a traffic purchase by its synchronizer, never by the given
+-- `PaymasterTrafficPurchase` alone. Traffic for one of the `supportedSynchronizerIds` is for a
+-- member of the decentralized synchronizer, and must not come with a paymaster's purchase. Traffic
+-- for any other synchronizer is a paymaster's purchase for its dedicated synchronizer, and needs one.
+fetchOptPaymasterPurchase : Party -> TrafficPurchaseConfig -> Party -> Text -> Int -> Optional PaymasterTrafficPurchase -> Update (Optional PaymasterPurchase)
+fetchOptPaymasterPurchase dso trafficConfig provider synchronizerId trafficAmount optPaymasterTrafficPurchase
+  | synchronizerId `elem` trafficConfig.supportedSynchronizerIds = do
+      whenSome optPaymasterTrafficPurchase $ \_ ->
+        failWithStatus (mkPaymasterPurchaseForDecentralizedSynchronizerFailure synchronizerId)
+      pure None
+  | otherwise = case optPaymasterTrafficPurchase of
+      None -> failWithStatus (mkUnknownSynchronizerFailure synchronizerId)
+      Some paymasterTrafficPurchase ->
+        Some <$> fetchPaymasterPurchase dso provider synchronizerId trafficAmount paymasterTrafficPurchase
 
 -- | Burn amulet to buy extra traffic on a synchronizer, for a member of the decentralized
--- synchronizer or, given a paymaster's purchase, for a registered synchronizer as a whole.
+-- synchronizer or, given a paymaster's purchase, for a dedicated synchronizer as a whole.
 buyMemberTraffic
-  : ContractId TransferEventsV2.EventLog -> TransferContextSummaryV2 -> TrafficPurchaseConfig -> Optional PaymasterPurchase
+  : ContractId TransferEventsV2.EventLog -> TransferContextSummaryV2 -> TrafficPurchaseConfig
   -> MemberTrafficPurchase -> (Decimal, Decimal) -> [TransferInput] -> BurnRewardPolicy -> Update MemberTrafficPurchaseResult
-buyMemberTraffic eventLogCid csum trafficConfig optPaymasterPurchase purchase (trafficCostAmulet, trafficCostUsd) inputs burnRewardPolicy = do
-  case validateBuyMemberTrafficInputs trafficConfig optPaymasterPurchase purchase of
+buyMemberTraffic eventLogCid csum trafficConfig purchase (trafficCostAmulet, trafficCostUsd) inputs burnRewardPolicy = do
+  case validateBuyMemberTrafficInputs trafficConfig purchase of
     Left failureStatus -> failWithStatus failureStatus
     Right _ -> pure ()
   (transferResult, meta) <-
@@ -2019,9 +1933,8 @@ buyMemberTraffic eventLogCid csum trafficConfig optPaymasterPurchase purchase (t
     numPurchases = 1
     amuletSpent = trafficCostAmulet
     usdSpent = trafficCostUsd
-  -- TODO(ChainSafe/canton-extending-mainnet#163): Given a paymaster's purchase, record the
-  -- `paymasterActivity` it earns for `purchase.trafficAmount` through the CIP-0104
-  -- `ActivityRecorder` hook once upstream Splice ships it.
+  -- TODO(ChainSafe/canton-extending-mainnet#163): Given a paymaster's purchase, record its
+  -- non-zero `appActivity` and `assetActivity` through the CIP-0104 `ActivityRecorder`.
   pure MemberTrafficPurchaseResult with ..
 
 data AppTransferContext = AppTransferContext

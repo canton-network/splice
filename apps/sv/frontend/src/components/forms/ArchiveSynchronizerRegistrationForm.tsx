@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '@tanstack/react-form';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { ContractId } from '@daml/types';
-import { RegisteredSynchronizer } from '@daml.js/splice-amulet/lib/Splice/DecentralizedSynchronizer';
+import { DedicatedSynchronizer } from '@daml.js/splice-amulet/lib/Splice/Amulet/DedicatedSynchronizer';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
 import { useAppForm } from '../../hooks/form';
@@ -83,7 +83,7 @@ export const ArchiveSynchronizerRegistrationForm: React.FC = _ => {
           dsoAction: {
             tag: 'SRARC_ArchiveSynchronizerRegistration',
             value: {
-              registeredSynchronizerCid: resolved.contractId as ContractId<RegisteredSynchronizer>,
+              dedicatedSynchronizerCid: resolved.contractId as ContractId<DedicatedSynchronizer>,
             },
           },
         },

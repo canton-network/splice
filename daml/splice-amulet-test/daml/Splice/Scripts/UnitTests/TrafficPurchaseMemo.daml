@@ -61,6 +61,7 @@ test_trafficPurchaseReason_includesPurchasedTraffic = script do
         synchronizerId = testSynchronizerId
         migrationId = 3
         trafficAmount = 1_000_000
+        paymaster = None
   trafficPurchaseReason purchase ===
     "splice/memo:purchased-traffic-bytes=1000000&" <> memoParams
 

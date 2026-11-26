@@ -31,7 +31,8 @@ import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
 import Splice.Wallet.Subscriptions
-import Splice.DecentralizedSynchronizer (MemberTraffic, RegisteredSynchronizer(..), RegisteredSynchronizer_Update(..), RegisteredSynchronizer_UpdateResult)
+import Splice.Amulet.DedicatedSynchronizer (DedicatedSynchronizer(..), DedicatedSynchronizerConfig, DedicatedSynchronizer_UpdateConfig(..), DedicatedSynchronizer_UpdateConfigResult)
+import Splice.DecentralizedSynchronizer (MemberTraffic)
 
 import qualified Splice.CometBft as CometBft
 import Splice.Ans
@@ -131,9 +132,9 @@ data DsoRules_ActionRequiringConfirmation
   | SRARC_RegisterSynchronizer DsoRules_RegisterSynchronizer
     -- ^ Voted action to register a dedicated synchronizer with its paymaster.
   | SRARC_UpdateSynchronizerRegistration DsoRules_UpdateSynchronizerRegistration
-    -- ^ Voted action to change the paymaster or activity weights of a registered synchronizer.
+    -- ^ Voted action to change the config of a dedicated synchronizer.
   | SRARC_ArchiveSynchronizerRegistration DsoRules_ArchiveSynchronizerRegistration
-    -- ^ Voted action to offboard a registered synchronizer by archiving its registration.
+    -- ^ Voted action to offboard a dedicated synchronizer by archiving it.
   deriving (Eq, Show, Serializable)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -435,14 +436,14 @@ data DsoRules_ExpireUnallocatedUnclaimedActivityRecordResult = DsoRules_ExpireUn
   deriving (Serializable)
 
 data DsoRules_RegisterSynchronizerResult = DsoRules_RegisterSynchronizerResult with
-    registeredSynchronizerCid : ContractId RegisteredSynchronizer
+    dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
   deriving (Serializable)
 
 data DsoRules_UpdateSynchronizerRegistrationResult = DsoRules_UpdateSynchronizerRegistrationResult with
-    result : RegisteredSynchronizer_UpdateResult
+    result : DedicatedSynchronizer_UpdateConfigResult
   deriving (Serializable)
 
-data DsoRules_ArchiveSynchronizerRegistrationResult = DsoRules_ArchiveSynchronizerRegistrationResult
+data DsoRules_ArchiveSynchronizerRegistrationResult = DsoRules_ArchiveSynchronizerRegistrationResult {}
   deriving (Serializable)
 
 data DsoRules_ExpireUnclaimedActivityRecordResult = DsoRules_ExpireUnclaimedActivityRecordResult with
@@ -2021,52 +2022,45 @@ template DsoRules with
     ----------------------------------
 
     nonconsuming choice DsoRules_RegisterSynchronizer : DsoRules_RegisterSynchronizerResult
-      -- ^ Registers a dedicated synchronizer by creating its `RegisteredSynchronizer`. The
+      -- ^ Registers a dedicated synchronizer by creating its `DedicatedSynchronizer`. The config's
       -- paymaster pays for the synchronizer's traffic on the decentralized synchronizer.
-      -- Registration is the only way the registry is populated.
+      -- Registration is the only way a `DedicatedSynchronizer` is created.
       with
         synchronizerId : Text -- ^ Id of the dedicated synchronizer to register.
-        paymaster : Party -- ^ The party paying for the synchronizer's traffic.
-        maxAppActivityWeight : Decimal
-          -- ^ Highest weight with which the synchronizer's traffic earns app activity.
-        maxAssetActivityWeight : Decimal
-          -- ^ Highest weight with which the synchronizer's traffic earns asset activity.
+        config : DedicatedSynchronizerConfig -- ^ The synchronizer's config.
       controller dso
       do
-        registeredSynchronizerCid <- create RegisteredSynchronizer with
+        dedicatedSynchronizerCid <- create DedicatedSynchronizer with
           dso
           synchronizerId
-          paymaster
-          maxAppActivityWeight
-          maxAssetActivityWeight
-        pure DsoRules_RegisterSynchronizerResult with registeredSynchronizerCid
+          config
+        pure DsoRules_RegisterSynchronizerResult with dedicatedSynchronizerCid
 
     nonconsuming choice DsoRules_UpdateSynchronizerRegistration : DsoRules_UpdateSynchronizerRegistrationResult
-      -- ^ Replaces the paymaster and activity weights of a registered synchronizer.
-      -- The synchronizer id is the identity of the registration and does not change. The vote
-      -- names the registration's contract id, so it fails if the registration was changed or
-      -- archived after the vote was requested. We expect registrations to change very rarely,
-      -- so this is acceptable.
+      -- ^ Changes the config of a dedicated synchronizer. The synchronizer id identifies the
+      -- `DedicatedSynchronizer` and does not change. The vote names its contract id, so it fails
+      -- if the contract was changed or archived after the vote was requested. We expect a dedicated
+      -- synchronizer's config to change very rarely, so this is acceptable.
       with
-        registeredSynchronizerCid : ContractId RegisteredSynchronizer
-        update : RegisteredSynchronizer_Update
+        dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
+        update : DedicatedSynchronizer_UpdateConfig
       controller dso
       do
-        void $ fetchChecked (ForDso with dso) registeredSynchronizerCid
-        result <- exercise registeredSynchronizerCid update
+        void $ fetchChecked (ForDso with dso) dedicatedSynchronizerCid
+        result <- exercise dedicatedSynchronizerCid update
         pure DsoRules_UpdateSynchronizerRegistrationResult with result
 
     nonconsuming choice DsoRules_ArchiveSynchronizerRegistration : DsoRules_ArchiveSynchronizerRegistrationResult
-      -- ^ Offboards a registered synchronizer by archiving its registration, after which the
-      -- registration can no longer be used to pay for the synchronizer's traffic. As for an
-      -- update, the vote names the registration's contract id, so it fails if another vote changed
-      -- the registration first. We accept that race, as registrations change very rarely.
+      -- ^ Offboards a dedicated synchronizer by archiving its `DedicatedSynchronizer`, after which
+      -- its paymaster can no longer buy traffic for it. As for an update, the vote names the
+      -- contract id, so it fails if another vote changed the contract first. We accept that race,
+      -- as a dedicated synchronizer's config changes very rarely.
       with
-        registeredSynchronizerCid : ContractId RegisteredSynchronizer
+        dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
       controller dso
       do
-        void $ fetchAndArchive (ForDso with dso) registeredSynchronizerCid
-        pure DsoRules_ArchiveSynchronizerRegistrationResult
+        void $ fetchAndArchive (ForDso with dso) dedicatedSynchronizerCid
+        pure DsoRules_ArchiveSynchronizerRegistrationResult {}
 
 
 pruneAtLeastOne : Ord t => t -> Schedule t a -> Optional (Schedule t a)

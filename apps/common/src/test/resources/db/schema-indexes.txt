@@ -84,6 +84,7 @@ dso_acs_store
   dso_acs_store_sid_mid_pn_tid_ere_r (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, election_request_epoch bigint, requester text) where election_request_epoch IS NOT NULL AND requester IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_farp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, featured_app_right_provider text) where featured_app_right_provider IS NOT NULL
+  dso_acs_store_sid_mid_pn_tid_mtd (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, member_traffic_domain text) where member_traffic_member IS NULL AND member_traffic_domain IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_mtm_mtd (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, member_traffic_member text, member_traffic_domain text) where member_traffic_member IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_rbio (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, reward_party text) where reward_beneficiary_is_observer = false
   dso_acs_store_sid_mid_pn_tid_sccid (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, subscription_reference_contract_id text) where subscription_reference_contract_id IS NOT NULL
@@ -148,6 +149,7 @@ scan_acs_store
   scan_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_farp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, featured_app_right_provider text) where featured_app_right_provider IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_mtm_mtd (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, member_traffic_member text, member_traffic_domain text) where member_traffic_member IS NOT NULL
+  scan_acs_store_sid_mid_pn_tid_rsi (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, registered_synchronizer_id text) where registered_synchronizer_id IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_v (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, validator text) where validator IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_val (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, validator text, event_number bigint) where validator IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_vlrc (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, validator_license_rounds_collected bigint) where validator_license_rounds_collected IS NOT NULL

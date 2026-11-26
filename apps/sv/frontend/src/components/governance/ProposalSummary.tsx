@@ -368,7 +368,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               }
             />
             <ProposalReviewField
-              id="registeredSynchronizerCid"
+              id="dedicatedSynchronizerCid"
               label="Registration Contract ID"
               value={props.registration.contractId}
             />

@@ -1,7 +1,10 @@
 package org.lfdecentralizedtrust.splice.sv
 
 import com.digitalasset.canton.BaseTest
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.RegisteredSynchronizer
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.dedicatedsynchronizer.{
+  DedicatedSynchronizer,
+  DedicatedSynchronizerConfig,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_ArchiveSynchronizerRegistration,
   DsoRules_RegisterSynchronizer,
@@ -22,9 +25,11 @@ class SvAppVoteRequestValidationTest extends AnyWordSpec with BaseTest {
       new SRARC_RegisterSynchronizer(
         new DsoRules_RegisterSynchronizer(
           synchronizerId,
-          s"paymaster::$fingerprint",
-          java.math.BigDecimal.ONE.setScale(10),
-          java.math.BigDecimal.ONE.setScale(10),
+          new DedicatedSynchronizerConfig(
+            s"paymaster::$fingerprint",
+            java.math.BigDecimal.ONE.setScale(10),
+            java.math.BigDecimal.ONE.setScale(10),
+          ),
         )
       )
     )
@@ -58,7 +63,7 @@ class SvAppVoteRequestValidationTest extends AnyWordSpec with BaseTest {
         new ARC_DsoRules(
           new SRARC_ArchiveSynchronizerRegistration(
             new DsoRules_ArchiveSynchronizerRegistration(
-              new RegisteredSynchronizer.ContractId("00" + "ab" * 32)
+              new DedicatedSynchronizer.ContractId("00" + "ab" * 32)
             )
           )
         )

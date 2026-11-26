@@ -7,7 +7,7 @@ import { Alert } from '@mui/material';
 import { useStore } from '@tanstack/react-form';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { ContractId } from '@daml/types';
-import { RegisteredSynchronizer } from '@daml.js/splice-amulet/lib/Splice/DecentralizedSynchronizer';
+import { DedicatedSynchronizer } from '@daml.js/splice-amulet/lib/Splice/Amulet/DedicatedSynchronizer';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
 import { useAppForm } from '../../hooks/form';
@@ -98,11 +98,10 @@ export const UpdateSynchronizerRegistrationForm: React.FC = _ => {
           dsoAction: {
             tag: 'SRARC_UpdateSynchronizerRegistration',
             value: {
-              registeredSynchronizerCid: resolved.contractId as ContractId<RegisteredSynchronizer>,
+              dedicatedSynchronizerCid: resolved.contractId as ContractId<DedicatedSynchronizer>,
               update: {
-                newPaymaster: proposed.paymaster,
-                newMaxAppActivityWeight: proposed.maxAppActivityWeight,
-                newMaxAssetActivityWeight: proposed.maxAssetActivityWeight,
+                baseConfig: resolved.fields,
+                newConfig: proposed,
               },
             },
           },

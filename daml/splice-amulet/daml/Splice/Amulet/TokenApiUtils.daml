@@ -5,6 +5,7 @@
 
 module Splice.Amulet.TokenApiUtils where
 
+import DA.Fail
 import DA.Optional
 import DA.Monoid ()
 import DA.Time
@@ -181,10 +182,10 @@ featuredAppRightContextKey = "featured-app-right"
 transferPreapprovalContextKey : Text
 transferPreapprovalContextKey = "transfer-preapproval"
 
--- | The key of the `RegisteredSynchronizer` in the context of a paymaster's traffic purchase for
--- its registered synchronizer.
-registeredSynchronizerContextKey : Text
-registeredSynchronizerContextKey = "registered-synchronizer"
+-- | The key of the `DedicatedSynchronizer` in the context of a paymaster's traffic purchase for
+-- its dedicated synchronizer.
+dedicatedSynchronizerContextKey : Text
+dedicatedSynchronizerContextKey = "dedicated-synchronizer"
 
 -- | The key used to embed all the lock specification in the choice context.
 lockContextKey : Text
@@ -359,3 +360,12 @@ instance FromAnyValue a => FromAnyValue [a] where
 instance FromAnyValue ChoiceContext where
   fromAnyValue (AV_Map values) = Right $ ChoiceContext with values
   fromAnyValue av = Left $ "expected map, got: " <> show av
+
+-- Failures
+-----------
+
+spliceErrorId : Text -> Text
+spliceErrorId t = "splice.lfdecentralizedtrust.org/" <> t
+
+mkFailureStatus : Text -> FailureCategory -> Text -> TextMap Text -> FailureStatus
+mkFailureStatus errorId category message' meta = FailureStatus with message = message'; ..

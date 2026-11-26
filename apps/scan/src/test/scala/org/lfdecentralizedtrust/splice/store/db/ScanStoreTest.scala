@@ -20,10 +20,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   AmuletRules_MintResult,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsEntry
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.{
-  MemberTraffic,
-  RegisteredSynchronizer,
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.dedicatedsynchronizer.{
+  DedicatedSynchronizer,
+  DedicatedSynchronizerConfig,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
@@ -424,11 +425,11 @@ abstract class ScanStoreTest
       }
     }
 
-    "lookupRegisteredSynchronizer" should {
+    "lookupDedicatedSynchronizer" should {
       val synchronizerA = "dedicated-synchronizer::1220aaaa"
       val synchronizerB = "dedicated-synchronizer::1220bbbb"
       def lookup(store: ScanStore, synchronizerId: String) =
-        store.lookupRegisteredSynchronizer(SynchronizerId.tryFromString(synchronizerId))
+        store.lookupDedicatedSynchronizer(SynchronizerId.tryFromString(synchronizerId))
 
       "return the registration of the synchronizer if it is registered" in {
         val wanted = registeredSynchronizer(synchronizerA)
@@ -1399,14 +1400,16 @@ trait AmuletTransferUtil { self: StoreTestBase =>
       dso: PartyId = dsoParty,
   ) =
     contract(
-      RegisteredSynchronizer.TEMPLATE_ID_WITH_PACKAGE_ID,
-      new RegisteredSynchronizer.ContractId(nextCid()),
-      new RegisteredSynchronizer(
+      DedicatedSynchronizer.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new DedicatedSynchronizer.ContractId(nextCid()),
+      new DedicatedSynchronizer(
         dso.toProtoPrimitive,
         synchronizerId,
-        paymaster.toProtoPrimitive,
-        numeric(1.0),
-        numeric(0.5),
+        new DedicatedSynchronizerConfig(
+          paymaster.toProtoPrimitive,
+          numeric(1.0),
+          numeric(0.5),
+        ),
       ),
     )
 

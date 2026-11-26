@@ -1127,7 +1127,7 @@ components:
 
     ListSynchronizerRegistrationsResponse:
       description: |
-        The active `Splice.DecentralizedSynchronizer:RegisteredSynchronizer` contracts for a
+        The active `Splice.Amulet.DedicatedSynchronizer:DedicatedSynchronizer` contracts for a
         synchronizer id, ordered by contract id.
       type: object
       required:
@@ -1140,7 +1140,7 @@ components:
 
     LookupSynchronizerRegistrationByContractIdResponse:
       description: |
-        An active `Splice.DecentralizedSynchronizer:RegisteredSynchronizer` contract looked up by
+        An active `Splice.Amulet.DedicatedSynchronizer:DedicatedSynchronizer` contract looked up by
         contract ID, if it exists.
       type: object
       properties:

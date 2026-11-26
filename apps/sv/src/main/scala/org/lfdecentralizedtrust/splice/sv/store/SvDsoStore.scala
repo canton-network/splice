@@ -1145,12 +1145,12 @@ trait SvDsoStore
       synchronizerId: String,
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[ContractWithState[
-    splice.decentralizedsynchronizer.RegisteredSynchronizer.ContractId,
-    splice.decentralizedsynchronizer.RegisteredSynchronizer,
+    splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.ContractId,
+    splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer,
   ]]] =
     for {
       registrations <- multiDomainAcsStore.listContracts(
-        splice.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION,
+        splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.COMPANION,
         limit,
       )
     } yield registrations
@@ -1619,7 +1619,7 @@ object SvDsoStore {
           totalTrafficPurchased = Some(contract.payload.totalPurchased),
         )
       },
-      mkFilter(splice.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION)(
+      mkFilter(splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.COMPANION)(
         co => co.payload.dso == dso,
         versionGuard = { case (pkgVersionSupport, now) =>
           (tc) => pkgVersionSupport.supportsDedicatedSynchronizers(Seq(dsoParty), now)(tc)

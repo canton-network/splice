@@ -314,7 +314,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('paymaster-party-id-value').textContent).toBe(
       registration.fields.paymaster
     );
-    expect(screen.getByTestId('registeredSynchronizerCid-field').textContent).toBe(
+    expect(screen.getByTestId('dedicatedSynchronizerCid-field').textContent).toBe(
       registration.contractId
     );
     expect(screen.queryByTestId('registrationChanges-field')).not.toBeInTheDocument();
@@ -339,7 +339,7 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('registeredSynchronizerCid-field').textContent).toBe(
+    expect(screen.getByTestId('dedicatedSynchronizerCid-field').textContent).toBe(
       registration.contractId
     );
     expect(screen.getByTestId('registrationChanges-title').textContent).toBe('Proposed Changes');

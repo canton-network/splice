@@ -636,8 +636,12 @@ class HttpSvOperatorHandler(
     withSpan(s"$workflowId.lookupSynchronizerRegistrationByContractId") { _ => _ =>
       for {
         registration <- dsoStore.multiDomainAcsStore.lookupContractById(
-          spliceCodegen.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION
-        )(new spliceCodegen.decentralizedsynchronizer.RegisteredSynchronizer.ContractId(contractId))
+          spliceCodegen.amulet.dedicatedsynchronizer.DedicatedSynchronizer.COMPANION
+        )(
+          new spliceCodegen.amulet.dedicatedsynchronizer.DedicatedSynchronizer.ContractId(
+            contractId
+          )
+        )
       } yield respond.OK(
         definitions.LookupSynchronizerRegistrationByContractIdResponse(
           registration.map(_.contract.toHttp)

@@ -37,7 +37,10 @@ const duplicateRegistration = {
   contract_id: registrationCid.replace(/^00a1/, '00b2'),
   payload: {
     ...activeSynchronizerRegistrationPayload,
-    maxAppActivityWeight: '0.6000000000',
+    config: {
+      ...activeSynchronizerRegistrationPayload.config,
+      maxAppActivityWeight: '0.6000000000',
+    },
   },
 };
 const duplicateCid = duplicateRegistration.contract_id;
@@ -93,7 +96,7 @@ describe('Update Dedicated Synchronizer Registration Form', () => {
       '0.5'
     );
     expect(screen.getByTestId(`${prefix}-paymaster`).getAttribute('value')).toBe(
-      activeSynchronizerRegistrationPayload.paymaster
+      activeSynchronizerRegistrationPayload.config.paymaster
     );
   });
 
@@ -175,7 +178,7 @@ describe('Update Dedicated Synchronizer Registration Form', () => {
               value: {
                 dsoAction: {
                   tag: 'SRARC_ArchiveSynchronizerRegistration',
-                  value: { registeredSynchronizerCid: registrationCid },
+                  value: { dedicatedSynchronizerCid: registrationCid },
                 },
               },
             },
@@ -261,7 +264,7 @@ describe('Update Dedicated Synchronizer Registration Form', () => {
     await user.click(submitButton);
 
     await screen.findByTestId('proposal-review');
-    expect(screen.getByTestId('registeredSynchronizerCid-field').textContent).toBe(registrationCid);
+    expect(screen.getByTestId('dedicatedSynchronizerCid-field').textContent).toBe(registrationCid);
     const changes = screen.getByTestId('registrationChanges-field');
     expect(within(changes).getAllByTestId('config-change')).toHaveLength(1);
     expect(within(changes).getByTestId('config-change-current-value').textContent).toBe('1.0');
@@ -327,7 +330,7 @@ describe('Update Dedicated Synchronizer Registration Form', () => {
     const paymasterInput = await screen.findByTestId(`${prefix}-paymaster`);
     await waitFor(() =>
       expect(paymasterInput.getAttribute('value')).toBe(
-        activeSynchronizerRegistrationPayload.paymaster
+        activeSynchronizerRegistrationPayload.config.paymaster
       )
     );
     await user.clear(paymasterInput);
@@ -346,11 +349,14 @@ describe('Update Dedicated Synchronizer Registration Form', () => {
         dsoAction: {
           tag: 'SRARC_UpdateSynchronizerRegistration',
           value: {
-            registeredSynchronizerCid: registrationCid,
+            dedicatedSynchronizerCid: registrationCid,
             update: {
-              newPaymaster: 'new-paymaster::1220abcdef',
-              newMaxAppActivityWeight: '1.0',
-              newMaxAssetActivityWeight: '0.5',
+              baseConfig: activeSynchronizerRegistrationPayload.config,
+              newConfig: {
+                paymaster: 'new-paymaster::1220abcdef',
+                maxAppActivityWeight: '1.0',
+                maxAssetActivityWeight: '0.5',
+              },
             },
           },
         },

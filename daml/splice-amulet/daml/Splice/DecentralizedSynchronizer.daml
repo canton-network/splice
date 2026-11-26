@@ -11,6 +11,8 @@ import DA.Text as T
 import qualified DA.TextMap as TextMap
 import DA.Time
 
+import Splice.Amulet.DedicatedSynchronizer (PaymasterPurchase)
+
 import Splice.Types
 import Splice.Util
 
@@ -61,7 +63,7 @@ validAmuletDecentralizedSynchronizerConfig config =
 template MemberTraffic with
     dso : Party
     memberId : Text -- ^ The id of the sequencer member (participant or mediator) for which traffic has been purchased.
-      -- Empty for traffic that a paymaster purchased for its registered synchronizer as a whole.
+      -- Empty for traffic that a paymaster purchased for its dedicated synchronizer as a whole.
     synchronizerId : Text -- ^ The id of the synchronizer for which this contract tracks purchased extra traffic
     migrationId : Int -- ^ The migration id of the synchronizer for which this contract tracks purchased extra traffic
     totalPurchased : Int -- ^ The number of bytes of extra traffic purchased
@@ -98,6 +100,9 @@ data MemberTrafficPurchase = MemberTrafficPurchase with
     synchronizerId : Text
     migrationId : Int
     trafficAmount : Int
+    paymaster : Optional PaymasterPurchase
+      -- ^ A paymaster's purchase for its dedicated synchronizer. `None` for a purchase for a member
+      -- of the decentralized synchronizer.
   deriving (Eq, Show)
 
 data TrafficPurchaseMemo = TrafficPurchaseMemo with
@@ -106,7 +111,12 @@ data TrafficPurchaseMemo = TrafficPurchaseMemo with
     migrationId : Int
     forfeitValidatorRewardCoupon : Bool
     appActivityWeight : Optional Decimal
+      -- ^ Weight (i.e. scaling factor) to use for creating activity records for this traffic
+      -- purchase. This weight is upper-bounded by the SV voted `maxAppActivityWeight`. Paymasters
+      -- can set it to a lower value than the allowed maximum to cater for special operational
+      -- circumstances.
     assetActivityWeight : Optional Decimal
+      -- ^ As `appActivityWeight`, for asset activity.
   deriving (Eq, Show)
 
 trafficPurchaseMemoPrefix : Text
@@ -116,8 +126,8 @@ trafficPurchaseMemoPrefix = "splice/memo:"
 -- `splice/memo:[member-id=...&]synchronizer-id=...&migration-id=...[&forfeit-validator-reward-coupon=true|false]`
 -- `[&app-activity-weight=...][&asset-activity-weight=...]`.
 -- A memo without a `member-id` parses to an empty `memberId`. Only a paymaster's purchase for its
--- registered synchronizer may leave it out, which `validateBuyMemberTrafficInputs` checks. The
--- activity weights are those of `DSyncTrafficPurchase`, so only such a purchase may give them.
+-- dedicated synchronizer may leave it out, which `validateBuyMemberTrafficInputs` checks. The
+-- activity weights are those of `PaymasterTrafficPurchase`, so only such a purchase may give them.
 parseTrafficPurchaseMemo : Text -> Either Text TrafficPurchaseMemo
 parseTrafficPurchaseMemo memo = do
   params <- case T.stripPrefix trafficPurchaseMemoPrefix memo of
@@ -199,114 +209,3 @@ instance Patchable AmuletDecentralizedSynchronizerConfig where
     activeSynchronizer = patch new.activeSynchronizer base.activeSynchronizer current.activeSynchronizer
     fees = patch new.fees base.fees current.fees
 
--- Dedicated synchronizer registry
-------------------------------------------------
-
--- | Whether `weight` is an allowed bound for a registered synchronizer's activity weights.
--- A weight scales how much CIP-0104 activity a paid traffic byte earns. As for the other activity
--- weights, e.g., a `FeaturedAppRight`'s, only negative values are rejected: a weight above 1.0
--- lets the SVs compensate a paymaster that pays for only part of the synchronizer's traffic.
-validSynchronizerActivityWeight : Decimal -> Bool
-validSynchronizerActivityWeight weight = weight >= 0.0
-
-validRegisteredSynchronizer : RegisteredSynchronizer -> Bool
-validRegisteredSynchronizer RegisteredSynchronizer{..} =
-  not (T.isEmpty synchronizerId)
-  && validSynchronizerActivityWeight maxAppActivityWeight
-  && validSynchronizerActivityWeight maxAssetActivityWeight
-
-data RegisteredSynchronizer_UpdateResult = RegisteredSynchronizer_UpdateResult with
-    registeredSynchronizerCid : ContractId RegisteredSynchronizer
-  deriving (Serializable)
-
--- | A dedicated synchronizer registered by DSO governance.
---
--- A dedicated synchronizer runs the Splice software separately from the decentralized
--- synchronizer that hosts Amulet. Its `paymaster` pays for the synchronizer's traffic on the
--- decentralized synchronizer.
---
--- The registration is created, updated and archived only by an SV vote, through
--- `DsoRules_RegisterSynchronizer`, `DsoRules_UpdateSynchronizerRegistration` and
--- `DsoRules_ArchiveSynchronizerRegistration` in the governance package. It lives in splice-amulet
--- so that `AmuletRules` can fetch it: the governance package depends on splice-amulet, not the
--- reverse.
-template RegisteredSynchronizer with
-    dso : Party
-      -- ^ The DSO party. Sole signatory.
-    synchronizerId : Text
-      -- ^ Id of the dedicated synchronizer. It identifies the registration and does not change on
-      -- update.
-    paymaster : Party
-      -- ^ The party paying for the synchronizer's traffic on the decentralized synchronizer.
-      -- Observes the registration, so it can read it from its own ledger.
-    maxAppActivityWeight : Decimal
-      -- ^ Highest weight with which traffic paid for this synchronizer earns CIP-0104 app
-      -- activity. See `validSynchronizerActivityWeight` for the allowed range.
-    maxAssetActivityWeight : Decimal
-      -- ^ Highest weight with which traffic paid for this synchronizer earns CIP-0104 asset
-      -- activity. See `validSynchronizerActivityWeight` for the allowed range.
-  where
-    signatory dso
-    observer paymaster
-
-    ensure validRegisteredSynchronizer this
-
-    -- Replaces the governed fields. The synchronizerId is the identity of the registration and is
-    -- kept.
-    choice RegisteredSynchronizer_Update : RegisteredSynchronizer_UpdateResult
-      with
-        newPaymaster : Party
-        newMaxAppActivityWeight : Decimal
-        newMaxAssetActivityWeight : Decimal
-      controller dso
-      do
-        registeredSynchronizerCid <- create this with
-          paymaster = newPaymaster
-          maxAppActivityWeight = newMaxAppActivityWeight
-          maxAssetActivityWeight = newMaxAssetActivityWeight
-        pure RegisteredSynchronizer_UpdateResult with registeredSynchronizerCid
-
-instance HasCheckedFetch RegisteredSynchronizer ForDso where
-    contractGroupId RegisteredSynchronizer{..} = ForDso with ..
-
--- | The arguments of a paymaster's traffic purchase for its registered dedicated synchronizer.
-data DSyncTrafficPurchase = DSyncTrafficPurchase with
-    registeredSynchronizerCid : ContractId RegisteredSynchronizer
-      -- ^ The registration of the dedicated synchronizer to buy traffic for. The provider must be
-      -- its paymaster, which pays for the synchronizer as a whole: the purchase's `memberId` must
-      -- be empty and its `migrationId` 0. The synchronizer must be the registration's, and must not
-      -- be one of the `requiredSynchronizers`.
-    optAppActivityWeight : Optional Decimal
-      -- ^ The weight with which each purchased byte earns the paymaster app activity. Defaults to
-      -- the registration's `maxAppActivityWeight`, and must not be negative or above it.
-    optAssetActivityWeight : Optional Decimal
-      -- ^ The weight with which each purchased byte earns the paymaster asset activity. Defaults
-      -- to the registration's `maxAssetActivityWeight`, and must not be negative or above it.
-  deriving (Eq, Show, Serializable)
-
--- | A paymaster's traffic purchase for its registered synchronizer.
-data PaymasterPurchase = PaymasterPurchase with
-    registration : RegisteredSynchronizer
-      -- ^ The registration of the synchronizer the traffic is purchased for.
-    appActivityWeight : Decimal
-      -- ^ The weight with which each purchased byte earns the paymaster app activity.
-    assetActivityWeight : Decimal
-      -- ^ The weight with which each purchased byte earns the paymaster asset activity.
-  deriving (Eq, Show)
-
--- | The CIP-0104 activity that a paymaster earns for a traffic purchase for its registered
--- synchronizer. It has the shape of the arguments of the CIP-0104 `ActivityRecorder`
--- hook, with one entry for the paymaster in each list.
-data PaymasterActivity = PaymasterActivity with
-    appActivity : [(Party, Int)]
-    assetActivity : [(Party, Int)]
-  deriving (Eq, Show)
-
--- | The activity that `trafficAmount` purchased bytes earn the paymaster. Each byte earns the
--- purchase's weight in app and in asset activity, and each total is rounded down.
-paymasterActivity : PaymasterPurchase -> Int -> PaymasterActivity
-paymasterActivity PaymasterPurchase{..} trafficAmount = PaymasterActivity with
-    appActivity = [(registration.paymaster, weighted appActivityWeight)]
-    assetActivity = [(registration.paymaster, weighted assetActivityWeight)]
-  where
-    weighted weight = floor (intToDecimal trafficAmount * weight)

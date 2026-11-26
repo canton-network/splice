@@ -4,7 +4,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Contract as OpenAPIContract } from '@canton-network/sv-openapi';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
-import { RegisteredSynchronizer } from '@daml.js/splice-amulet/lib/Splice/DecentralizedSynchronizer';
+import { DedicatedSynchronizer } from '@daml.js/splice-amulet/lib/Splice/Amulet/DedicatedSynchronizer';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { Option } from '../components/form-components/SelectField';
 import { validateSynchronizerId } from '../components/forms/formValidators';
@@ -25,21 +25,21 @@ const pinnedRegistrationCid = (voteRequest: VoteRequest): string | undefined => 
   switch (dsoAction.tag) {
     case 'SRARC_ArchiveSynchronizerRegistration':
     case 'SRARC_UpdateSynchronizerRegistration':
-      return dsoAction.value.registeredSynchronizerCid;
+      return dsoAction.value.dedicatedSynchronizerCid;
     default:
       return undefined;
   }
 };
 
 const toResolvedRegistration = (contract: OpenAPIContract): ResolvedSynchronizerRegistration => {
-  const registration = Contract.decodeOpenAPI(contract, RegisteredSynchronizer);
+  const registration = Contract.decodeOpenAPI(contract, DedicatedSynchronizer);
   return {
     contractId: registration.contractId,
     synchronizerId: registration.payload.synchronizerId,
     fields: {
-      paymaster: registration.payload.paymaster,
-      maxAppActivityWeight: registration.payload.maxAppActivityWeight,
-      maxAssetActivityWeight: registration.payload.maxAssetActivityWeight,
+      paymaster: registration.payload.config.paymaster,
+      maxAppActivityWeight: registration.payload.config.maxAppActivityWeight,
+      maxAssetActivityWeight: registration.payload.config.maxAssetActivityWeight,
     },
   };
 };

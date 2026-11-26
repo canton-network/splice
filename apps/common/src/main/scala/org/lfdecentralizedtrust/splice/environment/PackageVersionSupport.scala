@@ -73,7 +73,7 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  // RegisteredSynchronizer (splice-amulet) and the votes to register, update and archive it
+  // DedicatedSynchronizer (splice-amulet) and the votes to register, update and archive it
   // (splice-dso-governance) ship in the same bump. Vetting this splice-dso-governance version
   // implies vetting the splice-amulet version it depends on, so one check covers both.
   def supportsDedicatedSynchronizers(

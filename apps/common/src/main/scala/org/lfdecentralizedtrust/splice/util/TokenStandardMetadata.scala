@@ -17,8 +17,8 @@ object TokenStandardMetadata {
   // Mirrors "trafficPurchaseMemoPrefix" in splice.DecentralizedSynchronizer.daml.
   val trafficPurchaseMemoPrefix = "splice/memo:"
 
-  // Mirrors "registeredSynchronizerContextKey" in splice.Amulet.TokenApiUtils.daml.
-  val registeredSynchronizerContextKey = "registered-synchronizer"
+  // Mirrors "dedicatedSynchronizerContextKey" in splice.Amulet.TokenApiUtils.daml.
+  val dedicatedSynchronizerContextKey = "dedicated-synchronizer"
 
   /** The `synchronizer-id` of a traffic purchase memo, if it has a non-empty one. The Daml code
     * (`parseTrafficPurchaseMemo` in splice.DecentralizedSynchronizer.daml) validates the full memo.

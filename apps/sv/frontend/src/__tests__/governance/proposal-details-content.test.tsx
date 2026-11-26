@@ -1595,25 +1595,26 @@ describe('Dedicated synchronizer votes', () => {
       </Wrapper>
     );
 
-  const archiveDetails = (registeredSynchronizerCid: string) =>
+  const archiveDetails = (dedicatedSynchronizerCid: string) =>
     ({
       ...voteRequest.proposalDetails,
       actionName: 'Offboard Dedicated Synchronizer',
       action: 'SRARC_ArchiveSynchronizerRegistration',
-      proposal: { registeredSynchronizerCid } as ArchiveSynchronizerRegistrationProposal,
+      proposal: { dedicatedSynchronizerCid } as ArchiveSynchronizerRegistrationProposal,
     }) as ProposalDetails;
 
-  const updateDetails = (registeredSynchronizerCid: string) =>
+  const updateDetails = (dedicatedSynchronizerCid: string) =>
     ({
       ...voteRequest.proposalDetails,
       actionName: 'Update Dedicated Synchronizer Registration',
       action: 'SRARC_UpdateSynchronizerRegistration',
       proposal: {
-        registeredSynchronizerCid,
+        dedicatedSynchronizerCid,
         newFields: {
-          paymaster: activeSynchronizerRegistrationPayload.paymaster,
+          paymaster: activeSynchronizerRegistrationPayload.config.paymaster,
           maxAppActivityWeight: '2.5000000000',
-          maxAssetActivityWeight: activeSynchronizerRegistrationPayload.maxAssetActivityWeight,
+          maxAssetActivityWeight:
+            activeSynchronizerRegistrationPayload.config.maxAssetActivityWeight,
         },
       } as UpdateSynchronizerRegistrationProposal,
     }) as ProposalDetails;
@@ -1658,7 +1659,7 @@ describe('Dedicated synchronizer votes', () => {
     ).toHaveTextContent(activeSynchronizerRegistrationPayload.synchronizerId);
     expect(
       screen.getByTestId('proposal-details-archive-synchronizer-paymaster-party-id')
-    ).toHaveTextContent(activeSynchronizerRegistrationPayload.paymaster);
+    ).toHaveTextContent(activeSynchronizerRegistrationPayload.config.paymaster);
     expect(
       screen.getByTestId('proposal-details-archive-synchronizer-contract-id')
     ).toHaveTextContent(liveCid);

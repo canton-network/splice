@@ -1,13 +1,14 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import type { RegisteredSynchronizer } from '@daml.js/splice-amulet/lib/Splice/DecentralizedSynchronizer';
+import type { DedicatedSynchronizerConfig } from '@daml.js/splice-amulet/lib/Splice/Amulet/DedicatedSynchronizer';
 import type { ConfigChange } from '../../utils/types';
 import { validatePartyId, validateRequiredActivityWeight } from './formValidators';
 
-// The fields a vote can change. The synchronizer id identifies the registration and is kept.
-export type RegistrationFieldKey = keyof Omit<RegisteredSynchronizer, 'dso' | 'synchronizerId'>;
-export type RegistrationFields = Pick<RegisteredSynchronizer, RegistrationFieldKey>;
+// The fields a vote can change: the dedicated synchronizer's config. The synchronizer id
+// identifies the registration and is kept.
+export type RegistrationFieldKey = keyof DedicatedSynchronizerConfig;
+export type RegistrationFields = DedicatedSynchronizerConfig;
 export type RegistrationFieldValues = Record<RegistrationFieldKey, string>;
 
 // Daml renders a Decimal with all ten places, so 1.0 and 1.0000000000 must compare equal.

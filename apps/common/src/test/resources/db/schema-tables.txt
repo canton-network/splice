@@ -398,6 +398,7 @@ scan_acs_store
   package_name text not null
   governance_lock_type text
   governance_lock_subject text
+  registered_synchronizer_id text
   constraint scan_acs_store_pkey PRIMARY KEY (event_number)
   constraint scan_acs_store_store_id_fkey FOREIGN KEY (store_id) REFERENCES store_descriptors(id)
 

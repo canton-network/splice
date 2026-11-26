@@ -1,0 +1,217 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Dedicated synchronizers run with the paymaster model of CIP-0132, and their paymasters'
+-- traffic purchases.
+module Splice.Amulet.DedicatedSynchronizer where
+
+import DA.Fail
+import DA.Optional (optionalToList)
+import qualified DA.Text as T
+import qualified DA.TextMap as TextMap
+
+import Splice.Amulet.TokenApiUtils (mkFailureStatus, spliceErrorId)
+import Splice.Types
+import Splice.Util
+
+-- | The governed configuration of a dedicated synchronizer.
+data DedicatedSynchronizerConfig = DedicatedSynchronizerConfig with
+    paymaster : Party
+      -- ^ The party paying for the synchronizer's traffic on the decentralized synchronizer.
+    maxAppActivityWeight : Decimal
+      -- ^ Highest weight with which traffic paid for this synchronizer earns CIP-0104 app
+      -- activity.
+    maxAssetActivityWeight : Decimal
+      -- ^ Highest weight with which traffic paid for this synchronizer earns CIP-0104 asset
+      -- activity.
+  deriving (Eq, Show, Serializable)
+
+instance Patchable DedicatedSynchronizerConfig where
+  patch new base current = DedicatedSynchronizerConfig with
+    paymaster = patch new.paymaster base.paymaster current.paymaster
+    maxAppActivityWeight = patch new.maxAppActivityWeight base.maxAppActivityWeight current.maxAppActivityWeight
+    maxAssetActivityWeight = patch new.maxAssetActivityWeight base.maxAssetActivityWeight current.maxAssetActivityWeight
+
+validDedicatedSynchronizerConfig : DedicatedSynchronizerConfig -> Bool
+validDedicatedSynchronizerConfig config =
+  config.maxAppActivityWeight >= 0.0 && config.maxAssetActivityWeight >= 0.0
+
+data DedicatedSynchronizer_UpdateConfigResult = DedicatedSynchronizer_UpdateConfigResult with
+    dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
+  deriving (Serializable)
+
+-- | A dedicated synchronizer that the DSO registered, with the paymaster that pays for its
+-- traffic on the decentralized synchronizer.
+--
+-- A dedicated synchronizer runs the Splice software separately from the decentralized
+-- synchronizer that hosts Amulet. Its paymaster buys traffic for the synchronizer as a whole, and
+-- each purchased byte earns the paymaster CIP-0104 app and asset activity, scaled by an activity
+-- weight that is at most the config's max. As for the other activity weights, e.g., a
+-- `FeaturedAppRight`'s, only negative max weights are rejected: a max above 1.0 lets the SVs
+-- compensate a paymaster that pays for only part of the synchronizer's traffic.
+--
+-- It is created, updated and archived only by an SV vote, through `DsoRules_RegisterSynchronizer`,
+-- `DsoRules_UpdateSynchronizerRegistration` and `DsoRules_ArchiveSynchronizerRegistration` in the
+-- governance package. It lives in splice-amulet so that `AmuletRules` can fetch it: the
+-- governance package depends on splice-amulet, not the reverse.
+template DedicatedSynchronizer with
+    dso : Party
+      -- ^ The DSO party. Sole signatory.
+    synchronizerId : Text
+      -- ^ Id of the dedicated synchronizer. It identifies the contract and does not change on
+      -- update.
+    config : DedicatedSynchronizerConfig
+      -- ^ The governed configuration. Its paymaster observes the contract, so it can read it from
+      -- its own ledger.
+  where
+    signatory dso
+    observer config.paymaster
+
+    ensure not (T.isEmpty synchronizerId) && validDedicatedSynchronizerConfig config
+
+    -- Sets the fields of the config that `newConfig` changes compared to `baseConfig`. The
+    -- synchronizerId identifies the contract and is kept.
+    choice DedicatedSynchronizer_UpdateConfig : DedicatedSynchronizer_UpdateConfigResult
+      with
+        baseConfig : DedicatedSynchronizerConfig
+        newConfig : DedicatedSynchronizerConfig
+      controller dso
+      do
+        dedicatedSynchronizerCid <- create this with config = patch newConfig baseConfig config
+        pure DedicatedSynchronizer_UpdateConfigResult with dedicatedSynchronizerCid
+
+instance HasCheckedFetch DedicatedSynchronizer ForDso where
+  contractGroupId dedicatedSynchronizer = ForDso with dso = dedicatedSynchronizer.dso
+
+-- | The arguments of a paymaster's traffic purchase for its dedicated synchronizer. It is part of
+-- the arguments of `AmuletRules_BuyMemberTraffic`, so it must be serializable.
+data PaymasterTrafficPurchase = PaymasterTrafficPurchase with
+    dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
+      -- ^ The dedicated synchronizer to buy traffic for. The provider must be its paymaster.
+    optAppActivityWeight : Optional Decimal
+      -- ^ The weight with which each purchased byte earns the paymaster app activity, capped at
+      -- the config's `maxAppActivityWeight`. Defaults to the max. A paymaster can ask for less
+      -- than the max to cater for special operational circumstances.
+    optAssetActivityWeight : Optional Decimal
+      -- ^ The weight with which each purchased byte earns the paymaster asset activity, capped at
+      -- the config's `maxAssetActivityWeight`. Defaults to the max.
+  deriving (Eq, Show, Serializable)
+
+-- | A paymaster's traffic purchase for its dedicated synchronizer, and the activity it earns.
+data PaymasterPurchase = PaymasterPurchase with
+    paymaster : Party
+    appActivity : Int
+      -- ^ App activity to grant the paymaster for this purchase, in traffic bytes.
+    assetActivity : Int
+      -- ^ Asset activity to grant the paymaster for this purchase, in traffic bytes.
+  deriving (Eq, Show)
+
+-- | Fetches the dedicated synchronizer for a paymaster's purchase of `trafficAmount` bytes of
+-- traffic for `synchronizerId` by `provider`, and resolves the activity the purchase earns.
+fetchPaymasterPurchase : Party -> Party -> Text -> Int -> PaymasterTrafficPurchase -> Update PaymasterPurchase
+fetchPaymasterPurchase dso provider synchronizerId trafficAmount purchase = do
+  dedicatedSynchronizer <- fetchReferenceData (ForDso with dso) purchase.dedicatedSynchronizerCid
+  case resolvePaymasterPurchase dedicatedSynchronizer provider synchronizerId trafficAmount
+         purchase.optAppActivityWeight purchase.optAssetActivityWeight of
+    Left failureStatus -> failWithStatus failureStatus
+    Right paymasterPurchase -> pure paymasterPurchase
+
+-- | Checks that `provider` is the paymaster of `dedicatedSynchronizer` and buys traffic for it,
+-- and resolves the activity that `trafficAmount` purchased bytes earn the paymaster. Each byte
+-- earns the requested weight, capped at the config's max, in app and in asset activity, and each
+-- total is rounded down.
+resolvePaymasterPurchase : DedicatedSynchronizer -> Party -> Text -> Int -> Optional Decimal -> Optional Decimal -> Either FailureStatus PaymasterPurchase
+resolvePaymasterPurchase dedicatedSynchronizer provider synchronizerId trafficAmount optAppActivityWeight optAssetActivityWeight = do
+  checkPurchase
+  appActivityWeight <- resolveWeight "app activity weight" optAppActivityWeight config.maxAppActivityWeight
+  assetActivityWeight <- resolveWeight "asset activity weight" optAssetActivityWeight config.maxAssetActivityWeight
+  pure PaymasterPurchase with
+    paymaster = config.paymaster
+    appActivity = weighted appActivityWeight
+    assetActivity = weighted assetActivityWeight
+  where
+    config = dedicatedSynchronizer.config
+    checkPurchase
+      | provider /= config.paymaster =
+          Left $ mkNotPaymasterFailure provider config.paymaster dedicatedSynchronizer.synchronizerId
+      | synchronizerId /= dedicatedSynchronizer.synchronizerId =
+          Left $ mkDedicatedSynchronizerMismatchFailure dedicatedSynchronizer.synchronizerId synchronizerId
+      | otherwise = Right ()
+    resolveWeight weightName optWeight maxWeight = case optWeight of
+      None -> Right maxWeight
+      Some weight
+        | weight < 0.0 -> Left $ mkNegativeActivityWeightFailure weightName weight
+        | otherwise -> Right (min weight maxWeight)
+    weighted weight = floor (intToDecimal trafficAmount * weight)
+
+-- Failures
+-----------
+
+mkNotPaymasterFailure : Party -> Party -> Text -> FailureStatus
+mkNotPaymasterFailure provider paymaster synchronizerId =
+  mkFailureStatus
+    (spliceErrorId "not-paymaster")
+    InvalidGivenCurrentSystemStateOther
+    ("Only the paymaster " <> partyToText paymaster <> " may buy traffic for dedicated synchronizer "
+      <> synchronizerId <> ", not " <> partyToText provider)
+    (TextMap.fromList
+      [ ("provider", partyToText provider)
+      , ("paymaster", partyToText paymaster)
+      , ("synchronizerId", synchronizerId)
+      ])
+
+mkDedicatedSynchronizerMismatchFailure : Text -> Text -> FailureStatus
+mkDedicatedSynchronizerMismatchFailure dedicatedSynchronizerId synchronizerId =
+  mkFailureStatus
+    (spliceErrorId "dedicated-synchronizer-mismatch")
+    InvalidGivenCurrentSystemStateOther
+    ("The dedicated synchronizer is " <> dedicatedSynchronizerId <> ", not " <> synchronizerId)
+    (TextMap.fromList
+      [ ("dedicatedSynchronizerId", dedicatedSynchronizerId)
+      , ("synchronizerId", synchronizerId)
+      ])
+
+mkNegativeActivityWeightFailure : Text -> Decimal -> FailureStatus
+mkNegativeActivityWeightFailure weightName weight =
+  mkFailureStatus
+    (spliceErrorId "negative-activity-weight")
+    InvalidIndependentOfSystemState
+    ("The " <> weightName <> " " <> show weight <> " must not be negative")
+    (TextMap.fromList [("weightName", weightName), ("weight", show weight)])
+
+-- | A paymaster's purchase for a synchronizer that is part of the decentralized synchronizer.
+mkPaymasterPurchaseForDecentralizedSynchronizerFailure : Text -> FailureStatus
+mkPaymasterPurchaseForDecentralizedSynchronizerFailure synchronizerId =
+  mkFailureStatus
+    (spliceErrorId "paymaster-purchase-for-decentralized-synchronizer")
+    InvalidGivenCurrentSystemStateOther
+    ("Synchronizer " <> synchronizerId <> " is part of the decentralized synchronizer, so a paymaster can't buy traffic for it")
+    (TextMap.fromList [("synchronizerId", synchronizerId)])
+
+mkInvalidMigrationIdFailure : Text -> Int -> FailureStatus
+mkInvalidMigrationIdFailure synchronizerId migrationId =
+  mkFailureStatus
+    (spliceErrorId "invalid-migration-id")
+    InvalidIndependentOfSystemState
+    ("Traffic for dedicated synchronizer " <> synchronizerId <> " must be bought with migration id 0, not "
+      <> show migrationId)
+    (TextMap.fromList [("synchronizerId", synchronizerId), ("migrationId", show migrationId)])
+
+mkInvalidMemberIdFailure : Text -> Text -> FailureStatus
+mkInvalidMemberIdFailure message memberId =
+  mkFailureStatus
+    (spliceErrorId "invalid-member-id")
+    InvalidIndependentOfSystemState
+    message
+    (TextMap.fromList [("memberId", memberId)])
+
+-- | Activity weights given for a purchase that isn't a paymaster's.
+mkActivityWeightWithoutPaymasterFailure : Optional Decimal -> Optional Decimal -> FailureStatus
+mkActivityWeightWithoutPaymasterFailure optAppActivityWeight optAssetActivityWeight =
+  mkFailureStatus
+    (spliceErrorId "activity-weight-without-paymaster")
+    InvalidIndependentOfSystemState
+    "Activity weights are only given for a paymaster's purchase for its dedicated synchronizer"
+    (TextMap.fromList $
+      map (\weight -> ("appActivityWeight", show weight)) (optionalToList optAppActivityWeight) <>
+      map (\weight -> ("assetActivityWeight", show weight)) (optionalToList optAssetActivityWeight))

@@ -284,14 +284,14 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
           {proposalDetails.action === 'SRARC_ArchiveSynchronizerRegistration' && (
             <ArchiveSynchronizerRegistrationSection
-              registeredSynchronizerCid={proposalDetails.proposal.registeredSynchronizerCid}
+              dedicatedSynchronizerCid={proposalDetails.proposal.dedicatedSynchronizerCid}
               isOpen={!isClosed}
             />
           )}
 
           {proposalDetails.action === 'SRARC_UpdateSynchronizerRegistration' && (
             <UpdateSynchronizerRegistrationSection
-              registeredSynchronizerCid={proposalDetails.proposal.registeredSynchronizerCid}
+              dedicatedSynchronizerCid={proposalDetails.proposal.dedicatedSynchronizerCid}
               newFields={proposalDetails.proposal.newFields}
               isOpen={!isClosed}
             />

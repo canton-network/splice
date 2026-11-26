@@ -214,7 +214,7 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
         return createRegisterSynchronizerProposal(dsoAction.value);
       case 'SRARC_ArchiveSynchronizerRegistration':
         return createArchiveSynchronizerRegistrationProposal(
-          dsoAction.value.registeredSynchronizerCid
+          dsoAction.value.dedicatedSynchronizerCid
         );
       case 'SRARC_UpdateSynchronizerRegistration':
         return createUpdateSynchronizerRegistrationProposal(dsoAction.value);
@@ -314,29 +314,23 @@ function createRegisterSynchronizerProposal(
 ): RegisterSynchronizerProposal {
   return {
     synchronizerId: register.synchronizerId,
-    paymaster: register.paymaster,
-    maxAppActivityWeight: register.maxAppActivityWeight,
-    maxAssetActivityWeight: register.maxAssetActivityWeight,
+    ...register.config,
   };
 }
 
 function createArchiveSynchronizerRegistrationProposal(
-  registeredSynchronizerCid: string
+  dedicatedSynchronizerCid: string
 ): ArchiveSynchronizerRegistrationProposal {
-  return { registeredSynchronizerCid };
+  return { dedicatedSynchronizerCid };
 }
 
 function createUpdateSynchronizerRegistrationProposal({
-  registeredSynchronizerCid,
+  dedicatedSynchronizerCid,
   update,
 }: DsoRules_UpdateSynchronizerRegistration): UpdateSynchronizerRegistrationProposal {
   return {
-    registeredSynchronizerCid,
-    newFields: {
-      paymaster: update.newPaymaster,
-      maxAppActivityWeight: update.newMaxAppActivityWeight,
-      maxAssetActivityWeight: update.newMaxAssetActivityWeight,
-    },
+    dedicatedSynchronizerCid,
+    newFields: update.newConfig,
   };
 }
 

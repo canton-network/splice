@@ -22,10 +22,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.cometbft.CometBftConfigLimits
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.{
-  MemberTraffic,
-  RegisteredSynchronizer,
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.dedicatedsynchronizer.{
+  DedicatedSynchronizer,
+  DedicatedSynchronizerConfig,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
   DsoDecentralizedSynchronizerConfig,
   SynchronizerNodeConfigLimits,
@@ -522,9 +523,9 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
 
-    "RegisteredSynchronizer" should {
-      def lookup(store: SvDsoStore, cid: RegisteredSynchronizer.ContractId) =
-        store.multiDomainAcsStore.lookupContractById(RegisteredSynchronizer.COMPANION)(cid)
+    "DedicatedSynchronizer" should {
+      def lookup(store: SvDsoStore, cid: DedicatedSynchronizer.ContractId) =
+        store.multiDomainAcsStore.lookupContractById(DedicatedSynchronizer.COMPANION)(cid)
 
       "be found by contract id" in {
         val wanted = registeredSynchronizer(userParty(1), "dedicated::1220aa")
@@ -3009,14 +3010,16 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
   private def registeredSynchronizer(paymaster: PartyId, synchronizerId: String) =
     contract(
-      RegisteredSynchronizer.TEMPLATE_ID_WITH_PACKAGE_ID,
-      new RegisteredSynchronizer.ContractId(nextCid()),
-      new RegisteredSynchronizer(
+      DedicatedSynchronizer.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new DedicatedSynchronizer.ContractId(nextCid()),
+      new DedicatedSynchronizer(
         dsoParty.toProtoPrimitive,
         synchronizerId,
-        paymaster.toProtoPrimitive,
-        java.math.BigDecimal.ONE.setScale(10),
-        java.math.BigDecimal.ONE.setScale(10),
+        new DedicatedSynchronizerConfig(
+          paymaster.toProtoPrimitive,
+          java.math.BigDecimal.ONE.setScale(10),
+          java.math.BigDecimal.ONE.setScale(10),
+        ),
       ),
     )
 

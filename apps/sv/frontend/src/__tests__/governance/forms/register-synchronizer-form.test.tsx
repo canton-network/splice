@@ -216,9 +216,11 @@ describe('Register Dedicated Synchronizer Form', () => {
           tag: 'SRARC_RegisterSynchronizer',
           value: {
             synchronizerId: validSynchronizerId,
-            paymaster: validPaymaster,
-            maxAppActivityWeight: '1.0',
-            maxAssetActivityWeight: '0.25',
+            config: {
+              paymaster: validPaymaster,
+              maxAppActivityWeight: '1.0',
+              maxAssetActivityWeight: '0.25',
+            },
           },
         },
       },

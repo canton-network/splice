@@ -28,24 +28,27 @@ vi.mock('../../../hooks/useListVoteRequests', () => ({
 }));
 
 const synchronizerId = activeSynchronizerRegistrationPayload.synchronizerId;
-const paymaster = activeSynchronizerRegistrationPayload.paymaster;
+const paymaster = activeSynchronizerRegistrationPayload.config.paymaster;
 const registrationCid = activeSynchronizerRegistration.contract_id;
 
 const duplicatePaymaster = 'paymaster::1220f00dfeed';
 const duplicateRegistration = {
   ...activeSynchronizerRegistration,
   contract_id: registrationCid.replace(/^00a1/, '00b2'),
-  payload: { ...activeSynchronizerRegistrationPayload, paymaster: duplicatePaymaster },
+  payload: {
+    ...activeSynchronizerRegistrationPayload,
+    config: { ...activeSynchronizerRegistrationPayload.config, paymaster: duplicatePaymaster },
+  },
 };
 const duplicateCid = duplicateRegistration.contract_id;
 
-const openVoteOn = (tag: string, registeredSynchronizerCid: string) => ({
+const openVoteOn = (tag: string, dedicatedSynchronizerCid: string) => ({
   data: [
     {
       payload: {
         action: {
           tag: 'ARC_DsoRules',
-          value: { dsoAction: { tag, value: { registeredSynchronizerCid } } },
+          value: { dsoAction: { tag, value: { dedicatedSynchronizerCid } } },
         },
       },
     },
@@ -205,10 +208,10 @@ describe('Offboard Dedicated Synchronizer Form', () => {
     await screen.findByTestId('archive-synchronizer-registration-resolved');
     await fillAndReview(user);
 
-    expect(screen.getByTestId('registeredSynchronizerCid-field').textContent).toBe(registrationCid);
+    expect(screen.getByTestId('dedicatedSynchronizerCid-field').textContent).toBe(registrationCid);
     expect(screen.getByTestId('synchronizerId-field').textContent).toBe(synchronizerId);
     expect(screen.getByTestId('paymaster-party-id')).toHaveTextContent(
-      activeSynchronizerRegistrationPayload.paymaster
+      activeSynchronizerRegistrationPayload.config.paymaster
     );
   });
 
@@ -227,7 +230,7 @@ describe('Offboard Dedicated Synchronizer Form', () => {
       value: {
         dsoAction: {
           tag: 'SRARC_ArchiveSynchronizerRegistration',
-          value: { registeredSynchronizerCid: registrationCid },
+          value: { dedicatedSynchronizerCid: registrationCid },
         },
       },
     });
@@ -250,6 +253,6 @@ describe('Offboard Dedicated Synchronizer Form', () => {
     await screen.findByTestId('archive-synchronizer-registration-resolved');
     await fillAndReview(user);
 
-    expect(screen.getByTestId('registeredSynchronizerCid-field').textContent).toBe(duplicateCid);
+    expect(screen.getByTestId('dedicatedSynchronizerCid-field').textContent).toBe(duplicateCid);
   });
 });

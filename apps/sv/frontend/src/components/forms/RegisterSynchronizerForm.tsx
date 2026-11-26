@@ -92,7 +92,7 @@ export const RegisterSynchronizerForm: React.FC = _ => {
             tag: 'SRARC_RegisterSynchronizer',
             value: {
               synchronizerId: value.synchronizerId.trim(),
-              ...fromRegistrationFieldValues(value.fields),
+              config: fromRegistrationFieldValues(value.fields),
             },
           },
         },

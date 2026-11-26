@@ -5,6 +5,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   metadatav1,
   transferinstructionv1,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.dedicatedsynchronizer.DedicatedSynchronizerConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_RegisterSynchronizer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
@@ -173,9 +174,11 @@ class MemberTrafficIntegrationTest
             new SRARC_RegisterSynchronizer(
               new DsoRules_RegisterSynchronizer(
                 synchronizerId.toProtoPrimitive,
-                aliceParty.toProtoPrimitive,
-                java.math.BigDecimal.ONE,
-                java.math.BigDecimal.ONE,
+                new DedicatedSynchronizerConfig(
+                  aliceParty.toProtoPrimitive,
+                  java.math.BigDecimal.ONE,
+                  java.math.BigDecimal.ONE,
+                ),
               )
             )
           ),
@@ -311,7 +314,7 @@ class MemberTrafficIntegrationTest
     )
     val (factory, _) = sv1ScanBackend.getTransferFactory(choiceArgs)
     factory.args.extraArgs.context.values.asScala
-      .contains(TokenStandardMetadata.registeredSynchronizerContextKey)
+      .contains(TokenStandardMetadata.dedicatedSynchronizerContextKey)
   }
 
   private def listPaymasterTrafficContracts(

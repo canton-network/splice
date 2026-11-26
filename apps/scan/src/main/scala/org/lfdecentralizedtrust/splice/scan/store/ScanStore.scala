@@ -226,12 +226,12 @@ trait ScanStore
     * register a synchronizer at most once. With several, this returns the most recently created
     * one, the same on every Scan.
     */
-  def lookupRegisteredSynchronizer(
+  def lookupDedicatedSynchronizer(
       synchronizerId: SynchronizerId
   )(implicit tc: TraceContext): Future[
     Option[ContractWithState[
-      splice.decentralizedsynchronizer.RegisteredSynchronizer.ContractId,
-      splice.decentralizedsynchronizer.RegisteredSynchronizer,
+      splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.ContractId,
+      splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer,
     ]]
   ]
 }
@@ -539,7 +539,7 @@ object ScanStore {
             contract = contract
           )
         },
-        mkFilter(splice.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION)(
+        mkFilter(splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.COMPANION)(
           co => co.payload.dso == dso,
           versionGuard = { case (pkgVersionSupport, now) =>
             (tc) => pkgVersionSupport.supportsDedicatedSynchronizers(Seq(key.dsoParty), now)(tc)

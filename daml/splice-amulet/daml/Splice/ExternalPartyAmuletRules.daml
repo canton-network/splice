@@ -11,7 +11,6 @@ import DA.Foldable (forA_)
 import DA.Optional
 import qualified DA.TextMap as TextMap
 import DA.Time
-import DA.Traversable qualified as Traversable
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as Api.Token.TransferInstructionV1
@@ -25,6 +24,7 @@ import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 
 import Splice.Amulet
 import Splice.AmuletConfig (getTokenStandardMaxTTL)
+import Splice.Amulet.DedicatedSynchronizer (DedicatedSynchronizer, PaymasterTrafficPurchase(..), mkActivityWeightWithoutPaymasterFailure)
 import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer
 import Splice.AmuletAllocation as AmuletAllocationV1
@@ -33,7 +33,7 @@ import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
 import Splice.GovernanceLock (assertInPast24Hours, lockManagerParty)
 import Splice.GovernanceLock.Request (governanceLock_transferFactoryV1_transferImpl)
-import Splice.DecentralizedSynchronizer (DSyncTrafficPurchase(..), MemberTrafficPurchase(..), RegisteredSynchronizer, parseTrafficPurchaseMemo)
+import Splice.DecentralizedSynchronizer (MemberTrafficPurchase(..), parseTrafficPurchaseMemo)
 import Splice.Round (OpenMiningRound(..))
 import Splice.Types
 import Splice.Util
@@ -406,18 +406,6 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
     trafficConfig <- case trafficPurchaseConfigFromConfigState configState of
       None -> fail "The referenced ExternalPartyConfigState carries no traffic purchase configuration"
       Some trafficConfig -> pure trafficConfig
-    -- A paymaster's purchase for its registered synchronizer comes with the registration in the
-    -- choice context (canton-network/splice#7561), and may give its activity weights in the memo.
-    optRegisteredSynchronizerCid <-
-      lookupFromContextU @(ContractId RegisteredSynchronizer) arg.extraArgs.context registeredSynchronizerContextKey
-    when (isNone optRegisteredSynchronizerCid &&
-          (isSome purchaseMemo.appActivityWeight || isSome purchaseMemo.assetActivityWeight)) $
-      failWithStatus (mkActivityWeightWithoutRegistrationFailure purchaseMemo.appActivityWeight purchaseMemo.assetActivityWeight)
-    optPaymasterPurchase <- Traversable.forA optRegisteredSynchronizerCid $ \registeredSynchronizerCid ->
-      fetchPaymasterPurchase dso DSyncTrafficPurchase with
-        registeredSynchronizerCid
-        optAppActivityWeight = purchaseMemo.appActivityWeight
-        optAssetActivityWeight = purchaseMemo.assetActivityWeight
     paymentContext <- unfeaturedPaymentContextFromChoiceContext dso arg.extraArgs.context
     csum <- summarizeAndValidateExternalPartyContext paymentContext dso transfer.sender
     require "Traffic price must be positive" (trafficConfig.trafficPrice > 0.0)
@@ -435,14 +423,35 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
           assertDeadlineExceeded "openRound.opensAt" openRound.opensAt
           pure (IssueValidatorRewardCoupon openRound.round)
     let trafficCostUsd = transfer.amount * csum.amuletPrice
-        purchase = MemberTrafficPurchase with
+        trafficAmount = floor (trafficCostUsd * 1e6 / trafficConfig.trafficPrice)
+    -- The memo's synchronizer selects the kind of purchase, not the choice context, which one SV's
+    -- Scan provides. Only a paymaster's purchase for its dedicated synchronizer takes the dedicated
+    -- synchronizer from the choice context, and may give its activity weights in the memo.
+    optPaymasterTrafficPurchase <-
+      if purchaseMemo.synchronizerId `elem` trafficConfig.supportedSynchronizerIds
+        then do
+          when (isSome purchaseMemo.appActivityWeight || isSome purchaseMemo.assetActivityWeight) $
+            failWithStatus (mkActivityWeightWithoutPaymasterFailure purchaseMemo.appActivityWeight purchaseMemo.assetActivityWeight)
+          pure None
+        else do
+          optDedicatedSynchronizerCid <-
+            lookupFromContextU @(ContractId DedicatedSynchronizer) arg.extraArgs.context dedicatedSynchronizerContextKey
+          pure $ fmap
+            (\dedicatedSynchronizerCid -> PaymasterTrafficPurchase with
+              dedicatedSynchronizerCid
+              optAppActivityWeight = purchaseMemo.appActivityWeight
+              optAssetActivityWeight = purchaseMemo.assetActivityWeight)
+            optDedicatedSynchronizerCid
+    paymaster <- fetchOptPaymasterPurchase dso trafficConfig transfer.sender purchaseMemo.synchronizerId trafficAmount optPaymasterTrafficPurchase
+    let purchase = MemberTrafficPurchase with
           provider = transfer.sender
           memberId = purchaseMemo.memberId
           synchronizerId = purchaseMemo.synchronizerId
           migrationId = purchaseMemo.migrationId
-          trafficAmount = floor (trafficCostUsd * 1e6 / trafficConfig.trafficPrice)
+          trafficAmount
+          paymaster
     inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
-    result <- buyMemberTraffic (toInterfaceContractId configStateCid) csum trafficConfig optPaymasterPurchase purchase
+    result <- buyMemberTraffic (toInterfaceContractId configStateCid) csum trafficConfig purchase
       (transfer.amount, trafficCostUsd) inputs
       burnRewardPolicy
     pure Api.Token.TransferInstructionV1.TransferInstructionResult with

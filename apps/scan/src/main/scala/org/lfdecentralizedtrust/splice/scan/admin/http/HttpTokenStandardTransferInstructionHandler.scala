@@ -81,7 +81,7 @@ class HttpTokenStandardTransferInstructionHandler(
           body.excludeDebugFields.getOrElse(false)
         )
         dsoRules <- store.getDsoRules()
-        optRegisteredSynchronizer <- lookupTrafficPurchaseRegistration(
+        optDedicatedSynchronizer <- lookupTrafficPurchaseRegistration(
           transferInstr.transfer.receiver,
           transferInstr.transfer.meta,
         )
@@ -103,7 +103,7 @@ class HttpTokenStandardTransferInstructionHandler(
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
                   "transfer-preapproval" -> optTransferPreapproval,
-                  TokenStandardMetadata.registeredSynchronizerContextKey -> optRegisteredSynchronizer,
+                  TokenStandardMetadata.dedicatedSynchronizerContextKey -> optDedicatedSynchronizer,
                 )
                 .addFeaturedAppRight(clock, dsoRules.payload, optFeaturedAppRight)
                 .disclose(externalPartyAmuletRules.contract)
@@ -195,7 +195,7 @@ class HttpTokenStandardTransferInstructionHandler(
           body.excludeDebugFields.getOrElse(false)
         )
         dsoRules <- store.getDsoRules()
-        optRegisteredSynchronizer <- lookupTrafficPurchaseRegistration(
+        optDedicatedSynchronizer <- lookupTrafficPurchaseRegistration(
           TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.receiver),
           transferInstr.transfer.meta,
         )
@@ -221,7 +221,7 @@ class HttpTokenStandardTransferInstructionHandler(
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
                   "transfer-preapproval" -> optTransferPreapproval,
-                  TokenStandardMetadata.registeredSynchronizerContextKey -> optRegisteredSynchronizer,
+                  TokenStandardMetadata.dedicatedSynchronizerContextKey -> optDedicatedSynchronizer,
                 )
                 .addFeaturedAppRight(clock, dsoRules.payload, optFeaturedAppRight)
                 .disclose(externalPartyAmuletRules.contract)
@@ -290,7 +290,7 @@ class HttpTokenStandardTransferInstructionHandler(
   }
 
   /** The registration of the dedicated synchronizer that a traffic purchase's memo names, which a
-    * paymaster's purchase for its registered synchronizer needs in its choice context. None for any
+    * paymaster's purchase for its dedicated synchronizer needs in its choice context. None for any
     * other transfer, and for a memo whose synchronizer id doesn't parse. The Daml code checks that
     * the sender is the registration's paymaster.
     */
@@ -298,8 +298,8 @@ class HttpTokenStandardTransferInstructionHandler(
       receiver: String,
       meta: metadatav1.Metadata,
   )(implicit tc: TraceContext): Future[Option[ContractWithState[
-    splice.decentralizedsynchronizer.RegisteredSynchronizer.ContractId,
-    splice.decentralizedsynchronizer.RegisteredSynchronizer,
+    splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.ContractId,
+    splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer,
   ]]] =
     Option
       .when(receiver == TokenStandardMetadata.trafficPurchaseReceiver)(
@@ -309,7 +309,7 @@ class HttpTokenStandardTransferInstructionHandler(
       .flatMap(TokenStandardMetadata.trafficPurchaseMemoSynchronizerId)
       .flatMap(SynchronizerId.fromString(_).toOption) match {
       case None => Future.successful(None)
-      case Some(synchronizerId) => store.lookupRegisteredSynchronizer(synchronizerId)
+      case Some(synchronizerId) => store.lookupDedicatedSynchronizer(synchronizerId)
     }
 
   private def buildTransferFactory[FactoryResponse](

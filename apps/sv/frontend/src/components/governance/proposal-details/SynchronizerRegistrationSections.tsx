@@ -4,7 +4,7 @@
 import { Alert, Box, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
-import { RegisteredSynchronizer } from '@daml.js/splice-amulet/lib/Splice/DecentralizedSynchronizer';
+import { DedicatedSynchronizer } from '@daml.js/splice-amulet/lib/Splice/Amulet/DedicatedSynchronizer';
 import { useSvAdminClient } from '../../../contexts/SvAdminServiceContext';
 import type { RegisterSynchronizerProposal } from '../../../utils/types';
 import {
@@ -23,7 +23,7 @@ const useRegistrationByContractId = (contractId: string) => {
     queryFn: async () => {
       const response = await svAdminClient.lookupSynchronizerRegistrationByContractId(contractId);
       return response.registration
-        ? Contract.decodeOpenAPI(response.registration, RegisteredSynchronizer).payload
+        ? Contract.decodeOpenAPI(response.registration, DedicatedSynchronizer).payload
         : null;
     },
   });
@@ -119,15 +119,15 @@ export const RegisterSynchronizerSection: React.FC<RegisterSynchronizerSectionPr
 
 interface PinnedRegistrationProps {
   idPrefix: string;
-  registeredSynchronizerCid: string;
+  dedicatedSynchronizerCid: string;
   isOpen: boolean;
-  registration: RegisteredSynchronizer | null | undefined;
+  registration: DedicatedSynchronizer | null | undefined;
   isLoaded: boolean;
 }
 
 const PinnedRegistration = ({
   idPrefix,
-  registeredSynchronizerCid,
+  dedicatedSynchronizerCid,
   isOpen,
   registration,
   isLoaded,
@@ -143,14 +143,14 @@ const PinnedRegistration = ({
     {registration && (
       <>
         <SynchronizerIdItem idPrefix={idPrefix} synchronizerId={registration.synchronizerId} />
-        <PartyItem idPrefix={idPrefix} field="paymaster" partyId={registration.paymaster} />
+        <PartyItem idPrefix={idPrefix} field="paymaster" partyId={registration.config.paymaster} />
       </>
     )}
     <DetailItem
       label="Registration Contract ID"
       value={
         <CopyableIdentifier
-          value={registeredSynchronizerCid}
+          value={dedicatedSynchronizerCid}
           size="large"
           data-testid={`${idPrefix}-contract-id`}
         />
@@ -160,20 +160,20 @@ const PinnedRegistration = ({
 );
 
 interface ArchiveSynchronizerRegistrationSectionProps {
-  registeredSynchronizerCid: string;
+  dedicatedSynchronizerCid: string;
   isOpen: boolean;
 }
 
 export const ArchiveSynchronizerRegistrationSection: React.FC<
   ArchiveSynchronizerRegistrationSectionProps
-> = ({ registeredSynchronizerCid, isOpen }) => {
+> = ({ dedicatedSynchronizerCid, isOpen }) => {
   const idPrefix = 'proposal-details-archive-synchronizer';
-  const registrationQuery = useRegistrationByContractId(registeredSynchronizerCid);
+  const registrationQuery = useRegistrationByContractId(dedicatedSynchronizerCid);
   return (
     <Box id={`${idPrefix}-section`} data-testid={`${idPrefix}-section`}>
       <PinnedRegistration
         idPrefix={idPrefix}
-        registeredSynchronizerCid={registeredSynchronizerCid}
+        dedicatedSynchronizerCid={dedicatedSynchronizerCid}
         isOpen={isOpen}
         registration={registrationQuery.data}
         isLoaded={registrationQuery.isSuccess}
@@ -183,21 +183,21 @@ export const ArchiveSynchronizerRegistrationSection: React.FC<
 };
 
 interface UpdateSynchronizerRegistrationSectionProps {
-  registeredSynchronizerCid: string;
+  dedicatedSynchronizerCid: string;
   newFields: RegistrationFields;
   isOpen: boolean;
 }
 
 export const UpdateSynchronizerRegistrationSection: React.FC<
   UpdateSynchronizerRegistrationSectionProps
-> = ({ registeredSynchronizerCid, newFields, isOpen }) => {
+> = ({ dedicatedSynchronizerCid, newFields, isOpen }) => {
   const idPrefix = 'proposal-details-update-synchronizer-registration';
-  const registrationQuery = useRegistrationByContractId(registeredSynchronizerCid);
+  const registrationQuery = useRegistrationByContractId(dedicatedSynchronizerCid);
   return (
     <Box id={`${idPrefix}-section`} data-testid={`${idPrefix}-section`}>
       <PinnedRegistration
         idPrefix={idPrefix}
-        registeredSynchronizerCid={registeredSynchronizerCid}
+        dedicatedSynchronizerCid={dedicatedSynchronizerCid}
         isOpen={isOpen}
         registration={registrationQuery.data}
         isLoaded={registrationQuery.isSuccess}
@@ -206,7 +206,7 @@ export const UpdateSynchronizerRegistrationSection: React.FC<
         label="Proposed Changes"
         value={
           <ConfigValuesChanges
-            changes={registrationChanges(registrationQuery.data ?? undefined, newFields)}
+            changes={registrationChanges(registrationQuery.data?.config, newFields)}
           />
         }
       />
