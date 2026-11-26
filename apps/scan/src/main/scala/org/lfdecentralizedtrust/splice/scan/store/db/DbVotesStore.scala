@@ -152,21 +152,22 @@ class DbVotesStore private (
       limit: Limit,
       after: Option[Long],
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] =
-    // The page token of /v0/admin/sv/voteresults is a number, so this uses the row_id,
-    // which is only used to look up the position in the sort order.
-    queryVoteResults(
-      "listVoteRequestResults",
-      filters,
-      limit,
-      after.map(a => sql"""(#$sortKey, record_time, event_number) <
-        (select #$sortKey, record_time, event_number
-         from #$table where store_id = $storeId and row_id = $a)"""),
-    ).map { rows =>
-      ResultsPage(
-        rows.map(row => DsoRules_CloseVoteRequestResult.fromJson(row.result.choiceResult)),
-        rows.lastOption.map(_.rowId),
+    for {
+      parsed <- Future.fromTry(Try(Filters.tryParse(filters)))
+      // The page token of /v0/admin/sv/voteresults is a number, so this uses the row_id,
+      // which is only used to look up the position in the sort order.
+      rows <- queryVoteResults(
+        "listVoteRequestResults",
+        parsed,
+        limit,
+        after.map(a => sql"""(#$sortKey, record_time, event_number) <
+          (select #$sortKey, record_time, event_number
+           from #$table where store_id = $storeId and row_id = $a)"""),
       )
-    }
+    } yield ResultsPage(
+      rows.map(row => DsoRules_CloseVoteRequestResult.fromJson(row.result.choiceResult)),
+      rows.lastOption.map(_.rowId),
+    )
 
   /** Like [[listVoteRequestResults]], with the data that identifies each vote result,
     * and the JSON of each result as stored, without decoding it.
@@ -175,7 +176,7 @@ class DbVotesStore private (
     * so it is the same on all scans, and stays valid if the table is rebuilt.
     */
   def listVoteResults(
-      filters: VoteResultsFilters,
+      filters: Filters,
       limit: Limit,
       after: Option[VoteResultsPageToken],
   )(implicit tc: TraceContext): Future[VoteResultsPage] =
@@ -191,64 +192,53 @@ class DbVotesStore private (
 
   private def queryVoteResults(
       operation: String,
-      filters: VoteResultsFilters,
+      filters: Filters,
       limit: Limit,
       afterCond: Option[SQLActionBuilder],
-  )(implicit tc: TraceContext): Future[Seq[VoteResultRow]] =
-    for {
-      where <- Future.fromTry(Try {
-        and(filterConditions(storeId, filters) ++ afterCond.toList.map(toSQLActionBuilderChain))
-      })
-      rows <- futureUnlessShutdownToFuture(
-        storage.query(
-          (sql"""select row_id, #$sortKey,
+  )(implicit tc: TraceContext): Future[Seq[VoteResultRow]] = {
+    val where =
+      and(filterConditions(storeId, filters) ++ afterCond.toList.map(toSQLActionBuilderChain))
+    futureUnlessShutdownToFuture(
+      storage.query(
+        (sql"""select row_id, #$sortKey,
                    record_time, synchronizer_id, update_id, event_number, contract_id, choice_result
                  from #$table where """ ++ where ++
-            sql" order by #$sortKey desc, record_time desc, event_number desc limit ${sqlLimit(limit)}").toActionBuilder
-            .as[(Long, Long, ServedVoteResult)],
-          s"DbVotesStore.$operation",
-        )
+          sql" order by #$sortKey desc, record_time desc, event_number desc limit ${sqlLimit(limit)}").toActionBuilder
+          .as[(Long, Long, ServedVoteResult)],
+        s"DbVotesStore.$operation",
       )
-    } yield applyLimit(operation, limit, rows).map { case (rowId, sortKey, result) =>
-      VoteResultRow(
-        rowId,
-        VoteResultsPageToken(
-          CantonTimestamp.assertFromLong(sortKey),
-          result.recordTime,
-          result.eventNumber,
-        ),
-        result,
+    )
+      .map(rows =>
+        applyLimit(operation, limit, rows).map { case (rowId, sortKey, result) =>
+          VoteResultRow(
+            rowId,
+            VoteResultsPageToken(
+              CantonTimestamp.assertFromLong(sortKey),
+              result.recordTime,
+              result.eventNumber,
+            ),
+            result,
+          )
+        }
       )
-    }
+  }
 
   override def countVoteRequestResults(filters: VoteResultsFilters)(implicit
       tc: TraceContext
-  ): Future[Long] = {
-    for {
-      where <- Future.fromTry(Try(and(filterConditions(storeId, filters))))
-      count <- futureUnlessShutdownToFuture(
-        storage.query(
-          (sql"select count(*) from #$table where " ++ where).toActionBuilder
-            .as[Long]
-            .head,
-          "DbVotesStore.countVoteRequestResults",
-        )
-      )
-    } yield {
-      count
-    }
-  }
+  ): Future[Long] =
+    Future.fromTry(Try(Filters.tryParse(filters))).flatMap(countVoteResults)
 
-  /** Fails with INVALID_ARGUMENT (HTTP 400) if the date cannot be parsed. */
-  private def parseMicros(field: String, s: String): Long =
-    Try(Instant.parse(s)).toOption
-      .flatMap(CantonTimestamp.fromInstant(_).toOption)
-      .getOrElse(
-        throw Status.INVALID_ARGUMENT
-          .withDescription(s"Invalid $field: '$s' is not an ISO-8601 instant")
-          .asRuntimeException()
+  def countVoteResults(filters: Filters)(implicit tc: TraceContext): Future[Long] =
+    futureUnlessShutdownToFuture(
+      storage.query(
+        (sql"select count(*) from #$table where " ++ and(
+          filterConditions(storeId, filters)
+        )).toActionBuilder
+          .as[Long]
+          .head,
+        "DbVotesStore.countVoteResults",
       )
-      .toMicros
+    )
 
   private def and(conds: NonEmptyList[SQLActionBuilderChain]) =
     conds.reduceLeft((a, b) => (a ++ sql" and " ++ b).toActionBuilder)
@@ -257,17 +247,14 @@ class DbVotesStore private (
   // so it stays small (thousands of rows) and is scanned. Only the sort order is index-backed.
   private def filterConditions(
       storeId: Int,
-      f: VoteResultsFilters,
+      f: Filters,
   ): NonEmptyList[SQLActionBuilderChain] = NonEmptyList(
     toSQLActionBuilderChain(sql"store_id = $storeId"),
     List(
       f.actionName.map(n => sql"vote_action_name like ${lengthLimited(s"%$n%")}"),
       f.accepted.map(a => sql"vote_accepted = $a"),
       f.requester.map(r => sql"vote_requester_name like ${lengthLimited(s"%$r%")}"),
-      (
-        f.effectiveFrom.map(parseMicros("effective_from", _)),
-        f.effectiveTo.map(parseMicros("effective_to", _)),
-      ) match {
+      (f.effectiveFrom.map(_.toMicros), f.effectiveTo.map(_.toMicros)) match {
         case (Some(from), Some(to)) => Some(sql"vote_effective_at between $from and $to")
         case (Some(from), None) => Some(sql"vote_effective_at >= $from")
         case (None, Some(to)) => Some(sql"vote_effective_at <= $to")
@@ -398,6 +385,48 @@ object DbVotesStore {
           )
           .leftMap(e => io.circe.DecodingFailure(e.getMessage, c.history))
       } yield token
+  }
+
+  /** Like [[VoteResultsFilters]], with the dates parsed. */
+  final case class Filters(
+      actionName: Option[String] = None,
+      accepted: Option[Boolean] = None,
+      requester: Option[String] = None,
+      effectiveFrom: Option[CantonTimestamp] = None,
+      effectiveTo: Option[CantonTimestamp] = None,
+  )
+
+  object Filters {
+
+    /** Fails with INVALID_ARGUMENT (HTTP 400) if a date cannot be parsed. */
+    def tryParse(filters: VoteResultsFilters): Filters =
+      Filters(
+        actionName = filters.actionName,
+        accepted = filters.accepted,
+        requester = filters.requester,
+        effectiveFrom = filters.effectiveFrom.map(tryParseTimestamp("effective_from", _)),
+        effectiveTo = filters.effectiveTo.map(tryParseTimestamp("effective_to", _)),
+      )
+
+    /** Fails with INVALID_ARGUMENT (HTTP 400) if the instant is out of range. */
+    def tryTimestamp(field: String, instant: Instant): CantonTimestamp =
+      CantonTimestamp
+        .fromInstant(instant)
+        .valueOr(_ =>
+          throw Status.INVALID_ARGUMENT
+            .withDescription(s"Invalid $field: $instant is out of range")
+            .asRuntimeException()
+        )
+
+    private def tryParseTimestamp(field: String, s: String): CantonTimestamp =
+      tryTimestamp(
+        field,
+        Try(Instant.parse(s)).getOrElse(
+          throw Status.INVALID_ARGUMENT
+            .withDescription(s"Invalid $field: '$s' is not an ISO-8601 instant")
+            .asRuntimeException()
+        ),
+      )
   }
 
   final case class VoteResultsPage(

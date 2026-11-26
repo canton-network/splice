@@ -41,7 +41,6 @@ import org.lfdecentralizedtrust.splice.store.{
   HistoricalVotesStore,
   Limit,
   UpdateHistory,
-  VoteResultsFilters,
 }
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -106,12 +105,12 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
       .thenReturn(Future.successful(backfillingComplete))
     when(
       votesStore.listVoteResults(
-        any[VoteResultsFilters],
+        any[DbVotesStore.Filters],
         any[Limit],
         any[Option[DbVotesStore.VoteResultsPageToken]],
       )(any[TraceContext])
     ).thenReturn(Future.successful(DbVotesStore.VoteResultsPage(rows, Some(pageToken))))
-    when(votesStore.countVoteRequestResults(any[VoteResultsFilters])(any[TraceContext]))
+    when(votesStore.countVoteResults(any[DbVotesStore.Filters])(any[TraceContext]))
       .thenReturn(Future.successful(rows.size.toLong))
 
     val handler = new HttpScanHandler(
@@ -176,7 +175,7 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
       )
       verify(votesStore, never)
         .listVoteResults(
-          any[VoteResultsFilters],
+          any[DbVotesStore.Filters],
           any[Limit],
           any[Option[DbVotesStore.VoteResultsPageToken]],
         )(any[TraceContext])
@@ -232,17 +231,31 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
         .futureValue
       verify(votesStore).listVoteResults(
         eqTo(
-          VoteResultsFilters(
+          DbVotesStore.Filters(
             actionName = Some("SRARC_AddSv"),
             accepted = Some(true),
             requester = Some("sv1"),
-            effectiveFrom = Some("2026-01-01T00:00:00Z"),
-            effectiveTo = Some("2026-02-01T00:00:00Z"),
+            effectiveFrom =
+              Some(CantonTimestamp.assertFromInstant(Instant.parse("2026-01-01T00:00:00Z"))),
+            effectiveTo =
+              Some(CantonTimestamp.assertFromInstant(Instant.parse("2026-02-01T00:00:00Z"))),
           )
         ),
         any[Limit],
         eqTo(Some(pageToken)),
       )(any[TraceContext])
+    }
+
+    "fail with INVALID_ARGUMENT for a date that is out of range" in {
+      val (h, _) = handler(backfillingComplete = true)
+      assertGrpcError(
+        h.listVoteRequestResultsV1(ScanResource.ListVoteRequestResultsV1Response)(
+          listRequest(
+            Some(definitions.VoteResultsFiltersV1(effectiveFrom = Some(OffsetDateTime.MIN)))
+          )
+        )(tc),
+        Status.Code.INVALID_ARGUMENT,
+      )
     }
 
     "fail with INVALID_ARGUMENT for an invalid page token" in {
@@ -266,7 +279,7 @@ class HttpScanHandlerVoteResultsV1Test extends AnyWordSpec with BaseTest {
         )(tc),
         Status.Code.UNAVAILABLE,
       )
-      verify(votesStore, never).countVoteRequestResults(any[VoteResultsFilters])(any[TraceContext])
+      verify(votesStore, never).countVoteResults(any[DbVotesStore.Filters])(any[TraceContext])
     }
 
     "count the vote results" in {

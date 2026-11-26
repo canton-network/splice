@@ -2141,13 +2141,16 @@ class HttpScanHandler(
 
   private def voteResultsFiltersV1(
       filters: definitions.VoteResultsFiltersV1
-  ): VoteResultsFilters =
-    VoteResultsFilters(
+  ): DbVotesStore.Filters =
+    DbVotesStore.Filters(
       actionName = filters.actionName,
       accepted = filters.accepted,
       requester = filters.requester,
-      effectiveFrom = filters.effectiveFrom.map(_.toInstant.toString),
-      effectiveTo = filters.effectiveTo.map(_.toInstant.toString),
+      effectiveFrom = filters.effectiveFrom.map(d =>
+        DbVotesStore.Filters.tryTimestamp("effective_from", d.toInstant)
+      ),
+      effectiveTo =
+        filters.effectiveTo.map(d => DbVotesStore.Filters.tryTimestamp("effective_to", d.toInstant)),
     )
 
   /** Unlike `/v0/admin/sv/voteresults`, which serves the txlog, the endpoints served from the votes
@@ -2179,7 +2182,7 @@ class HttpScanHandler(
       confirmVotesBackfillingIsCompleteThen {
         votesStore
           .listVoteResults(
-            body.filters.fold(VoteResultsFilters())(voteResultsFiltersV1),
+            body.filters.fold(DbVotesStore.Filters())(voteResultsFiltersV1),
             PageLimit.tryCreate(body.pageSize),
             body.pageToken.map(DbVotesStore.VoteResultsPageToken.tryDecodeFromBase64),
           )
@@ -2232,7 +2235,7 @@ class HttpScanHandler(
     withSpan(s"$workflowId.countVoteRequestResultsV1") { _ => _ =>
       confirmVotesBackfillingIsCompleteThen {
         votesStore
-          .countVoteRequestResults(voteResultsFiltersV1(body))
+          .countVoteResults(voteResultsFiltersV1(body))
           .map(count =>
             ScanResource.CountVoteRequestResultsV1Response.OK(
               definitions.CountVoteResultsResponseV1(count)

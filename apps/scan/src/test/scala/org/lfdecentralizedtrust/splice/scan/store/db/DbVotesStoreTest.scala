@@ -218,7 +218,7 @@ class DbVotesStoreTest
         for {
           stores <- mkStores()
           _ <- ingestAll(stores, voteFixtures)
-          page <- stores.votesStore.listVoteResults(VoteResultsFilters(), PageLimit.Max, None)
+          page <- stores.votesStore.listVoteResults(DbVotesStore.Filters(), PageLimit.Max, None)
           resultsPage <- stores.votesStore.listVoteRequestResults(
             VoteResultsFilters(),
             PageLimit.Max,
@@ -260,11 +260,12 @@ class DbVotesStoreTest
             after: Option[DbVotesStore.VoteResultsPageToken],
             acc: Seq[DbVotesStore.ServedVoteResult],
         ): Future[Seq[DbVotesStore.ServedVoteResult]] =
-          votesStore.listVoteResults(VoteResultsFilters(), PageLimit.tryCreate(2), after).flatMap {
-            page =>
+          votesStore
+            .listVoteResults(DbVotesStore.Filters(), PageLimit.tryCreate(2), after)
+            .flatMap { page =>
               if (page.resultsInPage.isEmpty) Future.successful(acc)
               else go(votesStore, page.nextPageToken, acc ++ page.resultsInPage)
-          }
+            }
         for {
           stores <- mkStores()
           // Ingested in the opposite order of the record times
@@ -300,7 +301,7 @@ class DbVotesStoreTest
         for {
           stores <- mkStores()
           _ <- ingestAll(stores, voteFixtures)
-          page <- stores.votesStore.listVoteResults(VoteResultsFilters(), PageLimit.Max, None)
+          page <- stores.votesStore.listVoteResults(DbVotesStore.Filters(), PageLimit.Max, None)
         } yield {
           page.resultsInPage should have size voteFixtures.flatMap(_.votes).size.toLong
           forAll(page.resultsInPage) { row =>
