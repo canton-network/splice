@@ -409,6 +409,25 @@ class UpdateHistory private (
       }
   }
 
+  def dropPartitions(day: LocalDate)(implicit tc: TraceContext): Future[Unit] = {
+    val tableSuffix = day.format(DateTimeFormatter.BASIC_ISO_DATE)
+    storage.queryAndUpdate(
+      AdvisoryLocks.withBlockingTransactionalLock(
+        profile,
+        AdvisoryLockIds.createUpdateHistoryPartitionStatement,
+        DBIO.seq(
+          sqlu"set local lock_timeout = '5s'",
+          AdvisoryLocks.withDdlLock(
+            DBIO.seq(PartitionedTables.map { table =>
+              sqlu"drop table if exists #${table}_#$tableSuffix"
+            }*)
+          ),
+        ),
+      ),
+      "dropPartitions",
+    )
+  }
+
   def readLastIngestedRecordTime()(implicit
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] = {

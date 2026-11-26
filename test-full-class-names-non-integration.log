@@ -30,6 +30,7 @@ org.lfdecentralizedtrust.splice.scan.admin.http.HttpScanHandlerVoteResultsV1Test
 org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodingsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.UpdateHistoryOmitNullStringComplianceTest
 org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerTest
+org.lfdecentralizedtrust.splice.scan.automation.PruneUpdateHistoryTriggerTest
 org.lfdecentralizedtrust.splice.scan.automation.ScanHistoryStartTriggerTest
 org.lfdecentralizedtrust.splice.scan.automation.ScanVerdictIngestionServiceTest
 org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigTest

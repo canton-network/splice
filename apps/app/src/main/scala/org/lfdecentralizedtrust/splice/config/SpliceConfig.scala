@@ -25,6 +25,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanSnapshotPruningConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
+  ScanUpdateHistoryPruningConfig,
   TokenStandardConfig,
   CacheConfig as SpliceCacheConfig,
 }
@@ -549,6 +550,9 @@ object SpliceConfig {
       deriveReader[AnalyzableTimeWindowConfig]
     implicit val scanSnapshotPruningConfigReader: ConfigReader[ScanSnapshotPruningConfig] =
       deriveReader[ScanSnapshotPruningConfig]
+    implicit val scanUpdateHistoryPruningConfigReader
+        : ConfigReader[ScanUpdateHistoryPruningConfig] =
+      deriveReader[ScanUpdateHistoryPruningConfig]
     implicit val scanPruningConfigReader: ConfigReader[ScanPruningConfig] =
       deriveReader[ScanPruningConfig]
     implicit val scanConfigReader: ConfigReader[ScanAppBackendConfig] =
@@ -1098,6 +1102,9 @@ object SpliceConfig {
       deriveWriter[AnalyzableTimeWindowConfig]
     implicit val scanSnapshotPruningConfigWriter: ConfigWriter[ScanSnapshotPruningConfig] =
       deriveWriter[ScanSnapshotPruningConfig]
+    implicit val scanUpdateHistoryPruningConfigWriter
+        : ConfigWriter[ScanUpdateHistoryPruningConfig] =
+      deriveWriter[ScanUpdateHistoryPruningConfig]
     implicit val scanPruningConfigWriter: ConfigWriter[ScanPruningConfig] =
       deriveWriter[ScanPruningConfig]
     implicit val scanConfigWriter: ConfigWriter[ScanAppBackendConfig] =

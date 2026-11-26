@@ -70,6 +70,30 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
       }
     }
 
+    "dropPartitions" should {
+
+      val day0 = LocalDate.ofInstant(CantonTimestamp.Epoch.toInstant, ZoneOffset.UTC)
+      def daysAfter(days: Long) = CantonTimestamp.Epoch.plus(java.time.Duration.ofDays(days))
+
+      "drop the updates of that day only, and not recreate the day" in {
+        val store = mkStore()
+        for {
+          _ <- initStore(store, timeStart = CantonTimestamp.Epoch, partitionRunwayDays = 3)
+          _ <- create(domain1, cid1, offset1, party1, store, daysAfter(0).plusSeconds(10))
+          _ <- create(domain1, cid2, offset2, party1, store, daysAfter(1).plusSeconds(10))
+          _ <- store.dropPartitions(day0)
+          _ <- store.dropPartitions(day0)
+          _ <- store.ingestionSink.initialize(mockLedgerConnection())
+          days <- store.listDatesWithAllPartitions()
+          result <- updates(store)
+        } yield {
+          days should not contain day0
+          days should contain(day0.plusDays(1))
+          result.map(_.update.recordTime) shouldBe Seq(daysAfter(1).plusSeconds(10))
+        }
+      }
+    }
+
     "analyzePartitionedTables" should {
 
       "use ANALYZE ONLY from Postgres 18 and plain ANALYZE before" in {

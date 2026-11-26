@@ -188,10 +188,15 @@ object AnalyzableTimeWindowConfig {
 }
 
 final case class ScanPruningConfig(
-    snapshots: ScanSnapshotPruningConfig = ScanSnapshotPruningConfig()
+    snapshots: ScanSnapshotPruningConfig = ScanSnapshotPruningConfig(),
+    updateHistory: ScanUpdateHistoryPruningConfig = ScanUpdateHistoryPruningConfig(),
 )
 
 final case class ScanSnapshotPruningConfig(
+    enabled: Boolean = false
+)
+
+final case class ScanUpdateHistoryPruningConfig(
     enabled: Boolean = false
 )
 
