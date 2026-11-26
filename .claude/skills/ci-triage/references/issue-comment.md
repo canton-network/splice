@@ -3,37 +3,45 @@
 Reader: a senior engineer who knows splice and Canton but never opens the triage dataset. The comment must stand on
 its own: no packet paths or other triage-dataset references.
 
-Shape (Markdown, titled sections, short paragraphs of one to three sentences; as short as the facts allow). The same
-sections are used in the chat presentation and in the comment. Start with the verdict in one line, then:
-1. Verdict in one line: what kind of failure, and whether splice needs a change. State it as certain only when
-   every link from the trigger to the failure is shown in the log; otherwise say "likely" and name the unshown
-   link in one sentence. When the code has a guard against exactly this failure (a cleanup, a pause, a retry), the
-   verdict must say why the guard did not work; a cause that skips the guard is incomplete (11195: blamed the suite
-   that left vetted packages behind, missed that `withNoVettedPackages` skipped the disconnected participant).
-2. `## Test environment`: the architecture the failing job runs in, in two or three sentences and a diagram: which
-   components (apps, nodes, sequencers, runner, cluster, stores) take part and how they are connected. Plain job and
-   test names, no run ids, shas, shard numbers or which duplicate belongs to which job.
-3. `## Test purpose`: what the test, job or workflow step is for and what it does at the point of failure, in plain words (for a
-   deploy or a workflow: what it applies or checks).
-4. `## Root cause`: the mechanism, with the decisive log lines verbatim in a fenced code block (two to six lines,
-   timestamps kept, secrets and long JSON trimmed with `...`), then one or two sentences interpreting them. Name the
-   log file each block comes from, in the sentence before the block or in a comment line above it, so that a reader
-   can verify it by hand: the file as it is named in the job's artifact (`canton_network_test.clog.gz`,
-   `canton-simtime.clog.gz`, `canton.clog.gz`) or, for the console log, the job log and its step ("job log, step
-   Build Docker images"). A block that mixes files is split per file. Never quote a line without saying where it
-   is. Only the facts that settle the verdict, one sentence each (a check that passed, the last good run); no
-   timeline of the investigation, no list of runs checked.
-5. `## Fix`: the fix in one or two sentences (file and change; for a backport the PR and the release line), or why
+Shape (Markdown, titled sections in this order, short paragraphs of one to three sentences; as short as the facts
+allow). The same sections are used in the chat presentation and in the comment. Leave a section out only when it has
+nothing to say.
+1. Summary: one line, what broke and how bad (a test or job failing, how often, whether it blocks main or a release
+   line, whether splice needs a change). State it as certain only when every link from the trigger to the failure
+   is shown in the log; otherwise say "likely" and name the unshown link in one sentence. When the code has a guard
+   against exactly this failure (a cleanup, a pause, a retry), the summary must say why the guard did not work; a
+   cause that skips the guard is incomplete (11195: blamed the suite that left vetted packages behind, missed that
+   `withNoVettedPackages` skipped the disconnected participant).
+2. `## Test Purpose`: what the test, job or workflow step is for, in plain words (for a deploy or a workflow: what
+   it applies or checks). Plain job and test names, no run ids, shas, shard numbers or which duplicate belongs to
+   which job.
+3. `## Test Environment`: the architecture the failing job runs in, in two or three sentences and a network diagram:
+   which components (apps, nodes, sequencers, runner, cluster, stores) take part and how they are connected.
+4. `## Expected Behavior`: what should have happened at the point of failure, in one or two sentences.
+5. `## Actual Behavior`: what happened instead, with the decisive log lines verbatim in a fenced code block (two to
+   six lines, timestamps kept, secrets and long JSON trimmed with `...`) and a timeline diagram when the order of
+   events matters. Name the log file each block comes from, in the sentence before the block or in a comment line
+   above it, so that a reader can verify it by hand: the file as it is named in the job's artifact
+   (`canton_network_test.clog.gz`, `canton-simtime.clog.gz`, `canton.clog.gz`) or, for the console log, the job log
+   and its step ("job log, step Build Docker images"). A block that mixes files is split per file. Never quote a
+   line without saying where it is.
+6. `## Reproduction Steps` (or `## Repro Rate` when it is flaky): the commands that reproduce it, with their real
+   output, when it is deterministic or can be forced (a small local setup is fine); otherwise how often it
+   happened (hits and runs of the job, first occurrence or not) and what would force it.
+7. `## Root Cause`: the mechanism, with only the facts that settle it, one sentence each (a check that passed, the
+   last good run); no timeline of the investigation, no list of runs checked.
+8. `## Fix`: the fix in one or two sentences (file and change; for a backport the PR and the release line), or why
    none is needed. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
-6. `## Owner`: the person(s) to assign, each with the reason (the PR or commit that introduced the failure, the
-   history of the touched files, the related functional change, a recent fix; whether the cause is the original change or a later one, authorship alone is not ownership; for an external contributor the
-   internal reviewer or merger instead; ci-triage-inbox, Assignee). Left out when no owner was found.
+9. `## Owner`: the person(s) to assign, each with the reason (the PR or commit that introduced the failure, the
+   history of the touched files, the related functional change, a recent fix; whether the cause is the original
+   change or a later one, authorship alone is not ownership; for an external contributor the internal reviewer or
+   merger instead; ci-triage-inbox, Assignee). Left out when no owner was found.
 Diagrams (default: yes): a diagram helps a reader grasp the failure faster in almost every case, even a simple one,
 so draw one unless the failure is plainly a one-liner with nothing to connect (a missing file, a typo). Keep it
 small: three to eight boxes. There is no fixed recipe; pick the form that makes the failure clearest:
-- Under `Test environment`: a network picture (who talks to whom, which part of the setup the config or code
+- Under `Test Environment`: a network picture (who talks to whom, which part of the setup the config or code
   belongs to), with the failing part or link marked.
-- Under `Root cause`: a timeline when the order of events matters (a race, a close during a call, a cancel after
+- Under `Actual Behavior`: a timeline when the order of events matters (a race, a close during a call, a cancel after
   an error), or a state change or before and after, when that explains it better. One picture may serve both if it is
   clear.
 - How: Mermaid (GitHub renders it in the comment), placed before the log block. Short labels (at most about 30
