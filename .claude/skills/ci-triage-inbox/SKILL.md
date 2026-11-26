@@ -39,7 +39,13 @@ several. Find them from the history, not from the failing test alone:
   closed issues and their fix PRs);
 - for a fix outside splice (infra, workflows, config, Canton), the history of that repository's files the same way
   (`gh api repos/<repo>/commits?path=<file>`), or the component owner.
-Name the evidence next to every suggested login (the PR or commit). Prefer people active on the code recently over
+Name the evidence next to every suggested login (the PR or commit). External contributors: when the person found is an external contributor (not a member of the organisation; a
+login ending in `-da` is only a hint, check with `gh api orgs/<org>/members/<login>` or the PR's `author_association`),
+do not assign them; assign the internal owner or reviewer of that test or production change instead: the reviewers
+who approved and the person who merged the PR (`gh pr view <n> --json reviews,mergedBy,author`), the `CODEOWNERS`
+entry of the files, or else the internal people who most recently changed or reviewed the same files or the same
+area. Name the external PR and the reason next to the internal login.
+Prefer people active on the code recently over
 the original author of old code; skip bots and release-merge commits. If no owner can be found after this search,
 leave the issue unassigned: it then goes to the fix agent (Triaged without assignee). Never guess a login. Duplicates
 are not assigned; the parent is.

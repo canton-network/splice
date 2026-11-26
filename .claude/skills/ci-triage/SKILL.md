@@ -151,7 +151,7 @@ to `log/ci-triage-export/<ref>/`.
    implement without the chat: file and change (for a backport the PR and the release line), and the owner(s): always
    search for them in the history (the PR that introduced the failure, the history of the files the fix touches, the
    related functional changes, recent fixes of the same area) and list all that apply with the commit or PR as
-   evidence; leave the assignee empty only when none can be found (ci-triage-inbox, Assignee). No branch here: the fix agent
+   evidence (for a change by an external contributor: the internal reviewer or merger of that change instead, see ci-triage-inbox, Assignee); leave the assignee empty only when none can be found (ci-triage-inbox, Assignee). No branch here: the fix agent
    (`ci-triage-fix`) picks the issue up from Status Triaged and agrees the change with the user first.
 10. Commit in the dataset clone and hand it over (Dataset: Commits, Hand-over); under ci-triage-inbox the main
     thread does both. Report: one line per ref with the verdict, then the
