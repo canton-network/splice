@@ -239,7 +239,11 @@ class AcsSnapshotStore(
               .headOption
           _ <- tableNames match {
             case Some((createsTableName, stakeholdersTableName)) =>
+              // Give up if a long-running reader still holds the table, instead of blocking
+              // (and queueing every other query on it); the trigger retries on its next run.
+              // `set local` is scoped to this transaction.
               DBIO.seq(
+                sqlu"set local lock_timeout = '5s'",
                 AdvisoryLocks.withDdlLock(sqlu"drop table if exists #$createsTableName"),
                 AdvisoryLocks.withDdlLock(sqlu"drop table if exists #$stakeholdersTableName"),
               )
