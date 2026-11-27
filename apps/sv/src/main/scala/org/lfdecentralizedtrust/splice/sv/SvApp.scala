@@ -43,6 +43,8 @@ import org.lfdecentralizedtrust.splice.automation.{AutomationService, DomainTime
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_CreateUnclaimedRewardsBurnInstruction
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection.INITIAL_ROUND_USER_METADATA_KEY
@@ -876,6 +878,20 @@ object SvApp {
     }
   }
 
+  private def validateUnclaimedRewardsBurnAmount(
+      action: ActionRequiringConfirmation
+  ): Either[String, Unit] =
+    action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case burn: SRARC_CreateUnclaimedRewardsBurnInstruction
+              if burn.dsoRules_CreateUnclaimedRewardsBurnInstructionValue.amount.signum <= 0 =>
+            Left("The amount of unclaimed rewards to burn must be positive.")
+          case _ => Right(())
+        }
+      case _ => Right(())
+    }
+
   def createVoteRequest(
       requester: String,
       action: Json,
@@ -903,10 +919,15 @@ object SvApp {
       "Splice.DsoRules",
       "ActionRequiringConfirmation",
     )(action)
-    FeaturedAppRightValidator
-      .validateFeaturedAppRightAction(
-        decodedAction,
-        dsoStoreWithIngestion.store,
+    validateUnclaimedRewardsBurnAmount(decodedAction)
+      .fold(
+        err => Future.successful(Left(err)),
+        _ =>
+          FeaturedAppRightValidator
+            .validateFeaturedAppRightAction(
+              decodedAction,
+              dsoStoreWithIngestion.store,
+            ),
       )
       .flatMap {
         case Left(err) => Future.successful(Left(err))

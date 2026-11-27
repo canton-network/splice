@@ -128,6 +128,8 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Update a specific featured app right.
   | SRARC_CreateFeaturedAppConfigUpdateInstruction DsoRules_CreateFeaturedAppConfigUpdateInstruction
     -- ^ Voted action to change to a featured app right's config.
+  | SRARC_CreateUnclaimedRewardsBurnInstruction DsoRules_CreateUnclaimedRewardsBurnInstruction
+    -- ^ Voted action to burn from the UnclaimedReward pool.
   deriving (Eq, Show, Serializable)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -251,6 +253,17 @@ data DsoRules_ExecuteFeaturedAppConfigUpdateInstructionResult = DsoRules_Execute
   deriving (Serializable)
 
 data DsoRules_ExpireFeaturedAppConfigUpdateInstructionResult = DsoRules_ExpireFeaturedAppConfigUpdateInstructionResult
+  deriving (Serializable)
+
+data DsoRules_CreateUnclaimedRewardsBurnInstructionResult = DsoRules_CreateUnclaimedRewardsBurnInstructionResult with
+    instructionCid : ContractId UnclaimedRewardsBurnInstruction
+  deriving (Serializable)
+
+data DsoRules_ExecuteUnclaimedRewardsBurnInstructionResult = DsoRules_ExecuteUnclaimedRewardsBurnInstructionResult with
+    optUnclaimedRewardCid : Optional (ContractId UnclaimedReward)
+  deriving (Serializable)
+
+data DsoRules_ExpireUnclaimedRewardsBurnInstructionResult = DsoRules_ExpireUnclaimedRewardsBurnInstructionResult
   deriving (Serializable)
 
 data DsoRules_OnboardValidatorResult = DsoRules_OnboardValidatorResult with
@@ -1938,14 +1951,7 @@ template DsoRules with
         UnallocatedUnclaimedActivityRecord{..} <- fetchAndArchive (ForDso with dso) unallocatedUnclaimedActivityRecordCid
         assertWithinDeadline "UnallocatedUnclaimedActivityRecord.expiresAt" expiresAt
 
-        totalUnclaimedRewards <- sum <$> forA unclaimedRewardsToBurnCids \cid -> do
-          unclaimedReward <- fetchAndArchive (ForDso with dso) cid
-          pure unclaimedReward.amount
-        let leftover = totalUnclaimedRewards - amount
-        optUnclaimedRewardCid <-
-          if | leftover < 0.0 -> abort $ "insufficient unclaimed rewards: " <> show (negate leftover)
-             | leftover == 0.0 -> pure None
-             | otherwise -> Some <$> create UnclaimedReward with dso; amount = leftover
+        optUnclaimedRewardCid <- consumeUnclaimedRewards dso amount unclaimedRewardsToBurnCids
 
         unclaimedActivityRecordCid <- create UnclaimedActivityRecord with
           dso
@@ -1978,6 +1984,44 @@ template DsoRules with
         UnclaimedActivityRecord_DsoExpireResult unclaimedRewardCid <-
           exercise unclaimedActivityRecordCid UnclaimedActivityRecord_DsoExpire
         pure DsoRules_ExpireUnclaimedActivityRecordResult with unclaimedRewardCid
+
+    -- Unclaimed rewards burn instructions
+    -------------------------------------
+
+    nonconsuming choice DsoRules_CreateUnclaimedRewardsBurnInstruction : DsoRules_CreateUnclaimedRewardsBurnInstructionResult
+      with
+        amount : Decimal
+        reason : Text
+      controller dso
+      do
+        now <- getTime
+        let expiresAt = now `addRelTime` config.voteRequestTimeout
+        instructionCid <- create UnclaimedRewardsBurnInstruction with dso; amount; reason; expiresAt
+        pure DsoRules_CreateUnclaimedRewardsBurnInstructionResult with instructionCid
+
+    nonconsuming choice DsoRules_ExecuteUnclaimedRewardsBurnInstruction : DsoRules_ExecuteUnclaimedRewardsBurnInstructionResult
+      with
+        instructionCid : ContractId UnclaimedRewardsBurnInstruction
+        unclaimedRewardCids : [ContractId UnclaimedReward]
+        sv : Party
+      controller sv
+      do
+        void $ getAndValidateSvParty this (Some sv)
+        UnclaimedRewardsBurnInstruction {amount, expiresAt} <- fetchAndArchive (ForDso with dso) instructionCid
+        assertWithinDeadline "UnclaimedRewardsBurnInstruction.expiresAt" expiresAt
+        optUnclaimedRewardCid <- consumeUnclaimedRewards dso amount unclaimedRewardCids
+        pure DsoRules_ExecuteUnclaimedRewardsBurnInstructionResult with optUnclaimedRewardCid
+
+    nonconsuming choice DsoRules_ExpireUnclaimedRewardsBurnInstruction : DsoRules_ExpireUnclaimedRewardsBurnInstructionResult
+      with
+        instructionCid : ContractId UnclaimedRewardsBurnInstruction
+        sv : Party
+      controller sv
+      do
+        void $ getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) instructionCid
+        void $ exercise instructionCid UnclaimedRewardsBurnInstruction_Expire
+        pure DsoRules_ExpireUnclaimedRewardsBurnInstructionResult
 
     nonconsuming choice DsoRules_CreateBootstrapExternalPartyConfigStateInstruction : DsoRules_CreateBootstrapExternalPartyConfigStateInstructionResult
       controller dso
@@ -2063,6 +2107,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateFeaturedAppConfigUpdateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_CreateUnclaimedRewardsBurnInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
@@ -2236,6 +2281,21 @@ enforceCooldown cooldownName cooldown lastActionTime = do
       let nextAllowedTime = lastTime `addRelTime` cooldown
       assertDeadlineExceeded cooldownName nextAllowedTime
     None -> pure () -- no last action time, so no enforcement needed
+
+
+-- Unclaimed rewards
+--------------------
+
+-- | Archive the given `UnclaimedReward` contracts and return any amount above `amount` as a new one.
+consumeUnclaimedRewards : Party -> Decimal -> [ContractId UnclaimedReward] -> Update (Optional (ContractId UnclaimedReward))
+consumeUnclaimedRewards dso amount unclaimedRewardCids = do
+  totalUnclaimedRewards <- sum <$> forA unclaimedRewardCids \cid -> do
+    unclaimedReward <- fetchAndArchive (ForDso with dso) cid
+    pure unclaimedReward.amount
+  let leftover = totalUnclaimedRewards - amount
+  if | leftover < 0.0 -> abort $ "insufficient unclaimed rewards: " <> show (negate leftover)
+     | leftover == 0.0 -> pure None
+     | otherwise -> Some <$> create UnclaimedReward with dso; amount = leftover
 
 
 -- Unallocated unclaimed activity record

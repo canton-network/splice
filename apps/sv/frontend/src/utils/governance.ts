@@ -56,6 +56,7 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_OffboardSv: 'Offboard Member',
   SRARC_RevokeFeaturedAppRight: 'Unfeature Application',
   SRARC_CreateUnallocatedUnclaimedActivityRecord: 'Create Unclaimed Activity Record',
+  SRARC_CreateUnclaimedRewardsBurnInstruction: 'Burn Unclaimed Rewards',
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
   SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
@@ -81,6 +82,7 @@ export const createProposalActions: {
     name: 'Create Unclaimed Activity Record',
     value: 'SRARC_CreateUnallocatedUnclaimedActivityRecord',
   },
+  { name: 'Burn Unclaimed Rewards', value: 'SRARC_CreateUnclaimedRewardsBurnInstruction' },
   { name: 'Set Amulet Rules Configuration', value: 'CRARC_SetConfig' },
   { name: 'Update Super Validator Reward Weight', value: 'SRARC_UpdateSvRewardWeight' },
 ];
@@ -207,6 +209,8 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
           formatBasisPoints(dsoAction.value.newRewardWeight)
         );
       }
+      case 'SRARC_CreateUnclaimedRewardsBurnInstruction':
+        return { amount: dsoAction.value.amount };
       case 'SRARC_CreateUnallocatedUnclaimedActivityRecord':
         return createUnallocatedUnclaimedActivityRecordProposal(
           dsoAction.value.beneficiary,

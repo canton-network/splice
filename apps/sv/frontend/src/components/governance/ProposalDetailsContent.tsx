@@ -46,6 +46,7 @@ import { OpsPartiesDiff, OpsPartiesDisplay } from './OpsPartiesDisplay';
 import { JsonDiffAccordion } from './JsonDiffAccordion';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { DetailItem } from './proposal-details/DetailItem';
+import { UnclaimedRewardsBurnSection } from './proposal-details/UnclaimedRewardsBurnSection';
 import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-details/CreateUnallocatedUnclaimedActivityRecordSection';
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../ui';
 import { useQuery } from '@tanstack/react-query';
@@ -271,6 +272,10 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               currentWeight={proposalDetails.proposal.currentWeight}
               weightChange={proposalDetails.proposal.weightChange}
             />
+          )}
+
+          {proposalDetails.action === 'SRARC_CreateUnclaimedRewardsBurnInstruction' && (
+            <UnclaimedRewardsBurnSection amount={proposalDetails.proposal.amount} />
           )}
 
           {proposalDetails.action === 'SRARC_CreateUnallocatedUnclaimedActivityRecord' && (

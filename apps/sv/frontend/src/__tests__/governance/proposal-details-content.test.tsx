@@ -554,6 +554,38 @@ describe('Proposal Details Content', () => {
     expect(screen.getByTestId('config-change-new-value').textContent).toBe('1000');
   });
 
+  test('should render unclaimed rewards burn details', () => {
+    const proposalDetails: ProposalDetails = {
+      actionName: 'Burn Unclaimed Rewards',
+      action: 'SRARC_CreateUnclaimedRewardsBurnInstruction',
+      url: 'https://example.com',
+      summary: 'Missed milestone',
+      proposal: { amount: '100.1234567890' },
+    };
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={proposalDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('proposal-details-action-value')).toHaveTextContent(
+      'Burn Unclaimed Rewards'
+    );
+    expect(
+      screen.getByTestId('proposal-details-unclaimed-rewards-burn-section')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('proposal-details-amount-value')).toHaveTextContent('100.1234567890');
+    expect(screen.queryByTestId('proposal-details-beneficiary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('proposal-details-must-mint-before-value')).not.toBeInTheDocument();
+  });
+
   test('should render unallocated unclaimed activity record details', () => {
     const proposalDetails: ProposalDetails = {
       actionName: 'Create Unclaimed Activity Record',

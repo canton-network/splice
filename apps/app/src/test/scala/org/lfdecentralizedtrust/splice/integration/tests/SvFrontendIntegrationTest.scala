@@ -23,7 +23,11 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.instruction.UnclaimedRewardsBurnInstruction
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
+  CloseVoteRequestTrigger,
+  ExecuteUnclaimedRewardsBurnInstructionTrigger,
+}
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.defaultDsoRulesConfig
 import org.lfdecentralizedtrust.splice.util.*
 import org.openqa.selenium.By
@@ -41,7 +45,8 @@ class SvFrontendIntegrationTest
     with FrontendLoginUtil
     with WalletTestUtil
     with VotesFrontendTestUtil
-    with ValidatorLicensesFrontendTestUtil {
+    with ValidatorLicensesFrontendTestUtil
+    with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -713,6 +718,52 @@ class SvFrontendIntegrationTest
       ) { implicit webDriver =>
         fillOutTextField("create-unallocated-unclaimed-activity-record-beneficiary", beneficiary)
         fillOutTextField("create-unallocated-unclaimed-activity-record-amount", amount)
+      }
+    }
+
+    "Burn Unclaimed Rewards" taggedAs Tags.SpliceDsoGovernance_0_1_32 in { implicit env =>
+      val amount = BigDecimal("100.5")
+      val executeBurnTriggers = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).map(
+        _.dsoDelegateBasedAutomation.trigger[ExecuteUnclaimedRewardsBurnInstructionTrigger]
+      )
+      def burnInstructions() =
+        sv1Backend.participantClient.ledger_api_extensions.acs
+          .filterJava(UnclaimedRewardsBurnInstruction.COMPANION)(dsoParty)
+
+      setTriggersWithin(triggersToPauseAtStart = executeBurnTriggers) {
+        val proposalContractId = assertCreateProposal(
+          "SRARC_CreateUnclaimedRewardsBurnInstruction",
+          "create-unclaimed-rewards-burn",
+        ) { implicit webDriver =>
+          fillOutTextField("create-unclaimed-rewards-burn-amount", amount.toString)
+        }
+
+        withFrontEnd("sv1") { implicit webDriver =>
+          clue("sv1 sees the amount on the proposal details page") {
+            eventually() {
+              find(id("proposal-details-amount-value")).value.text shouldBe amount.toString
+            }
+          }
+        }
+
+        val trackingCid = eventually() {
+          val voteRequest = getVoteRequestForProposal(proposalContractId)
+          voteRequest.payload.trackingCid.orElse(voteRequest.contractId)
+        }
+
+        actAndCheck(
+          "sv3 casts the vote that reaches the threshold",
+          eventuallySucceeds() {
+            sv3Backend.castVote(trackingCid, isAccepted = true, "", "")
+          },
+        )(
+          "the passed vote creates a burn instruction with the amount and summary from the form",
+          _ => {
+            val instruction = burnInstructions().loneElement.data
+            BigDecimal(instruction.amount) shouldBe amount
+            instruction.reason shouldBe "This is a summary of the proposal"
+          },
+        )
       }
     }
 

@@ -186,6 +186,18 @@ class DsoDelegateBasedAutomationService(
       )
     )
     registerTrigger(
+      new ExecuteUnclaimedRewardsBurnInstructionTrigger(
+        triggerContext,
+        svTaskContext,
+      )
+    )
+    registerTrigger(
+      new ExpiredUnclaimedRewardsBurnInstructionTrigger(
+        triggerContext,
+        svTaskContext,
+      )
+    )
+    registerTrigger(
       new MergeUnclaimedDevelopmentFundCouponsTrigger(config, triggerContext, svTaskContext)
     )
     registerTrigger(
@@ -297,6 +309,8 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[AllocateUnallocatedUnclaimedActivityRecordTrigger],
     aTrigger[ExpiredUnallocatedUnclaimedActivityRecordTrigger],
     aTrigger[ExpiredUnclaimedActivityRecordTrigger],
+    aTrigger[ExecuteUnclaimedRewardsBurnInstructionTrigger],
+    aTrigger[ExpiredUnclaimedRewardsBurnInstructionTrigger],
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
     aTrigger[ExpireRewardCouponV2Trigger],
