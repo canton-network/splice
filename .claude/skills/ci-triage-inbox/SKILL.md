@@ -128,8 +128,16 @@ Models (the Agent tool's `model`); name the plan in the queue line.
   - the owner: the case under the Assignee rules (specific change, recent change, old code), not authorship or
     approval alone; external contributors replaced;
   - the action: retitle, status, assignee, close; nothing posted on a parent.
-  It returns "no change" or each disagreement with the evidence that settles it. The main thread applies what holds
-  up, and presents with "Reviewed: no change" or the list of changes. A duplicate of a known family with a clean
+  It returns "no change" or each disagreement with the evidence that settles it. Who fixes the drift:
+  - small drift (a number, a metric's scope, a quote, an owner reason, a title): the main thread checks the
+    reviewer's evidence and fixes the comment, the packet and the script itself;
+  - large drift (the mechanism, the duplicate decision, the parent, the fix or the owner changes): the reviewer
+    agent rewrites the packet and the comment (SendMessage to it; it has the evidence and is not anchored on the
+    first answer), never the agent that triaged it; then a short check of only the changed parts by the main thread
+    or a fresh agent;
+  - a disagreement that neither side's evidence settles: a question to the user with both positions and their
+    evidence; the group is not handed out until it is decided.
+  Present with "Reviewed: no change" or the list of changes and who made them. A duplicate of a known family with a clean
   confirming grep gets a short review (signature, parent state and fix, the close comment), not a re-triage.
 Precedents: the first pass had the mechanism wrong in 11766, 11773 and 11774, and 11784 was posted blaming a partition
 probe that explains about 90 ms of a 1.9 s regression.
