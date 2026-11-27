@@ -268,7 +268,7 @@ validPackageConfig _ = True
 
 validCredentialRegistryConfig : CredentialRegistryConfig -> Bool
 validCredentialRegistryConfig config =
-  optional True (> days 0) config.freePeriod &&
+  optional True (>= days 0) config.freePeriod &&
   optional True (> 0.0) config.extensionUsdPerYear
 
 -- | Config record grouping config values for governance locks.
