@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.util
 
-import com.digitalasset.base.error.ErrorCategory
+import com.digitalasset.base.error.{ErrorCategory, ErrorCode}
 import com.digitalasset.base.error.ErrorCategory.{
   InvalidGivenCurrentSystemStateOther,
   InvalidGivenCurrentSystemStateResourceExists,
@@ -13,9 +13,10 @@ import com.digitalasset.base.error.ErrorCategory.{
 }
 import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.ledger.error.groups.ConsistencyErrors.SubmissionAlreadyInFlight
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.participant.protocol.TransactionProcessor.SubmissionErrors.NoViewWithValidRecipients
 import com.digitalasset.canton.protocol.LocalRejectError.ConsistencyRejections.LockedContracts
-import com.digitalasset.canton.protocol.LocalRejectErrorCode
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -52,8 +53,10 @@ class SpliceCircuitBreaker(
     InvalidGivenCurrentSystemStateSeekAfterEnd,
   )
 
-  private val errorCodesToIgnore: Set[LocalRejectErrorCode] = Set(
-    LockedContracts
+  private val errorCodesToIgnore: Set[ErrorCode] = Set(
+    LockedContracts,
+    SubmissionAlreadyInFlight,
+    NoViewWithValidRecipients,
   )
 
   private val underlying: CircuitBreaker = new CircuitBreaker(
