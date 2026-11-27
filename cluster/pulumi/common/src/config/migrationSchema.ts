@@ -29,8 +29,6 @@ export const MigrationInfoSchema = z
     releaseReference: GitReferenceSchema.optional(),
     sequencer: z
       .object({
-        // TODO (#8263): remove, unused as all synchronizers use DA BFT.
-        enableBftSequencer: z.literal(true).default(true),
         // Use a separate DB server for DABFT.
         dedicatedBftSequencerDb: z.boolean().default(true),
       })

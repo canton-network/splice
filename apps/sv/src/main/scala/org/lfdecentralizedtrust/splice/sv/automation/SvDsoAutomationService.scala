@@ -49,7 +49,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UnavailablePartiesStore}
-import org.lfdecentralizedtrust.splice.sv.{CantonBftSequencerConfig, LocalSynchronizerNode}
+import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
   LocalSequencerClientConfig,
   LocalSequencerClientContext,
@@ -403,26 +403,22 @@ class SvDsoAutomationService(
       triggerContext.loggerFactory,
     )
     def registerTriggersForSynchronizers(node: LocalSynchronizerNode): Unit = {
-      node.sequencerConfig match {
-        case CantonBftSequencerConfig() =>
-          registerTrigger(
-            new SvBftSequencerPeerOffboardingTrigger(
-              triggerContext,
-              dsoStore,
-              node.sequencerAdminConnection,
-              aggregatingScanConnection,
-            )
-          )
-          registerTrigger(
-            new SvBftSequencerPeerOnboardingTrigger(
-              triggerContext,
-              dsoStore,
-              node.sequencerAdminConnection,
-              aggregatingScanConnection,
-            )
-          )
-        case _ =>
-      }
+      registerTrigger(
+        new SvBftSequencerPeerOffboardingTrigger(
+          triggerContext,
+          dsoStore,
+          node.sequencerAdminConnection,
+          aggregatingScanConnection,
+        )
+      )
+      registerTrigger(
+        new SvBftSequencerPeerOnboardingTrigger(
+          triggerContext,
+          dsoStore,
+          node.sequencerAdminConnection,
+          aggregatingScanConnection,
+        )
+      )
     }
 
     registerTriggersForSynchronizers(synchronizerNodeService.nodes.current)

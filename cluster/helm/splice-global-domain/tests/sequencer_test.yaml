@@ -318,7 +318,6 @@ tests:
 
   - it: "allows setting sequencer image and initImages"
     set:
-      sequencer.driver.type: "cantonbft"
       imageRepo: "secure-registry.example.com"
       sequencer.imageName: "custom-standard-sequencer"
       sequencer.persistence.initImageName: "secure-registry.example.com/postgres:18-primary"
@@ -341,7 +340,6 @@ tests:
 
   - it: "allows overriding sequencer base database password with raw strings"
     set:
-      sequencer.driver.type: "cantonbft"
       sequencer.driver.address: "mock-driver-address"
       sequencer.persistence.secretOverrides.postgresPassword: "vault:kv/data/sequencer/postgres-password"
     documentSelector:
@@ -360,7 +358,6 @@ tests:
 
   - it: "allows overriding bft driver database password with raw strings"
     set:
-      sequencer.driver.type: "cantonbft"
       sequencer.driver.externalAddress: "sequencer.example.com"
       sequencer.driver.externalPort: 5010
       sequencer.driver.persistence:
@@ -574,11 +571,4 @@ tests:
           content:
             name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
             value: canton.sequencers.sequencer.monitoring.http-health-server.port = 5071
-
-  - it: "fails when the sequencer driver type is not cantonbft"
-    set:
-      sequencer.driver.type: "cometbft"
-    asserts:
-      - failedTemplate:
-          errorPattern: "at '/sequencer/driver/type': value must be 'cantonbft'"
 

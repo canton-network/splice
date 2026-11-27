@@ -617,9 +617,9 @@ object AppUpgradeIntegrationTest {
     conf
   }
 
-  // TODO (#8263): remove once the base version's bundled configs enable DA BFT (needs transform-config.sc to apply withBftSequencers)
-  // The bundled config transforms don't enable DA BFT (EnvironmentDefinition does that for the
-  // test environment), so we enable it for the bundled SV and scan apps here.
+  // TODO (#8263): remove once latest release is > 0.11.0
+  // The base version's SV app defaults to the reference sequencer and its bundled test configs don't
+  // set the scan p2p URLs, so we enable DA BFT for the bundled SV and scan apps here.
   def bundledBftConfig(app: String): Seq[String] =
     app match {
       case s"sv-apps.$_" =>

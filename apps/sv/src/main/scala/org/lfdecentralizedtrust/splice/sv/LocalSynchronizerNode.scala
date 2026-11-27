@@ -64,7 +64,6 @@ class LocalSynchronizerNode(
     override val mediatorAdminConnection: MediatorAdminConnection,
     override val loggerFactory: NamedLoggerFactory,
     override protected[this] val retryProvider: RetryProvider,
-    sequencerConfig: SequencerConfig,
     val config: SvSynchronizerNodeConfig,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -76,7 +75,6 @@ class LocalSynchronizerNode(
       mediatorAdminConnection,
       config.sequencer.externalPublicApiUrl,
       config.sequencer.sequencerAvailabilityDelay.asJava,
-      sequencerConfig,
       config.mediator.sequencerRequestAmplification,
       config.mediator.sequencerConnectionPoolDelays,
       config.mediator.subscriptionLivenessLimits,
@@ -569,13 +567,10 @@ class LocalSynchronizerNode(
       config.mediator.pruning
     )
 
-  def ensureDABFTPruningSchedule()(implicit tc: TraceContext): Future[Unit] = {
-    if (config.sequencer.isCantonBftSequencer) {
-      sequencerAdminConnection.ensurePruningSchedule(
-        config.sequencer.cantonBftPruning
-      )
-    } else Future.unit
-  }
+  def ensureDABFTPruningSchedule()(implicit tc: TraceContext): Future[Unit] =
+    sequencerAdminConnection.ensurePruningSchedule(
+      config.sequencer.cantonBftPruning
+    )
 
   override protected def onClosed(): Unit = {
     LifeCycle.close(sequencerAdminConnection, mediatorAdminConnection)(logger)

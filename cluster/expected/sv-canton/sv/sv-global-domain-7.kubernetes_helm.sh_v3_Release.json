@@ -93,8 +93,7 @@
           "persistence": {
             "databaseName": "sequencer_7_dabft",
             "secretName": "sequencer-bft-7-pg-secrets"
-          },
-          "type": "cantonbft"
+          }
         },
         "persistence": {
           "databaseName": "sequencer_7",

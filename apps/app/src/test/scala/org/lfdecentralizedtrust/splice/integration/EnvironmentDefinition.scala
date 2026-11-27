@@ -68,11 +68,8 @@ case class EnvironmentDefinition(
     with Inside {
 
   override def loggerFactory: SuppressingLogger = SuppressingLogger(getClass)
-  override val configTransforms: Seq[SpliceConfig => SpliceConfig] = {
-    // TODO (#8263): enable DA BFT in the test app configs instead of through this config transform
-    // add the BFT sequencers config transform to the front to ensure that it modifies the ports before any other transforms updates the ports
-    ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
-  }
+  override val configTransforms: Seq[SpliceConfig => SpliceConfig] =
+    this.configTransformsWithContext(context)
   def updateTestingConfig(
       update: TestingConfigInternal => TestingConfigInternal
   ): EnvironmentDefinition =
@@ -354,15 +351,6 @@ case class EnvironmentDefinition(
           .replace(Some(s"http://localhost:${5108 + sequencerPortBump}"))
       )(config)
     )
-
-  // TODO (#8263): remove, DA BFT is always enabled (see configTransforms)
-  def withBftSequencers(namePredicate: String => Boolean = _ => true): EnvironmentDefinition =
-    addConfigTransformToFront((_, config) =>
-      ConfigTransforms.withBftSequencers(namePredicate)(config)
-    )
-
-  def withBftSequencersSuccessor: EnvironmentDefinition =
-    addConfigTransform((_, config) => ConfigTransforms.withBftSequencersSuccessor()(config))
 
   def withSvBftSequencerConnectionDisabled(): EnvironmentDefinition =
     addConfigTransforms(
