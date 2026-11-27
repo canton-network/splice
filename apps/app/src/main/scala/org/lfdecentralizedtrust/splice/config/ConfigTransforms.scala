@@ -7,7 +7,6 @@ import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.scan.config.{
-  CantonBftPeerConfig,
   ScanAppBackendConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
@@ -587,67 +586,6 @@ object ConfigTransforms {
       _.focus(_.participantClient).modify(portTransform(bump, _))
     )
   }
-
-  private def enableCantonBftForSv(node: SvSynchronizerNodeConfig): SvSynchronizerNodeConfig =
-    node.focus(_.sequencer).modify(_.copy(isCantonBftSequencer = true))
-
-  def withCantonBft(config: SvAppBackendConfig): SvAppBackendConfig =
-    config.focus(_.localSynchronizerNodes.current).modify(enableCantonBftForSv)
-
-  def withCantonBftSuccessor(config: SvAppBackendConfig): SvAppBackendConfig =
-    config.focus(_.localSynchronizerNodes.successor).modify(_.map(enableCantonBftForSv))
-
-  private def cantonBftScanConfig(name: String, basePort: Int): Option[CantonBftPeerConfig] =
-    Some(
-      CantonBftPeerConfig(
-        s"http://localhost:${basePort + Integer.parseInt(name.stripPrefix("sv").take(1)) * 100}"
-      )
-    )
-
-  def withCantonBft(
-      name: String,
-      config: ScanAppBackendConfig,
-      basePort: Int = 5010,
-  ): ScanAppBackendConfig =
-    config
-      .focus(_.synchronizerNodes.current.cantonBft)
-      .replace(cantonBftScanConfig(name, basePort))
-
-  def withCantonBftSuccessor(
-      name: String,
-      config: ScanAppBackendConfig,
-      basePort: Int = 5010,
-  ): ScanAppBackendConfig =
-    config
-      .focus(_.synchronizerNodes.successor)
-      .modify(_.map(_.focus(_.cantonBft).replace(cantonBftScanConfig(name, basePort))))
-
-  private def withBftSequencersFor(
-      svTransform: SvAppBackendConfig => SvAppBackendConfig,
-      scanTransform: (String, ScanAppBackendConfig) => ScanAppBackendConfig,
-      namePredicate: String => Boolean,
-  ): ConfigTransform =
-    updateAllSvAppConfigs { case (name, c) =>
-      if (namePredicate(name)) {
-        svTransform(c)
-      } else {
-        c
-      }
-    } compose {
-      updateAllScanAppConfigs { case (name, c) =>
-        if (namePredicate(name)) {
-          scanTransform(name, c)
-        } else {
-          c
-        }
-      }
-    }
-
-  def withBftSequencers(namePredicate: String => Boolean = _ => true): ConfigTransform =
-    withBftSequencersFor(withCantonBft, withCantonBft(_, _), namePredicate)
-
-  def withBftSequencersSuccessor(namePredicate: String => Boolean = _ => true): ConfigTransform =
-    withBftSequencersFor(withCantonBftSuccessor, withCantonBftSuccessor(_, _), namePredicate)
 
   def withNoVoteCooldown: ConfigTransform = {
     updateAllSvAppFoundDsoConfigs_ { c =>

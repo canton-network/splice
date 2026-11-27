@@ -34,6 +34,9 @@
       participant's identity comes from elsewhere, e.g. while restoring from an identities dump or
       when using an offline root namespace key.
 
+    - `splice-global-domain`: the value `sequencer.driver.type` is no longer required and is ignored.
+      Canton BFT is the only supported sequencer driver; you can remove `type: "cantonbft"` from your values.
+
 {/* If you introduce any breaking changes in the next minor release,
     then in addition to the release notes as above,
     please also duplicate this template (if it's not duplicated already),

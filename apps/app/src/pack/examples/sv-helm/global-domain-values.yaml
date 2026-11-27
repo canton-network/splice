@@ -5,7 +5,6 @@ sequencer:
     secretName: sequencer-pg-secret
     databaseName: sequencer_SERIAL_ID
   driver:
-    type: "cantonbft"
     externalAddress: "sequencer-p2p-SERIAL_ID.sv.YOUR_HOSTNAME"
     externalPort: 443
     persistence:

@@ -18,7 +18,7 @@ function migration(id: number, gitReference?: string): MigrationInfo {
   return {
     id,
     version: { type: 'remote', version: `0.${id}.0` },
-    sequencer: { enableBftSequencer: true, dedicatedBftSequencerDb: true },
+    sequencer: { dedicatedBftSequencerDb: true },
     ...(gitReference !== undefined
       ? {
           releaseReference: {

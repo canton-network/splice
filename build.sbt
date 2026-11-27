@@ -2326,12 +2326,10 @@ checkErrors := {
     import better.files.File
     val logSpecificIgnores =
       if (File(ignorePatternsFilename(logName)).exists()) Seq(logName) else Seq.empty
-    // TODO (#8263): merge canton_log_bft into canton_log, DA BFT is always enabled now
-    val bftIgnore = Seq("canton_log_bft")
 
     val simtimeIgnorePatterns = if (usesSimtime) Seq("canton_log_simtime_extra") else Seq.empty
     val beforeIgnorePatterns =
-      Seq("canton_log") ++ simtimeIgnorePatterns ++ logSpecificIgnores ++ bftIgnore
+      Seq("canton_log") ++ simtimeIgnorePatterns ++ logSpecificIgnores
     val afterIgnorePatterns =
       beforeIgnorePatterns ++ Seq("canton_log_shutdown_extra") ++ logSpecificIgnores
 

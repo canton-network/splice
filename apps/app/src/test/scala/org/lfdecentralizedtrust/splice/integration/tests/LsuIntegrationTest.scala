@@ -148,7 +148,6 @@ class LsuIntegrationTest
               }
           )(config)
       })
-      .withBftSequencersSuccessor
       .addConfigTransform((_, config) =>
         ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config)
       )

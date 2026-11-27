@@ -84,7 +84,6 @@ abstract class InStackDecentralizedSynchronizerNode
       bftSequencerPostgres?: Postgres;
     },
     driver: {
-      type: 'cantonbft';
       externalAddress: string;
       externalPort: number;
       persistence?: {
@@ -244,7 +243,6 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       migrationId,
       dbs,
       {
-        type: 'cantonbft',
         externalAddress: `sequencer-p2p-${migrationId}.${ingressName}.${CLUSTER_HOSTNAME}`,
         externalPort: 443,
         persistence,

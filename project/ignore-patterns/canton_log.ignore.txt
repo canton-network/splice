@@ -220,3 +220,6 @@ SERVER_OVERLOADED.*Reached the limit of concurrent requests for.*DownloadTopolog
 
 Not accepting submission as aggregation ID.*is already marked as delivered
 SEQUENCER_AGGREGATE_SUBMISSION_ALREADY_SENT
+
+# Silence warning for stuck ordering layer in tests. Likely comes from onboarding new SVs while we don't have enough SVs to reach thresholds without the new one.
+Waiting for new membership after epoch completion for.*seconds without receiving it from the output module

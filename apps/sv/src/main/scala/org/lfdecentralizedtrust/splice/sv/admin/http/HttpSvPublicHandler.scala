@@ -473,7 +473,6 @@ class HttpSvPublicHandler(
               s"Waiting for sequencer $sequencerId to be onboarded before querying its onboarding state"
             )
             _ <- waitForNewSequencerObservedByExistingSequencer(
-              node.config.sequencer.isCantonBftSequencer,
               sequencerAdminConnection,
               decentralizedSynchronizer,
               sequencerId,
@@ -537,11 +536,10 @@ class HttpSvPublicHandler(
       .map(_.isDefined)
   }
 
-  /** Waits until the existing sequencer observes the new sequencer in the synchronizer topology and, for a BFT
-    * sequencer, in the ordering topology.
+  /** Waits until the existing sequencer observes the new sequencer in the synchronizer topology and in the
+    * ordering topology.
     */
   private def waitForNewSequencerObservedByExistingSequencer(
-      isBftSequencer: Boolean,
       sequencerAdminConnection: SequencerAdminConnection,
       decentralizedSynchronizer: SynchronizerId,
       sequencerId: SequencerId,
@@ -582,26 +580,23 @@ class HttpSvPublicHandler(
           },
         logger,
       )
-      _ <-
-        if (isBftSequencer) {
-          retryProvider.waitUntil(
-            RetryFor.WaitingOnInitDependency,
-            "sequencer_ordering_topology",
-            s"Wait for $sequencerId to be in the ordering topology",
-            sequencerAdminConnection
-              .getSequencerOrderingTopology()
-              .map(topology =>
-                if (topology.sequencerIds.contains(sequencerId)) ()
-                else
-                  throw Status.NOT_FOUND
-                    .withDescription(
-                      s"Sequencer $sequencerId is not in the ordering topology $topology"
-                    )
-                    .asRuntimeException()
-              ),
-            logger,
-          )
-        } else Future.unit
+      _ <- retryProvider.waitUntil(
+        RetryFor.WaitingOnInitDependency,
+        "sequencer_ordering_topology",
+        s"Wait for $sequencerId to be in the ordering topology",
+        sequencerAdminConnection
+          .getSequencerOrderingTopology()
+          .map(topology =>
+            if (topology.sequencerIds.contains(sequencerId)) ()
+            else
+              throw Status.NOT_FOUND
+                .withDescription(
+                  s"Sequencer $sequencerId is not in the ordering topology $topology"
+                )
+                .asRuntimeException()
+          ),
+        logger,
+      )
     } yield ()
   }
 

@@ -204,7 +204,6 @@ spec:
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.current {
                   sequencer {
-                    is-canton-bft-sequencer = true
                     admin-api {
                       address = {{ .Values.domain.sequencerAddress | quote }}
                       port = 5009
@@ -235,7 +234,6 @@ spec:
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.{{ $syncName }} {
                   sequencer {
-                    is-canton-bft-sequencer = true
                     admin-api {
                       address = {{ $sync.sequencerAddress | quote }}
                       port = 5009
@@ -266,7 +264,6 @@ spec:
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.{{ $i }} {
                   sequencer {
-                    is-canton-bft-sequencer = true
                     admin-api {
                       address = {{ $sync.sequencerAddress | quote }}
                       port = 5009

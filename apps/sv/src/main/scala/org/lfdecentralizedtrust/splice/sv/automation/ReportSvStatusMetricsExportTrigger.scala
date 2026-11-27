@@ -108,7 +108,6 @@ class ReportSvStatusMetricsExportTrigger(
         metrics.participantSynchronizerTime.updateValue(
           CantonTimestamp.assertFromInstant(status.participantSynchronizerTime).toMicros
         )
-        metrics.cometBftHeight.updateValue(status.cometBftHeight)
         metrics.latestOpenRound.updateValue(status.latestOpenRound.number)
         TaskSuccess(show"Updated metrics")
     }
@@ -150,8 +149,6 @@ object ReportSvStatusMetricsExportTrigger {
       gauge("number", "The report number, as reported in the contract", initial = 0L)
     val creationTime: Gauge[Long] =
       gauge("creation_time_us", "When was the last report created", initial = minTimestampValue)
-    val cometBftHeight: Gauge[Long] =
-      gauge("cometbft_height", "CometBFT height as reported during the last report", initial = -1L)
     val mediatorSynchronizerTime: Gauge[Long] =
       gauge(
         "domain_time_us",
@@ -174,7 +171,6 @@ object ReportSvStatusMetricsExportTrigger {
     override def close(): Unit = {
       reportNumber.close()
       creationTime.close()
-      cometBftHeight.close()
       mediatorSynchronizerTime.close()
       participantSynchronizerTime.close()
       latestOpenRound.close()

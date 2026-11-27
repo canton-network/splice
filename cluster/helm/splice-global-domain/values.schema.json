@@ -9,13 +9,7 @@
       "properties": {
         "driver": {
           "type": "object",
-          "required": ["type"],
-          "properties": {
-            "type": {
-              "const": "cantonbft",
-              "description": "The sequencer driver. Only the Canton BFT (DA BFT) driver is supported."
-            }
-          }
+          "description": "The Canton BFT (DA BFT) sequencer driver configuration."
         }
       }
     },

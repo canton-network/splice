@@ -168,9 +168,6 @@ class SvApp(
           ),
           loggerFactory,
           retryProvider,
-          SequencerConfig.fromConfig(
-            svSynchronizerConfig.sequencer
-          ),
           svSynchronizerConfig,
         )
       )
