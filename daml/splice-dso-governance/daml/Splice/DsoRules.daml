@@ -827,6 +827,7 @@ template DsoRules with
       controller confirmer
       do
         require "Confirmer is an SV" (confirmer `Map.member` svs)
+        requireWellformedAction config action
         now <- getTime
         let expiresAt = now `addRelTime` config.actionConfirmationTimeout
         confirmation <- create Confirmation with
@@ -876,6 +877,7 @@ template DsoRules with
           None -> fail "Requester is not an SV"
           Some info -> pure (info.name)
         requireWellformedReason config reason
+        requireWellformedAction config action
         now <- getTime
         let voteBefore = case voteRequestTimeout of
               Some value ->
@@ -2080,6 +2082,34 @@ requireWellformedReason : DsoRulesConfig -> Reason -> Update ()
 requireWellformedReason config reason = do
   require "Reason URL is not too long" (T.length reason.url <= config.maxTextLength)
   require "Reason body is not too long" (T.length reason.body <= config.maxTextLength)
+
+-- | Check the length of the `Text` values of an action when it is proposed or confirmed,
+-- as the stores index the whole action.
+requireWellformedAction : DsoRulesConfig -> ActionRequiringConfirmation -> Update ()
+requireWellformedAction config act = case act of
+  ARC_DsoRules with .. -> case dsoAction of
+    SRARC_AddSv arg -> do
+      TextLimits.requireMaxLength "newSvName" TextLimits.maxIdentifierLength arg.newSvName
+      TextLimits.requireMaxLength "newSvParticipantId" TextLimits.maxIdentifierLength arg.newSvParticipantId
+    SRARC_ConfirmSvOnboarding arg -> do
+      TextLimits.requireMaxLength "newSvName" TextLimits.maxIdentifierLength arg.newSvName
+      TextLimits.requireMaxLength "newParticipantId" TextLimits.maxIdentifierLength arg.newParticipantId
+      TextLimits.requireMaxLength "reason" config.maxTextLength arg.reason
+    SRARC_CreateUnallocatedUnclaimedActivityRecord arg ->
+      TextLimits.requireMaxLength "reason" config.maxTextLength arg.reason
+    SRARC_OffboardSv _ -> pure ()
+    SRARC_GrantFeaturedAppRight _ -> pure ()
+    SRARC_RevokeFeaturedAppRight _ -> pure ()
+    SRARC_UpdateFeaturedAppRight _ -> pure ()
+    SRARC_SetConfig _ -> pure ()
+    SRARC_UpdateSvRewardWeight _ -> pure ()
+    SRARC_CreateExternalPartyAmuletRules _ -> pure ()
+    SRARC_CreateTransferCommandCounter _ -> pure ()
+    SRARC_CreateBootstrapExternalPartyConfigStateInstruction _ -> pure ()
+    SRARC_CreateFeaturedAppConfigUpdateInstruction _ -> pure ()
+  ARC_AmuletRules _ -> pure ()
+  ARC_AnsEntryContext _ _ -> pure ()
+  ExtActionRequiringConformation _ -> pure ()
 
 requireWellformedVote : DsoRulesConfig -> Vote -> Update ()
 requireWellformedVote config vote = do

@@ -3,6 +3,7 @@
 
 module Splice.Scripts.TestGovernance where
 
+import DA.Action (void)
 import DA.Assert
 import DA.Foldable (forA_)
 import DA.List
@@ -11,6 +12,7 @@ import qualified DA.Set as Set
 import Daml.Script
 import DA.Time
 import DA.TextMap qualified as TextMap
+import DA.Text qualified as Text
 
 import Splice.Amulet
 import Splice.AmuletRules
@@ -32,6 +34,8 @@ import Splice.Scripts.DsoTestUtils
 import Splice.Scripts.Util (AmuletApp(..))
 import Splice.Testing.Registries.AmuletRegistry.Parameters
 import Splice.Testing.Utils
+import Splice.TextLimits (textTooLongFailure)
+import Splice.Types (Round(..))
 
 
 -- Vote Requests
@@ -1401,4 +1405,58 @@ testGrantFeaturedAppRightWithConfig = do
       exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
         requestCid; amuletRulesCid = Some amuletRulesCid; sv = Some sv1
   [_] <- query @FeaturedAppRight provider
+  pure ()
+
+
+testActionTextLimits : Script ()
+testActionTextLimits = do
+  (_app, dso, (sv1, _sv2, _sv3, _sv4)) <- initMainNet
+
+  [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
+  svX <- allocateParty "svX"
+  now <- getTime
+  let -- the limits are spelled out to notice accidental changes
+      maxIdentifier = 255
+      maxText = dsoRules.config.maxTextLength
+      addSv newSvName newSvParticipantId = ARC_DsoRules with
+        dsoAction = SRARC_AddSv DsoRules_AddSv with
+          newSvParty = svX
+          newSvName
+          newSvRewardWeight = 19
+          newSvParticipantId
+          joinedAsOfRound = Round 3
+      confirmOnboarding newSvName newParticipantId reason = ARC_DsoRules with
+        dsoAction = SRARC_ConfirmSvOnboarding DsoRules_ConfirmSvOnboarding with
+          newSvParty = svX
+          newSvName
+          newParticipantId
+          newSvRewardWeight = 19
+          reason
+      createActivityRecord reason = ARC_DsoRules with
+        dsoAction = SRARC_CreateUnallocatedUnclaimedActivityRecord DsoRules_CreateUnallocatedUnclaimedActivityRecord with
+          beneficiary = svX
+          amount = 10.0
+          reason
+          expiresAt = addRelTime now (days 2)
+      requestVote action = void $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+        requester = sv1
+        action
+        reason = Reason with url = ""; body = "because"
+        voteRequestTimeout = None
+        targetEffectiveAt = None
+      confirmAction action = void $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+        confirmer = sv1
+        action
+      checkLimit field limit mkAction =
+        forA_ [requestVote, confirmAction] $ \propose -> do
+          submit (actAs sv1 <> readAs dso) $ propose $ mkAction $ Text.implode (replicate limit "x")
+          submitMustFail'' (expectFailureStatus (== textTooLongFailure field limit (limit + 1))) (actAs sv1 <> readAs dso) $
+            propose $ mkAction $ Text.implode (replicate (limit + 1) "x")
+
+  checkLimit "newSvName" maxIdentifier $ \name -> addSv name "svX-participant-id"
+  checkLimit "newSvParticipantId" maxIdentifier $ \participantId -> addSv "svX" participantId
+  checkLimit "newSvName" maxIdentifier $ \name -> confirmOnboarding name "svX-participant-id" "because"
+  checkLimit "newParticipantId" maxIdentifier $ \participantId -> confirmOnboarding "svX" participantId "because"
+  checkLimit "reason" maxText $ \reason -> confirmOnboarding "svX" "svX-participant-id" reason
+  checkLimit "reason" maxText createActivityRecord
   pure ()

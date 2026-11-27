@@ -56,6 +56,8 @@
       | SV governance lock requests | SV name in the `lock-subject` metadata | 255 |
       | `WalletAppInstall_CreateBuyTrafficRequest` | `trackingId` | 279 |
       | `BuyTrafficRequest` template | `trackingId` | 279 |
+      | `DsoRules_RequestVote`, `DsoRules_ConfirmAction` | `newSvName`, `newSvParticipantId` and `newParticipantId` in `SRARC_AddSv` and `SRARC_ConfirmSvOnboarding` actions | 255 |
+      | `DsoRules_RequestVote`, `DsoRules_ConfirmAction` | `reason` in `SRARC_ConfirmSvOnboarding` and `SRARC_CreateUnallocatedUnclaimedActivityRecord` actions | `maxTextLength` of the `DsoRulesConfig` |
 
   - Scan App
 
