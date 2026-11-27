@@ -170,8 +170,10 @@ test_RegisterSynchronizer_acceptsZeroAndAboveOneWeights = do
   -- 0.0 is allowed, and there is no upper bound.
   initiateAndAcceptVote app svs $ registerAction paymaster 0.0 2.0
   (_, registration) <- onlyRegistration dso
-  registration.config.maxAppActivityWeight === 0.0
-  registration.config.maxAssetActivityWeight === 2.0
+  registration === DedicatedSynchronizer with
+    dso
+    synchronizerId = testSynchronizerId
+    config = mkConfig paymaster 0.0 2.0
 
 -- | An update cannot set an empty synchronizer id, as it keeps the registration's id, so only the
 -- weights are checked here. The empty id is covered at registration.
@@ -194,5 +196,7 @@ test_UpdateSynchronizerRegistration_rejectsNegativeWeights = do
   -- 0.0 is allowed, and there is no upper bound.
   initiateAndAcceptVote app svs $ updateAction registered paymaster 2.0 0.0
   (_, updated) <- onlyRegistration dso
-  updated.config.maxAppActivityWeight === 2.0
-  updated.config.maxAssetActivityWeight === 0.0
+  updated === DedicatedSynchronizer with
+    dso
+    synchronizerId = testSynchronizerId
+    config = mkConfig paymaster 2.0 0.0
