@@ -4,7 +4,9 @@ import { z } from 'zod';
 
 import { clusterProdLike, isMainNet } from '../config';
 import { clusterYamlConfig } from '../config/config';
-import { DEFAULT_AUDIENCE } from './audiences';
+
+// TODO(#2873): can we get to a point where we no longer even export this outside of this file?
+export const DEFAULT_AUDIENCE = 'https://canton.network.global';
 
 const AudienceConfigSchema = z.union([
   z.strictObject({
@@ -26,7 +28,7 @@ const Auth0ConfigSchema = z.strictObject({
 
 const Auth0RootConfigSchema = z.object({
   auth0: Auth0ConfigSchema
-    // TODO(): remove these defaults when we get config for the respective clusters.
+    // TODO(#8757): remove these defaults when we get config for the respective clusters.
     .default(() => {
       if (isMainNet) {
         return {

@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { ClusterBasename } from '../config/gcpConfig';
 import { auth0Config } from './config';
+import { DEFAULT_AUDIENCE } from './config';
 
 // TODO(#2873): can we get to a point where we no longer even export this outside of this file?
-export const DEFAULT_AUDIENCE = 'https://canton.network.global';
+export { DEFAULT_AUDIENCE };
 
 export function getApiAudience(
   api: 'ledgerApi' | 'participantAdminApi' | 'validatorApi' | 'svAppApi',
