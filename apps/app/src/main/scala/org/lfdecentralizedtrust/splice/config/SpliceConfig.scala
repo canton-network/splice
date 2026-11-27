@@ -552,7 +552,15 @@ object SpliceConfig {
       deriveReader[ScanSnapshotPruningConfig]
     implicit val scanUpdateHistoryPruningConfigReader
         : ConfigReader[ScanUpdateHistoryPruningConfig] =
-      deriveReader[ScanUpdateHistoryPruningConfig]
+      deriveReader[ScanUpdateHistoryPruningConfig].emap { conf =>
+        Either.cond(
+          !conf.enabled,
+          conf,
+          ConfigValidationFailed(
+            "pruning.update-history.enabled cannot be set yet: pruning update history must wait for the DsoRules and votes backfills, a serving boundary for pruned data and E6 (see #6462)"
+          ),
+        )
+      }
     implicit val scanPruningConfigReader: ConfigReader[ScanPruningConfig] =
       deriveReader[ScanPruningConfig]
     implicit val scanConfigReader: ConfigReader[ScanAppBackendConfig] =
