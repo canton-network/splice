@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnles
 import slick.jdbc.JdbcProfile
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.jdbc.canton.SQLActionBuilder
+import scala.concurrent.duration.*
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -43,6 +44,8 @@ class DbUnavailablePartiesStore(
   private val baseMicros = baseDuration.underlying.toMicros
   private val maxMicros = maxIgnoreDuration.underlying.toMicros
   private val jitterMicros = baseJitter.underlying.toMicros
+  // Marks configured ignored parties: the largest FiniteDuration (~292 years), i.e. never expiring
+  private val permanentMicros = Long.MaxValue.nanos.toMicros
 
   override def addParties(
       parties: Seq[PartyId]
@@ -108,40 +111,73 @@ class DbUnavailablePartiesStore(
         .map(_.discard)
     }
 
-  override def ensureParties(
-      parties: Seq[PartyId]
-  )(implicit tc: TraceContext): Future[Unit] =
-    ensurePartiesAt(parties, clock.now.toMicros)
-
-  private[splice] def ensurePartiesAt(parties: Seq[PartyId], nowMicros: Long)(implicit
+  /** Brings the table in line with the configuration, to be run once at startup:
+    * configured ignored parties are ignored permanently, protected parties never are,
+    * and entries of old stores (e.g. from earlier store descriptors) are removed.
+    */
+  def syncWithConfig(configuredIgnoredParties: Set[PartyId])(implicit
       tc: TraceContext
   ): Future[Unit] =
-    if (parties.isEmpty) Future.unit
-    else {
-      val partyArray = parties.distinct.toArray
-      storage
-        .update(
-          sql"""insert into dso_unavailable_parties
-                  (party, updated_at, ignore_duration, store_id)
-                select u.party, $nowMicros, $maxMicros, $storeId
-                from unnest($partyArray) as u(party)
-                on conflict (store_id, party) do update
-                  set updated_at = excluded.updated_at,
-                      ignore_duration = excluded.ignore_duration
-                  where dso_unavailable_parties.updated_at + dso_unavailable_parties.ignore_duration <= excluded.updated_at
-             """.asUpdate,
-          "ensureParties",
-        )
-        .map(_.discard)
+    for {
+      _ <- syncConfiguredParties((configuredIgnoredParties -- protectedParties).toSeq)
+      removedProtected <- removeParties(protectedParties.toSeq)
+      removedOldStores <- removeOldStores()
+    } yield {
+      if (removedProtected.nonEmpty)
+        logger.info(s"Removed protected parties from the unavailable parties: $removedProtected")
+      if (removedOldStores > 0)
+        logger.info(s"Removed $removedOldStores unavailable parties entries of old stores")
     }
 
-  override def removeOtherStores()(implicit tc: TraceContext): Future[Int] =
+  // Ignores the configured parties permanently, and releases previously configured parties that are no longer in the list
+  def syncConfiguredParties(
+      parties: Seq[PartyId]
+  )(implicit tc: TraceContext): Future[Unit] =
+    syncConfiguredPartiesAt(parties, clock.now.toMicros)
+
+  private[splice] def syncConfiguredPartiesAt(parties: Seq[PartyId], nowMicros: Long)(implicit
+      tc: TraceContext
+  ): Future[Unit] = {
+    val partyArray = parties.distinct.toArray
+    for {
+      ensured <- storage.update(
+        sql"""insert into dso_unavailable_parties
+                (party, updated_at, ignore_duration, store_id)
+              select u.party, $nowMicros, $permanentMicros, $storeId
+              from unnest($partyArray) as u(party)
+              on conflict (store_id, party) do update
+                set updated_at = excluded.updated_at,
+                    ignore_duration = excluded.ignore_duration
+                where dso_unavailable_parties.ignore_duration <> excluded.ignore_duration
+           """.asUpdate,
+        "syncConfiguredParties.ensure",
+      )
+      released <- storage
+        .queryAndUpdate(
+          sql"""delete from dso_unavailable_parties
+                where store_id = $storeId
+                  and ignore_duration = $permanentMicros
+                  and party <> all($partyArray)
+                returning party""".asUpdateReturning[PartyId],
+          "syncConfiguredParties.release",
+        )
+        .map(_.toSeq)
+    } yield {
+      if (ensured > 0)
+        logger.info(s"Ignoring $ensured configured parties permanently")
+      if (released.nonEmpty)
+        logger.info(s"Released configured parties that are no longer ignored: $released")
+    }
+  }
+
+  // Removes the entries of all stores other than this one, e.g. left over from earlier store descriptors
+  def removeOldStores()(implicit tc: TraceContext): Future[Int] =
     storage.update(
       sql"""delete from dso_unavailable_parties where store_id <> $storeId""".asUpdate,
-      "removeOtherStores",
+      "removeOldStores",
     )
 
-  // Removes specific parties from the table upon successful transaction processing.
+  // Removes specific parties from the table upon successful transaction processing, except permanently ignored ones.
   def removeParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Seq[PartyId]] =
     if (parties.isEmpty) Future.successful(Seq.empty)
     else {
@@ -150,6 +186,7 @@ class DbUnavailablePartiesStore(
         .queryAndUpdate(
           sql"""delete from dso_unavailable_parties
                 where party = any($partyArray) and store_id = $storeId
+                  and ignore_duration <> $permanentMicros
                 returning party""".asUpdateReturning[PartyId],
           "removeParties",
         )

@@ -30,13 +30,6 @@ class InMemoryUnavailablePartiesStore(
     Future.successful(partiesToIgnore)
   }
 
-  override def ensureParties(newParties: Seq[PartyId])(implicit tc: TraceContext): Future[Unit] = {
-    newParties.foreach(parties.add)
-    Future.unit
-  }
-
-  override def removeOtherStores()(implicit tc: TraceContext): Future[Int] = Future.successful(0)
-
   override def removeParties(toRemove: Seq[PartyId])(implicit
       tc: TraceContext
   ): Future[Seq[PartyId]] =

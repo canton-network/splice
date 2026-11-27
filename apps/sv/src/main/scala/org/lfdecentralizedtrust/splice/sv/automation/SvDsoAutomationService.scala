@@ -56,7 +56,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.*
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.SvTaskBasedTrigger
-import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesCleanupTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.*
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.{
   SvOffboardingMediatorTrigger,
@@ -301,16 +300,6 @@ class SvDsoAutomationService(
 
   // Triggers that require namespace permissions and the existence of the DsoRules and AmuletRules contracts
   def registerPostOnboardingTriggers(): Unit = {
-    if (enabledFeatures.enablePersistedUnavailableParties) {
-      registerTrigger(
-        new UnavailablePartiesCleanupTrigger(
-          triggerContext,
-          unavailablePartiesStore,
-          config.automation.ignoredPartyIds,
-          config.protectedPartyIds + dsoStore.dsoPartyId,
-        )
-      )
-    }
     registerTrigger(
       new SvOnboardingRequestTrigger(
         triggerContext,
@@ -786,6 +775,5 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[LsuTransferTrafficTrigger],
       aTrigger[LsuSequencingTestTrigger],
       aTrigger[ReconcileSequencingParametersTrigger],
-      aTrigger[UnavailablePartiesCleanupTrigger],
     )
 }
