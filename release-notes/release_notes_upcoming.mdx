@@ -13,6 +13,12 @@
       repair commands such as `participant.repair.import_acs`.
       The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
 
+  - Scan App
+
+    - SVs can enable bulk storage: Scan exports its update history and daily ACS snapshots to S3-compatible object
+      storage. It is optional for now. See [SV Bulk Storage](https://docs.canton.network/global-synchronizer/production-operations/sv-bulk-storage)
+      for the buckets, credentials and Helm values, and the commented `bulkStorage` section in the example `scan-values.yaml`.
+
   - SV App
 
     - Removed the legacy "Update Featured Application Metadata (use before Splice 0.10.0)" proposal option from the SV UI.
