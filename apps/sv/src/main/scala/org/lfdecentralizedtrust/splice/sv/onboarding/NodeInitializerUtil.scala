@@ -227,7 +227,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
           protectedPartiesWithDso,
           loggerFactory,
           config.unavailablePartiesBackoffParameters.baseIgnoreDurationJitter,
-        )
+        ).flatMap(store => store.syncWithConfig(config.automation.ignoredPartyIds).map(_ => store))
       }
     } else {
       Future.successful(

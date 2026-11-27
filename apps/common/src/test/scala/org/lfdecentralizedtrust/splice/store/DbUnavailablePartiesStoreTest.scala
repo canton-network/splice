@@ -7,6 +7,7 @@ import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.store.db.{
@@ -40,18 +41,176 @@ class DbUnavailablePartiesStoreTest
 
   private def atSeconds(seconds: Long): Long = seconds * oneSecond
 
-  private def mkStore(descriptor: StoreDescriptor = storeDescriptor) =
+  private def mkStore(
+      descriptor: StoreDescriptor = storeDescriptor,
+      protectedParties: Set[PartyId] = Set.empty,
+  ) =
     DbUnavailablePartiesStore(
       descriptor,
       storage,
       baseDuration,
       maxIgnoreDuration,
       wallClock,
-      Set.empty,
+      protectedParties,
       loggerFactory,
     )
 
   "DbUnavailablePartiesStore" should {
+
+    "syncWithConfig" should {
+
+      "ignore configured parties, drop protected parties and entries of old stores" in {
+        for {
+          store <- mkStore(protectedParties = Set(userParty(2)))
+          oldStore <- mkStore(storeDescriptor2)
+          _ <- store.addPartiesAt(Seq(userParty(2), userParty(3)), atSeconds(0))
+          _ <- oldStore.addPartiesAt(Seq(userParty(4)), atSeconds(0))
+          _ <- store.syncWithConfig(Set(userParty(1)))
+          parties <- store.listPartiesAt(atSeconds(0))
+          oldParties <- oldStore.listPartiesAt(atSeconds(0))
+        } yield {
+          parties should contain theSameElementsAs Seq(userParty(1), userParty(3))
+          oldParties shouldBe empty
+        }
+      }
+
+      "release a party once it is removed from the configuration, keeping detected ones" in {
+        for {
+          store <- mkStore()
+          _ <- store.addPartiesAt(Seq(userParty(3)), atSeconds(0))
+          _ <- store.syncWithConfig(Set(userParty(1)))
+          _ <- store.syncWithConfig(Set.empty)
+          parties <- store.listPartiesAt(atSeconds(0))
+        } yield parties shouldBe Seq(userParty(3))
+      }
+
+      "not ignore a configured party that is also protected" in {
+        for {
+          store <- mkStore(protectedParties = Set(userParty(1)))
+          _ <- store.syncWithConfig(Set(userParty(1)))
+          parties <- store.listPartiesAt(atSeconds(0))
+        } yield parties shouldBe empty
+      }
+
+      "release a protected party that was previously configured" in {
+        for {
+          store <- mkStore()
+          _ <- store.syncWithConfig(Set(userParty(1)))
+          protectedStore <- mkStore(protectedParties = Set(userParty(1)))
+          _ <- protectedStore.syncWithConfig(Set(userParty(1)))
+          parties <- protectedStore.listPartiesAt(atSeconds(0))
+        } yield parties shouldBe empty
+      }
+    }
+
+    "syncConfiguredParties" should {
+
+      "ignore configured parties permanently" in {
+        for {
+          store <- mkStore()
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1)), atSeconds(0))
+          later <- store.listPartiesAt(atSeconds(3600L * 24 * 365))
+        } yield later should contain(userParty(1))
+      }
+
+      "upgrade parties that are in backoff" in {
+        for {
+          store <- mkStore()
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1)), atSeconds(2))
+          later <- store.listPartiesAt(atSeconds(3600L * 24 * 365))
+        } yield later should contain(userParty(1))
+      }
+
+      "release permanently ignored parties that are no longer configured, keeping backoff entries" in {
+        for {
+          store <- mkStore()
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1), userParty(2)), atSeconds(0))
+          _ <- store.addPartiesAt(Seq(userParty(3)), atSeconds(0))
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(2)), atSeconds(0))
+          parties <- store.listPartiesAt(atSeconds(0))
+          _ <- store.syncConfiguredPartiesAt(Seq.empty, atSeconds(0))
+          afterEmpty <- store.listPartiesAt(atSeconds(0))
+        } yield {
+          parties should contain theSameElementsAs Seq(userParty(2), userParty(3))
+          afterEmpty should contain theSameElementsAs Seq(userParty(3))
+        }
+      }
+
+      "not be shortened or doubled by addParties" in {
+        for {
+          store <- mkStore()
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(10))
+          later <- store.listPartiesAt(atSeconds(3600L * 24 * 365))
+        } yield later should contain(userParty(1))
+      }
+
+      "not be removed by removeParties" in {
+        for {
+          store <- mkStore()
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1)), atSeconds(0))
+          removed <- store.removeParties(Seq(userParty(1)))
+          parties <- store.listPartiesAt(atSeconds(0))
+        } yield {
+          removed shouldBe empty
+          parties shouldBe Seq(userParty(1))
+        }
+      }
+
+      "not rewrite rows that are already permanent" in {
+        val permanentSeconds = 100L * 365 * 24 * 3600
+        for {
+          store <- mkStore()
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1)), atSeconds(10))
+          // a rewrite at 10s would extend the window to permanentSeconds + 10s
+          afterOriginalExpiry <- store.listPartiesAt(atSeconds(permanentSeconds + 5))
+        } yield afterOriginalExpiry shouldBe empty
+      }
+
+      "handle duplicate parties" in {
+        for {
+          store <- mkStore()
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1), userParty(1)), atSeconds(0))
+          parties <- store.listPartiesAt(atSeconds(0))
+        } yield parties shouldBe Seq(userParty(1))
+      }
+
+      "only affect its own store" in {
+        for {
+          store <- mkStore()
+          otherStore <- mkStore(storeDescriptor2)
+          _ <- otherStore.syncConfiguredPartiesAt(Seq(userParty(2)), atSeconds(0))
+          _ <- store.syncConfiguredPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- store.syncConfiguredPartiesAt(Seq.empty, atSeconds(0))
+          own <- store.listPartiesAt(atSeconds(0))
+          other <- otherStore.listPartiesAt(atSeconds(0))
+        } yield {
+          own shouldBe empty
+          other shouldBe Seq(userParty(2))
+        }
+      }
+    }
+
+    "removeOldStores" should {
+
+      "only remove the entries of old stores" in {
+        for {
+          store <- mkStore()
+          otherStore <- mkStore(storeDescriptor2)
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- otherStore.addPartiesAt(Seq(userParty(2)), atSeconds(0))
+          removed <- store.removeOldStores()
+          own <- store.listPartiesAt(atSeconds(0))
+          other <- otherStore.listPartiesAt(atSeconds(0))
+        } yield {
+          removed should be >= 1
+          own should contain(userParty(1))
+          other shouldBe empty
+        }
+      }
+    }
 
     "addParties" should {
 

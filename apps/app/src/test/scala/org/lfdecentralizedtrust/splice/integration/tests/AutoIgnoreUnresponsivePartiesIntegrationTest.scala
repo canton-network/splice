@@ -243,6 +243,7 @@ class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
     UnavailablePartiesBackoffParameters(
       baseIgnoreDuration = NonNegativeFiniteDuration.ofSeconds(15),
       maxIgnoreDuration = NonNegativeFiniteDuration.ofSeconds(30),
+      baseIgnoreDurationJitter = NonNegativeFiniteDuration.Zero,
     )
 
   private def ignoreDurationOf(
