@@ -134,21 +134,26 @@ to `log/ci-triage-export/<ref>/`.
      `direnv exec . .claude/skills/ci-triage/scripts/set_status.py Inbox Triaged <ref>` (recipe 12).
    - Duplicate: `direnv exec . .claude/skills/ci-triage/scripts/close_duplicates.py <parent> <ref>... --comment '<why>'` (a
      single line of plain text, inline, no body file), one line
-     per parent with all its duplicates (closing moves them to `Closed`). The duplicate close links the occurrence to the parent; add a recurrence comment on the parent only
-     when it recurs often and has neither an assignee nor an owner discussion.
+     per parent with all its duplicates (closing moves them to `Closed`). Before the close, the full triage comment (this
+     occurrence's evidence, the nine sections) goes on the duplicate itself; the close comment stays one line. Nothing is
+     posted on the parent: it is the origin, and the user decides about it (owner, priority) separately.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.
    Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no
-   packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example).
+   packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example). Titled
+   sections (Summary, Test Purpose, Test Environment, Expected Behavior, Actual Behavior, Reproduction Steps or Repro Rate, Root Cause, Fix, Owner with the reason) and a diagram in almost every
+   case, even a simple one, in the form that fits the issue (network under Test Environment, timeline under Actual Behavior;
+   `issue-comment.md`, Shape and Diagrams).
    Every claim in the comment must be reproducible from the packet alone: each fact, count, comparison and code
    reference has a packet section with the command and its verbatim output (a code claim: `git show <sha>:<file>`
    with the lines). A search result is listed per hit with one line on why it is or is not the same failure (title
    or the matching line), and only the hits that are the same failure are counted in the comment. A claim with no
    packet section is either added to the packet first or left out of the comment.
 9. Fix. Decide where the fix belongs and state it in the packet's Verdict and in the comment, precisely enough to
-   implement without the chat: file and change (for a backport the PR and the release line), and a suggested assignee only
-   when the evidence points at one or two people: the PR that introduced the failure, the one clear owner git blame
-   shows for the code the fix touches, or the component owner for infra or Canton (ci-triage-inbox, Assignee). No branch here: the fix agent
+   implement without the chat: file and change (for a backport the PR and the release line), and the owner(s): always
+   search for them in the history (the PR that introduced the failure, the history of the files the fix touches, the
+   related functional changes, recent fixes of the same area) and list all that apply with the commit or PR as
+   evidence (for a change by an external contributor: the internal reviewer or merger of that change instead, see ci-triage-inbox, Assignee); leave the assignee empty only when none can be found (ci-triage-inbox, Assignee). No branch here: the fix agent
    (`ci-triage-fix`) picks the issue up from Status Triaged and agrees the change with the user first.
 10. Commit in the dataset clone and hand it over (Dataset: Commits, Hand-over); under ci-triage-inbox the main
     thread does both. Report: one line per ref with the verdict, then the
@@ -166,3 +171,14 @@ to `log/ci-triage-export/<ref>/`.
 - The suite list of a checkErrors shard is not the culprit: the WARN's suite is the one running at the flagged
   timestamp, and commitment or ack WARNs often land minutes after the causing step.
 - A packet without the commands that produced its conclusions is not accepted.
+- Magnitude: a cause must account for the size of what failed. Put a number on it: how much of the delay, the
+  regression or the breach the mechanism explains ("explains 90 ms of +1.9 s"). When it explains only a small part,
+  it is a contributing factor and the cause is not established; say so and name the unexplained part. A fix must
+  bring the measured value under the limit, not only improve it.
+- Know what a number measures before attributing it: read the code of the timer, metric or log field (whole
+  operation, DB time, one query, wall clock or CPU) and use its scope in the comment. 11784: `getUpdate` is the whole
+  read, of which DB time grew 115 ms; the comment treated it as the DB step.
+- Performance regressions: compare the breakdown before and after (total, DB, outside DB, per query) from the same
+  log lines, over several samples when the test prints them; one cold sample is not a measurement.
+- Every quoted log line names the file it comes from (artifact file name, or job log and step), in the packet and in the
+  comment, so that anyone can verify it by hand.

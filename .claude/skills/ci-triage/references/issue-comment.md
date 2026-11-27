@@ -3,20 +3,86 @@
 Reader: a senior engineer who knows splice and Canton but never opens the triage dataset. The comment must stand on
 its own: no packet paths or other triage-dataset references.
 
-Shape (Markdown, short paragraphs of one to three sentences; as short as the facts allow):
-1. Verdict in one line: what kind of failure, and whether splice needs a change. State it as certain only when
-   every link from the trigger to the failure is shown in the log; otherwise say "likely" and name the unshown
-   link in one sentence. When the code has a guard against exactly this failure (a cleanup, a pause, a retry), the
-   verdict must say why the guard did not work; a cause that skips the guard is incomplete (11195: blamed the suite
-   that left vetted packages behind, missed that `withNoVettedPackages` skipped the disconnected participant).
-2. What failed, by plain job or test name (`docker-compose`, `key-download`, the test name), without run ids, shas,
-   shard numbers or which duplicate belongs to which job: the issue and the linked duplicates show those.
-3. The decisive log lines verbatim in a fenced code block (two to six lines, timestamps kept, secrets and long JSON
-   trimmed with `...`), then one or two sentences interpreting them.
-4. Only the facts that settle the verdict, one sentence each (a check that passed, the last good run). No timeline
-   of the investigation, no list of runs checked.
-5. Resolution only when someone has to act and the action is not obvious from the verdict: the fix in one sentence
-   (file and change) and the owner. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
+Shape (Markdown, titled sections in this order, short paragraphs of one to three sentences; as short as the facts
+allow). The same sections are used in the chat presentation and in the comment. Leave a section out only when it has
+nothing to say.
+1. `## Summary`: exactly one line (one sentence, under about 200 characters, no line break): what broke and how bad
+   (the failing test or job, how often, whether it blocks main or a release line, whether splice needs a change).
+   Details belong in the sections below, not here. State it as certain only when every link from the trigger to
+   the failure is shown in the log; otherwise say "likely" and name the unshown link in the sections below. When
+   the code has a guard against exactly this failure (a cleanup, a pause, a retry), the sections must say why the
+   guard did not work; a cause that skips the guard is incomplete (11195: blamed the suite that left vetted
+   packages behind, missed that `withNoVettedPackages` skipped the disconnected participant).
+2. `## Test Purpose`: what the test, job or workflow step is for, in plain words (for a deploy or a workflow: what
+   it applies or checks). Plain job and test names, no run ids, shas, shard numbers or which duplicate belongs to
+   which job.
+3. `## Test Environment`: the architecture the failing job runs in, in two or three sentences and a network diagram:
+   which components (apps, nodes, sequencers, runner, cluster, stores) take part and how they are connected.
+4. `## Expected Behavior`: what should have happened at the point of failure, in one or two sentences.
+5. `## Actual Behavior`: what happened instead, with the decisive log lines verbatim in a fenced code block (two to
+   six lines, timestamps kept, secrets and long JSON trimmed with `...`) and a timeline diagram when the order of
+   events matters. Name the log file each block comes from, in the sentence before the block or in a comment line
+   above it, so that a reader can verify it by hand: the file as it is named in the job's artifact
+   (`canton_network_test.clog.gz`, `canton-simtime.clog.gz`, `canton.clog.gz`) or, for the console log, the file name in the run's log archive (`gh api repos/<repo>/actions/runs/<run>/logs`,
+   `unzip -l`; e.g. `0_trigger_cimain _ trigger_cluster_test.txt`) with the job id and the step. A block that mixes files is split per file. Never quote a
+   line without saying where it is. Make the source the first line inside the code block, as a comment line
+   (`# log file: canton_network_test.clog.gz` or, for a console log, `# log file: <file name in the run's log archive> (job <id>, step "<step>")`), so that it stays with the
+   lines when someone copies them. Before handing over the comment, check that every code block with log lines
+   starts with such a line.
+6. `## Reproduction Steps`: the commands that reproduce it or force it, with their real output (a small local
+   setup is fine), and one sentence on the repro rate: hits and runs of the job, first occurrence or not, what
+   triggers it. When it cannot be forced, the section is called `## Repro Rate` and has only the rate and what
+   would force it.
+7. `## Root Cause`: the mechanism, with only the facts that settle it, one sentence each (a check that passed, the
+   last good run); no timeline of the investigation, no list of runs checked.
+8. `## Fix`: the fix in one or two sentences (file and change; for a backport the PR and the release line), or why
+   none is needed. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
+9. `## Owner`: the person(s) to assign, each with the reason (the PR or commit that introduced the failure, the
+   history of the touched files, the related functional change, a recent fix; whether the cause is the original
+   change or a later one, authorship alone is not ownership; for an external contributor the internal reviewer or
+   merger instead; ci-triage-inbox, Assignee). Left out when no owner was found.
+Priorities, in this order:
+1. Right. The conclusion, the duplicate decision, the fix and the owner must be correct; that matters more than
+   length or speed. Say "likely" or "not established" where the evidence stops.
+2. Enough. Add the information a reader needs to trust and act on the conclusion: the decisive log lines, the
+   number that sizes the cause, the one fact that rules out the obvious alternative. When a case is subtle (a
+   metric that means something else than its name, a cause that is only part of the delay, a parent that differs
+   in one point), say so, even if it takes more words.
+3. Crisp. Everything else is cut: investigation steps, timing tables and breakdowns that do not change the
+   conclusion (they stay in the packet), ruled-out alternatives nobody would suspect, related issues that are not
+   the parent, caveats that do not change the action, repeated facts. Simple, direct sentences. A plain case is
+   short (about 300 words for a root cause, less for a duplicate: Summary one line, Repro Rate one line, Fix one to
+   three lines, Owner one line); a subtle one is as long as it needs to be, no longer.
+Diagrams always help: always the full network diagram (Test Environment) and the full timeline (Actual Behavior), as
+described under Diagrams. They do not count against the length.
+Tone: friendly and direct, as a colleague would write it. Plain words, active voice, "we" where natural ("We've
+seen this once in 33 runs"). Explain why a fact matters in the same breath ("that error just means the same command
+is still running"). No report jargon or labels ("Verdict:", "Not explained:", "Case: old code"), no stiff passive
+constructions, no hedging beyond "likely" where the evidence stops.
+Style: write for a quick read. Simple, direct sentences: one idea per sentence, about 20 words at most, active voice,
+plain words, the subject first. No chains of clauses joined by commas, semicolons or "which"; split them. A fix or a
+list of steps is a short numbered list or a small code block, not one long sentence. Keep the facts and the names
+(files, steps, tests, PRs): shortening must not lose context. Example, not "In `cluster_tests.yml`, step "Trigger
+cluster test": keep only the successful response in `result`, for example write the body to a file with `curl -o` and
+use the file (or take `tail -n 1` of `$result`) before the `echo`", but: "File: `cluster_tests.yml`, step `Trigger
+cluster test`. Keep only the successful response. Write the body to a file with `curl -o`. Read `result` from that
+file." The same style applies to the chat presentation.
+
+Diagrams (default: yes): a diagram helps a reader grasp the failure faster in almost every case, even a simple one,
+so draw one unless the failure is plainly a one-liner with nothing to connect (a missing file, a typo). Keep it
+small: three to eight boxes. There is no fixed recipe; pick the form that makes the failure clearest:
+- Under `Test Environment`: a network picture (who talks to whom, which part of the setup the config or code
+  belongs to), with the failing part or link marked.
+- Under `Actual Behavior`: a timeline when the order of events matters (a race, a close during a call, a cancel after
+  an error), or a state change or before and after, when that explains it better. One picture may serve both if it is
+  clear.
+- How: Mermaid (GitHub renders it in the comment), placed before the log block. Short labels (at most about 30
+  characters per line, `<br/>` for line breaks) so nothing is cut off at comment width; the failing step stands
+  out (red link: `linkStyle <n> stroke:#d00,stroke-width:3px,color:#d00`); times as offsets with the date and the
+  log file in a note. Only steps and names that the quoted lines or the code show. Check the syntax before handing
+  over the comment (`mermaid.parse` under jsdom accepts or rejects the source); the rendering is only seen on the
+  issue.
+
 Do not claim evidence is absent ("not in the artifacts", "the logs do not show") unless a stated search settled it; an unexplained step is left out or named as open ("not found" is a statement about our search, not the logs). No triage-dataset vocabulary: no family letters ("family L") or packet names; describe the mechanism instead. No speculation about causes the evidence does not show (who or what did something, why), no @mentions (the
 assignee is set with the command), and no "Not checked" paragraph unless the missing evidence decides whether
 someone has to act; then one sentence, and if the evidence is in a system the user can read (GCP logs: recipe 13),
@@ -27,14 +93,29 @@ cn-test-failures issues; a splice PR or commit is `canton-network/splice#N` or a
 (not to name the commit under test, which the issue already shows).
 
 Leave out what the reader can see on the issue itself (links, the job list) and the triage process (which recipes
-ran, what was grepped). Duplicate-close comments are one sentence of plain text, the one fact that makes it the same failure, passed inline
+ran, what was grepped). A duplicate gets the full triage comment (the nine sections with this occurrence's evidence, written like any other
+comment; the Summary starts with "Same failure as #N") and nothing is posted on its parent. The close comment is one sentence of plain text, the one fact that makes it the same failure, passed inline
 with `close_duplicates.py --comment '...'` (no body file; no backticks or quotes, so it fits the shell rules). They do not
 name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
 already.
 
+Every body file ends with a hidden marker line `<!-- ci-triage:<ref> -->`. The hand-over script finds its own earlier
+comment by that marker and then posts nothing, so a re-run never makes a second copy. (Searching for a phrase of the
+text breaks as soon as the text changes: 11775 got two copies that way.)
+
+A posted comment is never overwritten: people have read it and may have answered it. A correction or a new finding
+after posting is a new follow-up comment, body file `comments/<ref>-update-<n>.md` with marker
+`<!-- ci-triage:<ref>-update-<n> -->`, posted once by its own marker. It starts with `## Update: <what changed>` and
+says in its first sentence what in the earlier comment was wrong or is new (11784: the read regression was blamed on
+the DB, but most of it is outside the DB timers). The body file of the original stays as posted. Before writing the
+correction, check whether the original is posted (search the issue's comments for its marker): if it is not posted
+yet, fix the original file instead. Exception, only when the user asks for it (11780, wrong owner): delete the posted triage comment and post
+the corrected one; the hand-over script deletes only our own comments with the marker whose text differs from the
+file, and changes nothing else that the user did not ask for (assignees, pings, status).
+
 Body files (shell rules for the commands: `<D>/CLAUDE.md`, Commands for the user). A comment that is a single line
 of plain text (no Markdown, backticks, quotes, backslashes or `$`) is passed inline with `--body` or `--comment`;
-duplicate-close comments are always written that way. Every other comment, and always one with a code block or a
+the one-sentence close comment is always written that way (the full duplicate comment is a body file). Every other comment, and always one with a code block or a
 log line, goes into `<round dir>/comments/<ref>.md`, is handed over (ci-triage skill, Dataset) and is posted from
 the user's host clone with `--body-file <checkout>/ci-triage/rounds/<round>/comments/<ref>.md` (or
 `close_duplicates.py --comment-file` with the same path, which accepts only such files). Never edit a log line to
