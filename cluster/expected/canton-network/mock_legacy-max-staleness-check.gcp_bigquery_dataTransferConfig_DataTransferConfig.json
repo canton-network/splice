@@ -1,0 +1,17 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "dataSourceId": "scheduled_query",
+    "displayName": "mock Legacy Datastream max_staleness Check",
+    "location": "europe-west6",
+    "params": {
+      "query": "DECLARE below_safe STRING DEFAULT (\n  SELECT STRING_AGG(FORMAT('%s=%s', t.table_name, IFNULL(o.option_value, 'unset')), ', ' ORDER BY t.table_name)\n  FROM `test-project.mock_da2_scan.INFORMATION_SCHEMA.TABLES` t\n  LEFT JOIN `test-project.mock_da2_scan.INFORMATION_SCHEMA.TABLE_OPTIONS` o\n    ON o.table_name = t.table_name AND o.option_name = 'max_staleness'\n  WHERE t.table_name IN ('scan_sv_1_update_history_creates', 'scan_sv_1_update_history_exercises', 'scan_sv_1_scan_verdict_store', 'scan_sv_1_scan_verdict_transaction_view_store', 'scan_sv_1_app_activity_record_store')\n    AND (o.option_value IS NULL\n      OR CAST(o.option_value AS INTERVAL) < MAKE_INTERVAL(second => 14400))\n);\nIF below_safe IS NOT NULL THEN\n  RAISE USING MESSAGE = CONCAT('splice-legacy-bq-max-staleness-below-safe cluster=mock: max_staleness below 14400s on ', below_safe);\nEND IF;"
+    },
+    "schedule": "every 1 hours from 00:37 to 23:37",
+    "serviceAccountName": "bigquery@test-project.iam.gserviceaccount.com"
+  },
+  "name": "mock_legacy-max-staleness-check",
+  "provider": "",
+  "type": "gcp:bigquery/dataTransferConfig:DataTransferConfig"
+}
