@@ -180,6 +180,8 @@ data AmuletRules_MigrateContractStateSchemaResult = AmuletRules_MigrateContractS
 --
 -- Version 0 corresponds to `contractStateSchemaVersion = None`. There are no migrations yet,
 -- so `AmuletRules_MigrateContractStateSchema` cannot be exercised successfully yet.
+--
+-- When a migration is added perform the `AmuletRules_MigrateContractStateSchema` in `DsoBootstrap_Bootstrap`.
 latestContractStateSchemaVersion : Int
 latestContractStateSchemaVersion = 0
 
