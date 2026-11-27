@@ -41,16 +41,20 @@ nothing to say.
    history of the touched files, the related functional change, a recent fix; whether the cause is the original
    change or a later one, authorship alone is not ownership; for an external contributor the internal reviewer or
    merger instead; ci-triage-inbox, Assignee). Left out when no owner was found.
-Length: super short and crisp. Keep only what a reader needs to act: what failed, the proof, the cause, the fix, the
-owner. Aim for about 300 words for a root cause and less for a duplicate. Per section: Summary one line; Test Purpose
-and Expected Behavior one or two sentences; Test Environment two or three sentences; Actual
-Behavior three to five sentences, one log block of two to four lines (a second block only when a
-different file proves a different step); Repro Rate one line; Root Cause two to four sentences; Fix one to three
-lines; Owner one line with the reason. Leave out: investigation steps, timing tables and breakdowns (they stay in the
-packet), ruled-out alternatives unless a reader would suspect them, related issues that are not the parent, caveats
-about what was not checked unless they change the action, and repeated facts. When in doubt, cut it; the packet keeps
-the detail. The diagrams are not cut: keep the full network diagram (Test Environment) and the full timeline
-(Actual Behavior) as described under Diagrams; the word budget is for the text. (11780: the first version had 1266 words; the posted one 344.)
+Priorities, in this order:
+1. Right. The conclusion, the duplicate decision, the fix and the owner must be correct; that matters more than
+   length or speed. Say "likely" or "not established" where the evidence stops.
+2. Enough. Add the information a reader needs to trust and act on the conclusion: the decisive log lines, the
+   number that sizes the cause, the one fact that rules out the obvious alternative. When a case is subtle (a
+   metric that means something else than its name, a cause that is only part of the delay, a parent that differs
+   in one point), say so, even if it takes more words.
+3. Crisp. Everything else is cut: investigation steps, timing tables and breakdowns that do not change the
+   conclusion (they stay in the packet), ruled-out alternatives nobody would suspect, related issues that are not
+   the parent, caveats that do not change the action, repeated facts. Simple, direct sentences. A plain case is
+   short (about 300 words for a root cause, less for a duplicate: Summary one line, Repro Rate one line, Fix one to
+   three lines, Owner one line); a subtle one is as long as it needs to be, no longer.
+Diagrams always help: always the full network diagram (Test Environment) and the full timeline (Actual Behavior), as
+described under Diagrams. They do not count against the length.
 Style: write for a quick read. Simple, direct sentences: one idea per sentence, about 20 words at most, active voice,
 plain words, the subject first. No chains of clauses joined by commas, semicolons or "which"; split them. A fix or a
 list of steps is a short numbered list or a small code block, not one long sentence. Keep the facts and the names

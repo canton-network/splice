@@ -150,7 +150,7 @@ probe that explains about 90 ms of a 1.9 s regression.
 
 ## 4. Present one group at a time
 
-Write in the style and length of the comment (`issue-comment.md`, Length and Style): super short and crisp, only what the user needs to decide; details stay in the packet. Use the sections of the comment (`ci-triage/references/issue-comment.md`, Shape), in this order, with a diagram in
+Write by the priorities of the comment (`issue-comment.md`, Priorities and Style): right first, then enough information to trust and act on it, then crisp, direct and simple; diagrams always; details stay in the packet. Use the sections of the comment (`ci-triage/references/issue-comment.md`, Shape), in this order, with a diagram in
 Test Environment and Actual Behavior in almost every case, even a simple one (Mermaid, rendered by the host, syntax
 checked):
 1. `## Summary`: one line, what broke and how bad (run, job, test, the failing assertion or flagged line verbatim).
