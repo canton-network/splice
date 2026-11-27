@@ -55,6 +55,10 @@ Priorities, in this order:
    three lines, Owner one line); a subtle one is as long as it needs to be, no longer.
 Diagrams always help: always the full network diagram (Test Environment) and the full timeline (Actual Behavior), as
 described under Diagrams. They do not count against the length.
+Tone: friendly and direct, as a colleague would write it. Plain words, active voice, "we" where natural ("We've
+seen this once in 33 runs"). Explain why a fact matters in the same breath ("that error just means the same command
+is still running"). No report jargon or labels ("Verdict:", "Not explained:", "Case: old code"), no stiff passive
+constructions, no hedging beyond "likely" where the evidence stops.
 Style: write for a quick read. Simple, direct sentences: one idea per sentence, about 20 words at most, active voice,
 plain words, the subject first. No chains of clauses joined by commas, semicolons or "which"; split them. A fix or a
 list of steps is a short numbered list or a small code block, not one long sentence. Keep the facts and the names
