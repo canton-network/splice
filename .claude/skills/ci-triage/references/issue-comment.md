@@ -109,7 +109,9 @@ after posting is a new follow-up comment, body file `comments/<ref>-update-<n>.m
 says in its first sentence what in the earlier comment was wrong or is new (11784: the read regression was blamed on
 the DB, but most of it is outside the DB timers). The body file of the original stays as posted. Before writing the
 correction, check whether the original is posted (search the issue's comments for its marker): if it is not posted
-yet, fix the original file instead.
+yet, fix the original file instead. Exception, only when the user asks for it (11780, wrong owner): delete the posted triage comment and post
+the corrected one; the hand-over script deletes only our own comments with the marker whose text differs from the
+file, and changes nothing else that the user did not ask for (assignees, pings, status).
 
 Body files (shell rules for the commands: `<D>/CLAUDE.md`, Commands for the user). A comment that is a single line
 of plain text (no Markdown, backticks, quotes, backslashes or `$`) is passed inline with `--body` or `--comment`;
