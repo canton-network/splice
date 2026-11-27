@@ -1504,34 +1504,65 @@ function subcmd_validate_lock() {
     _info "Cluster lock validated."
 }
 
-subcommand_whitelist[deploy_basic]='Trigger a basic cluster test deploy for a PR and post the run link back on the PR.'
+subcommand_whitelist[cluster_test]='Trigger a basic cluster test for a PR, with its status and result reported on the PR.'
 
-function subcmd_deploy_basic() {
-    _deploy_cluster_workflow "deploy_scratchnet_basic.yml" "Cluster test" "$@"
+function subcmd_cluster_test() {
+    _deploy_cluster_workflow "deploy_scratchnet_basic.yml" "Cluster test" "cluster-test" "$@"
 }
 
-subcommand_whitelist[deploy_upgrade]='Trigger a scratchnet upgrade test deploy for a PR and post the run link back on the PR.'
+subcommand_whitelist[upgrade_test]='Trigger a scratchnet upgrade test for a PR, with its status and result reported on the PR.'
 
-function subcmd_deploy_upgrade() {
-    _deploy_cluster_workflow "deploy_scratchnet_upgrade.yml" "Upgrade test" "$@"
+function subcmd_upgrade_test() {
+    _deploy_cluster_workflow "deploy_scratchnet_upgrade.yml" "Upgrade test" "upgrade-test" "$@"
 }
 
-subcommand_whitelist[deploy_lsu]='Trigger a scratchnet logical synchronizer upgrade (LSU) test deploy for a PR and post the run link back on the PR.'
+subcommand_whitelist[lsu_test]='Trigger a scratchnet logical synchronizer upgrade (LSU) test for a PR, with its status and result reported on the PR.'
 
-function subcmd_deploy_lsu() {
-    _deploy_cluster_workflow "deploy_scratchnet_lsu.yml" "LSU test" "$@"
+function subcmd_lsu_test() {
+    _deploy_cluster_workflow "deploy_scratchnet_lsu.yml" "LSU test" "lsu-test" "$@"
+}
+
+# Name of the optional input of the deploy workflows that receives the id of the
+# PR comment to update with the final result of the run.
+CLUSTER_TEST_COMMENT_ID_INPUT="pr-comment-id"
+
+# Prints the id of the most recent comment on the PR that contains the given
+# marker, or nothing if there is none.
+function _find_pr_comment_with_marker() {
+    local repo="$1" pr="$2" marker="$3"
+    gh api --paginate "repos/${repo}/issues/${pr}/comments" \
+        --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | tail -n 1
+}
+
+# Succeeds if the given deploy workflow accepts the PR comment id input. This
+# lets cncluster pass the input only once the internal workflow supports it, as
+# dispatching a workflow with an unknown input fails.
+function _deploy_workflow_supports_comment_id() {
+    local internal_repo="$1" workflow="$2"
+    gh api -H "Accept: application/vnd.github.raw" \
+        "repos/${internal_repo}/contents/.github/workflows/${workflow}" 2>/dev/null \
+        | grep -qE "^[[:space:]]+${CLUSTER_TEST_COMMENT_ID_INPUT}:"
 }
 
 function _deploy_cluster_workflow() {
-    local deploy_workflow="$1" label="$2"; shift 2
+    local deploy_workflow="$1" label="$2" kind="$3"; shift 3
 
     # DA-internal repo hosting the deploy workflows triggered from here, and the
     # default repo PRs are looked up in (overridable per call via --repo).
     local deploy_internal_repo="DACH-NY/canton-network-internal"
     local deploy_default_repo="canton-network/splice"
 
+    # The comment that `/cluster_test` (pr_cluster_test.yml) posts on the PR
+    # carries this marker until a test run claims it. Keep both in sync.
+    local unclaimed_marker="<!-- splice-${kind}:unclaimed -->"
+    # Comments reporting a run carry this marker instead. The deploy workflow
+    # only updates comments carrying it, and keeps it in the final result.
+    local run_marker="<!-- splice-${kind}:run -->"
+
     local repo="${deploy_default_repo}" repo_explicit="" pr="" url_repo=""
     local pr_json sha cluster dispatch_out run_url me body
+    local comment_id="" unclaimed_body="" supports_comment_id="" pending_body
+    local -a dispatch_args
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -1542,8 +1573,11 @@ function _deploy_cluster_workflow() {
             -h|--help)
                 echo "Usage: $0 ${SUBCOMMAND_NAME} <pr-number|pr-url> [--repo org/name]"
                 echo ""
-                echo "${label} deploy for the given PR on the current cluster,"
-                echo "with the workflow run link posted back on the PR."
+                echo "${label} deploy for the given PR on the current cluster."
+                echo "The status of the run is reported in a single PR comment: the"
+                echo "unclaimed comment posted for a /${kind//-/_} request if there is one,"
+                echo "otherwise a new one. The comment is updated with the run link, and"
+                echo "with the final result once the deploy workflow has finished."
                 echo "The PR can be given as a number (e.g. 7742) or as a full URL"
                 echo "(e.g. https://github.com/canton-network/splice/pull/7742,"
                 echo "in which case the repo is deduced from the URL)."
@@ -1600,12 +1634,52 @@ function _deploy_cluster_workflow() {
     else
         cluster="$GCP_CLUSTER_BASENAME"
     fi
+    me=$(gh api user --jq '.login')
+
+    dispatch_args=(
+        -f splice-repo="$repo"
+        -f splice-git-ref="$sha"
+        -f cluster="$cluster"
+    )
+
+    # Claim the comment to report the run in before dispatching, so that the
+    # deploy workflow can update it with the final result. The unclaimed comment
+    # is posted by github-actions[bot]; editing it needs write access to the
+    # repo, so fall back to a new comment if that fails.
+    if _deploy_workflow_supports_comment_id "$deploy_internal_repo" "$deploy_workflow"; then
+        supports_comment_id=1
+        pending_body="${run_marker}"$'\n'"⏳ ${label} for PR #${pr} (${sha}) on ${cluster} is being triggered by @${me}."
+        comment_id=$(_find_pr_comment_with_marker "$repo" "$pr" "$unclaimed_marker" || true)
+        if [ -n "$comment_id" ]; then
+            unclaimed_body=$(gh api "repos/${repo}/issues/comments/${comment_id}" --jq '.body') || unclaimed_body=""
+            if [ -n "$unclaimed_body" ] && gh api "repos/${repo}/issues/comments/${comment_id}" --method PATCH \
+                    -f body="$pending_body" > /dev/null; then
+                _info "Claimed comment ${comment_id} on PR ${repo}#${pr}."
+            else
+                _warning "Could not claim comment ${comment_id} on PR ${repo}#${pr}, posting a new one."
+                comment_id=""
+                unclaimed_body=""
+            fi
+        fi
+        if [ -z "$comment_id" ]; then
+            comment_id=$(gh api "repos/${repo}/issues/${pr}/comments" --method POST \
+                -f body="$pending_body" --jq '.id') || _error "Failed to post a comment on PR ${repo}#${pr}."
+        fi
+        dispatch_args+=(-f "${CLUSTER_TEST_COMMENT_ID_INPUT}=${comment_id}")
+    else
+        _warning "${deploy_workflow} does not accept '${CLUSTER_TEST_COMMENT_ID_INPUT}' yet, so the final result will not be reported on the PR."
+    fi
 
     _info "Triggering ${deploy_workflow} in ${deploy_internal_repo} for ${sha} on ${cluster}."
-    dispatch_out=$(gh workflow run "${deploy_workflow}" -R "${deploy_internal_repo}" \
-        -f splice-repo="$repo" \
-        -f splice-git-ref="$sha" \
-        -f cluster="$cluster" 2>&1) || _error "Failed to trigger ${deploy_workflow}: ${dispatch_out}"
+    if ! dispatch_out=$(gh workflow run "${deploy_workflow}" -R "${deploy_internal_repo}" "${dispatch_args[@]}" 2>&1); then
+        # Undo the comment changes, so that a retry starts from the same state.
+        if [ -n "$unclaimed_body" ]; then
+            gh api "repos/${repo}/issues/comments/${comment_id}" --method PATCH -f body="$unclaimed_body" > /dev/null || true
+        elif [ -n "$comment_id" ]; then
+            gh api "repos/${repo}/issues/comments/${comment_id}" --method DELETE > /dev/null || true
+        fi
+        _error "Failed to trigger ${deploy_workflow}: ${dispatch_out}"
+    fi
     echo "$dispatch_out"
     run_url=$(echo "$dispatch_out" | grep -oE 'https://[^[:space:]]*/actions/runs/[0-9]+' | head -n 1 || true)
 
@@ -1613,10 +1687,19 @@ function _deploy_cluster_workflow() {
         _error "Run URL not returned. The workflow may still have been dispatched, so check https://github.com/${deploy_internal_repo}/actions/workflows/${deploy_workflow} (and https://www.githubstatus.com/ for GitHub Actions incidents)."
     fi
 
-    me=$(gh api user --jq '.login')
-    body="${label} triggered for PR #${pr} (${sha}) on ${cluster} by @${me}. Track progress here: ${run_url}"
-    gh api "repos/${repo}/issues/${pr}/comments" --method POST -f body="$body" > /dev/null
-    _info "Posted run link back on PR ${repo}#${pr}."
+    body="⏳ ${label} triggered for PR #${pr} (${sha}) on ${cluster} by @${me}. Track progress here: ${run_url}"
+    if [ -n "$supports_comment_id" ]; then
+        body="${run_marker}"$'\n'"${body}"$'\n\n'"This comment will be updated with the result once the run has finished."
+    fi
+
+    if [ -n "$comment_id" ]; then
+        gh api "repos/${repo}/issues/comments/${comment_id}" --method PATCH -f body="$body" > /dev/null \
+            || _error "Failed to update comment ${comment_id} on PR ${repo}#${pr} with the run link."
+        _info "Updated comment ${comment_id} on PR ${repo}#${pr} with the run link."
+    else
+        gh api "repos/${repo}/issues/${pr}/comments" --method POST -f body="$body" > /dev/null
+        _info "Posted run link back on PR ${repo}#${pr}."
+    fi
 }
 
 ###
