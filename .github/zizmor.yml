@@ -17,7 +17,5 @@ rules:
       - cimain.yml
       - daml_compat_test.yml
       - post_merge.yml
-      - pr_auto_upgrade_test.yml
-      - pr_cluster_test.yml
       - pr_contributors.yml
       - pr_non_contributors.yml
