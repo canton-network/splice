@@ -71,16 +71,29 @@ final case class GeneratedMetrics(
       metrics.filter(m => !m.name.startsWith("daml.cache")).map(renderMetric(_))).mkString("\n")
   }
 
-  def renderMetric(metric: MetricDoc.Item): String =
+  def renderMetric(metric: MetricDoc.Item): String = {
+    val name = GeneratedMetrics.rstText(metric.name)
     Seq(
-      metric.name,
-      "^" * metric.name.length,
-      s"* **Summary**: ${metric.summary}",
-      s"* **Description**: ${metric.description}",
-      s"* **Type**: ${metric.metricType}",
-      s"* **Qualification**: ${metric.qualification}",
+      name,
+      "^" * name.length,
+      s"* **Summary**: ${GeneratedMetrics.rstText(metric.summary)}",
+      s"* **Description**: ${GeneratedMetrics.rstText(metric.description)}",
+      s"* **Type**: ${GeneratedMetrics.rstText(metric.metricType)}",
+      s"* **Qualification**: ${GeneratedMetrics.rstText(metric.qualification.toString)}",
       "\n",
     ).mkString("\n")
+  }
+}
+
+object GeneratedMetrics {
+  private val rstMarkup: Set[Char] = raw"\*`_|:".toSet
+
+  def rstText(text: String): String =
+    text.trim
+      .split("\\s+")
+      .filter(_.nonEmpty)
+      .mkString(" ")
+      .flatMap(c => if (rstMarkup.contains(c)) s"\\$c" else c.toString)
 }
 
 object MetricsDocs {

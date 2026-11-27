@@ -42,6 +42,7 @@ TEST_LISTS = re.compile(r"^test-.*\.log$")
 TEST_DEFINITION = re.compile(
     r"^[+-](?![+-])\s*(?:(?:final|abstract|sealed|private|protected|case)\s+)*(?:class|object)\s+\w"
 )
+DOCS_SOURCES = re.compile(r"^(docs/|daml/|token-standard/|apps/metrics-docs/)")
 ROOT_JS_OR_JSON = re.compile(r"^[^/]+\.(json|js|cjs|mjs)$")
 NPM_LINT_SOURCES = {
     "apps-frontends": re.compile(
@@ -109,7 +110,11 @@ def all_static() -> dict[str, str]:
 
 
 def all_build() -> dict[str, str]:
-    return {"test_config": "true", "npm_lint": npm_lint_command(ALL_NPM_LINTS)}
+    return {
+        "test_config": "true",
+        "npm_lint": npm_lint_command(ALL_NPM_LINTS),
+        "docs": "true",
+    }
 
 
 def select_static(
@@ -161,7 +166,11 @@ def select_build(changes: list[Change], test_diff: Optional[str] = "") -> dict[s
             for project in ALL_NPM_LINTS
             if any_matches(NPM_LINT_SOURCES[project], changes)
         )
-    return {"test_config": "true" if test_config else "false", "npm_lint": npm_lint_command(lints)}
+    return {
+        "test_config": "true" if test_config else "false",
+        "npm_lint": npm_lint_command(lints),
+        "docs": "true" if any_matches(DOCS_SOURCES, changes) else "false",
+    }
 
 
 def unknown_files(
