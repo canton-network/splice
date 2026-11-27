@@ -4,12 +4,22 @@
 package org.lfdecentralizedtrust.splice.validator.store.db
 
 import com.digitalasset.daml.lf.data.Time.Timestamp
-import org.lfdecentralizedtrust.splice.store.db.{AcsRowData, AcsTables, IndexColumnValue}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsRowData,
+  AcsTables,
+  HashIndexedTextColumn,
+  IndexColumnValue,
+}
 import org.lfdecentralizedtrust.splice.util.Contract
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.store.db.AcsRowData.HasIndexColumns
 
 object ValidatorTables extends AcsTables {
+
+  /** Index columns holding free text, which are indexed by a hash of their value. */
+  object HashIndexedColumns {
+    val userName: HashIndexedTextColumn = HashIndexedTextColumn("user_name")
+  }
 
   case class ValidatorAcsStoreRowData(
       contract: Contract[?, ?],
@@ -23,7 +33,7 @@ object ValidatorTables extends AcsTables {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] =
       Seq[(String, IndexColumnValue[?])](
         ValidatorAcsStoreRowData.IndexColumns.user_party -> userParty,
-        ValidatorAcsStoreRowData.IndexColumns.user_name -> userName.map(lengthLimited),
+        ValidatorAcsStoreRowData.IndexColumns.user_name -> userName,
         ValidatorAcsStoreRowData.IndexColumns.provider_party -> providerParty,
         ValidatorAcsStoreRowData.IndexColumns.validator_party -> validatorParty,
         ValidatorAcsStoreRowData.IndexColumns.traffic_domain_id -> trafficSynchronizerId,

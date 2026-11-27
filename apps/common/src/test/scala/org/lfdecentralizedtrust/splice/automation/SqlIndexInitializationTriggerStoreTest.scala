@@ -40,9 +40,35 @@ class SqlIndexInitializationTriggerStoreTest
 
   private val expectedIndexNames = Seq(
     "dso_acs_store_sid_mid_pn_tid_rbio",
+    "scan_txlog_store_sid_effat_en_vot",
+    "dso_acs_store_sid_mid_pn_tid_cenh_exp",
+    "dso_acs_store_sid_mid_pn_tid_scnh",
+    "dso_acs_store_sid_mid_pn_tid_scp",
+    "dso_acs_store_sid_pn_tid_soth",
+    "dso_acs_store_sid_mid_pn_tid_ahh_r",
+    "dso_acs_store_sid_pn_tid_ahh_c",
+    "sv_acs_store_sid_mid_pn_tid_asicnh",
+    "sv_acs_store_sid_mid_pn_tid_vocsh",
+    "validator_acs_store_sid_mid_pn_tid_unh",
+    "user_wallet_txlog_store_sid_tidh",
+    "dso_acs_store_sid_mid_glt_glsh",
+    "scan_acs_store_sid_mid_glt_glsh",
+  )
+
+  // Indexes that the default actions drop, or replace by the indexes on a hash of the value above.
+  private val replacedIndexNames = Seq(
+    "dso_acs_store_sid_mid_pn_tid_cen_exp",
+    "dso_acs_store_sid_mid_pn_tid_scn",
+    "dso_acs_store_sid_mid_pn_tid_scp_scn",
+    "dso_acs_store_sid_pn_tid_sot",
+    "dso_acs_store_sid_mid_pn_tid_ah_r",
+    "dso_acs_store_sid_pn_tid_ah_c",
+    "sv_acs_store_sid_mid_pn_tid_asicn",
+    "sv_acs_store_sid_mid_pn_tid_vocs",
+    "validator_acs_store_sid_mid_pn_tid_un",
+    "user_wallet_txlog_store_sid_tid",
     "dso_acs_store_sid_mid_glt_gls",
     "scan_acs_store_sid_mid_glt_gls",
-    "scan_txlog_store_sid_effat_en_vot",
     "user_wallet_acs_store_sid_mid_glt_gls",
     "external_party_wallet_acs_store_sid_mid_glt_gls",
   )
@@ -74,6 +100,7 @@ class SqlIndexInitializationTriggerStoreTest
       } yield {
         indexNames should contain allElementsOf expectedIndexNames
         indexNames should not contain "scan_txlog_store_sid_en_vot"
+        indexNames should contain noElementsOf replacedIndexNames
       }
     }
 

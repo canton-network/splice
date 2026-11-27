@@ -5,10 +5,20 @@ package org.lfdecentralizedtrust.splice.sv.store.db
 
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.store.db.AcsRowData.HasIndexColumns
-import org.lfdecentralizedtrust.splice.store.db.{AcsRowData, AcsTables, IndexColumnValue}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsRowData,
+  AcsTables,
+  HashIndexedTextColumn,
+  IndexColumnValue,
+}
 import org.lfdecentralizedtrust.splice.util.Contract
 
 object SvTables extends AcsTables {
+
+  /** Index columns holding free text, which are indexed by a hash of their value. */
+  object HashIndexedColumns {
+    val onboardingSecret: HashIndexedTextColumn = HashIndexedTextColumn("onboarding_secret")
+  }
 
   case class SvAcsStoreRowData(
       contract: Contract[?, ?],
@@ -17,8 +27,8 @@ object SvTables extends AcsTables {
       svCandidateName: Option[String] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
-      SvAcsStoreRowData.IndexColumns.onboarding_secret -> onboardingSecret.map(lengthLimited),
-      SvAcsStoreRowData.IndexColumns.sv_candidate_name -> svCandidateName.map(lengthLimited),
+      SvAcsStoreRowData.IndexColumns.onboarding_secret -> onboardingSecret,
+      SvAcsStoreRowData.IndexColumns.sv_candidate_name -> svCandidateName,
     )
   }
 

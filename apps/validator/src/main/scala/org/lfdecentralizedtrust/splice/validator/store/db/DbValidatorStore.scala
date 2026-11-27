@@ -193,7 +193,7 @@ class DbValidatorStore private (
           acsStoreId,
           domainMigrationId,
           walletCodegen.WalletAppInstall.COMPANION,
-          where = sql"""user_name = ${lengthLimited(endUserName)}""",
+          where = ValidatorTables.HashIndexedColumns.userName.equalTo(endUserName),
           orderLimit = sql"limit 1",
         ).headOption,
         "lookupInstallByName",
@@ -236,8 +236,7 @@ class DbValidatorStore private (
             acsStoreId,
             domainMigrationId,
             walletCodegen.WalletAppInstall.COMPANION,
-            sql"""user_name = ${lengthLimited(endUserName)}
-            """,
+            ValidatorTables.HashIndexedColumns.userName.equalTo(endUserName),
             sql"limit 1",
           ).headOption,
           "lookupWalletInstallByNameWithOffset",

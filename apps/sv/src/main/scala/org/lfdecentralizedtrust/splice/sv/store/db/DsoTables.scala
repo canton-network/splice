@@ -7,7 +7,13 @@ import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.VoteRequest
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions as sub
-import org.lfdecentralizedtrust.splice.store.db.{AcsRowData, AcsTables, IndexColumnValue}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsRowData,
+  AcsTables,
+  HashIndexedJsonbColumn,
+  HashIndexedTextColumn,
+  IndexColumnValue,
+}
 import org.lfdecentralizedtrust.splice.util.Contract
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
@@ -21,6 +27,15 @@ object DsoTables extends AcsTables with NamedLogging {
   final val AnsActionTypeRejectEntryInitialPayment = "ANSRARC_RejectEntryInitialPayment"
 
   override protected def loggerFactory: NamedLoggerFactory = NamedLoggerFactory.root
+
+  /** Index columns holding free text, which are indexed by a hash of their value. */
+  object HashIndexedColumns {
+    val ansEntryName: HashIndexedTextColumn = HashIndexedTextColumn("ans_entry_name")
+    val svCandidateName: HashIndexedTextColumn = HashIndexedTextColumn("sv_candidate_name")
+    val svOnboardingToken: HashIndexedTextColumn = HashIndexedTextColumn("sv_onboarding_token")
+    val actionRequiringConfirmation: HashIndexedJsonbColumn =
+      HashIndexedJsonbColumn("action_requiring_confirmation")
+  }
 
   case class DsoAcsStoreRowData(
       contract: Contract[?, ?],
@@ -70,18 +85,18 @@ object DsoTables extends AcsTables with NamedLogging {
       DsoAcsStoreRowData.IndexColumns.mining_round -> miningRound,
       DsoAcsStoreRowData.IndexColumns.action_requiring_confirmation -> actionRequiringConfirmation,
       DsoAcsStoreRowData.IndexColumns.confirmer -> confirmer,
-      DsoAcsStoreRowData.IndexColumns.sv_onboarding_token -> svOnboardingToken.map(lengthLimited),
+      DsoAcsStoreRowData.IndexColumns.sv_onboarding_token -> svOnboardingToken,
       DsoAcsStoreRowData.IndexColumns.sv_candidate_party -> svCandidateParty,
-      DsoAcsStoreRowData.IndexColumns.sv_candidate_name -> svCandidateName.map(lengthLimited),
+      DsoAcsStoreRowData.IndexColumns.sv_candidate_name -> svCandidateName,
       DsoAcsStoreRowData.IndexColumns.validator -> validator,
       DsoAcsStoreRowData.IndexColumns.total_traffic_purchased -> totalTrafficPurchased,
       DsoAcsStoreRowData.IndexColumns.voter -> voter,
       DsoAcsStoreRowData.IndexColumns.vote_request_tracking_cid -> voteRequestTrackingCid,
       DsoAcsStoreRowData.IndexColumns.requester -> requester,
-      DsoAcsStoreRowData.IndexColumns.requester_name -> requesterName.map(lengthLimited),
+      DsoAcsStoreRowData.IndexColumns.requester_name -> requesterName,
       DsoAcsStoreRowData.IndexColumns.member_traffic_member -> memberTrafficMember,
       DsoAcsStoreRowData.IndexColumns.member_traffic_domain -> memberTrafficDomain,
-      DsoAcsStoreRowData.IndexColumns.ans_entry_name -> ansEntryName.map(lengthLimited),
+      DsoAcsStoreRowData.IndexColumns.ans_entry_name -> ansEntryName,
       DsoAcsStoreRowData.IndexColumns.action_ans_entry_context_cid -> actionAnsEntryContextCid,
       DsoAcsStoreRowData.IndexColumns.action_ans_entry_context_payment_id -> actionAnsEntryContextPaymentId,
       DsoAcsStoreRowData.IndexColumns.action_ans_entry_context_arc_type -> actionAnsEntryContextArcType
@@ -90,14 +105,12 @@ object DsoTables extends AcsTables with NamedLogging {
       DsoAcsStoreRowData.IndexColumns.subscription_next_payment_due_at -> subscriptionNextPaymentDueAt,
       DsoAcsStoreRowData.IndexColumns.featured_app_right_provider -> featuredAppRightProvider,
       DsoAcsStoreRowData.IndexColumns.sv_party -> svParty,
-      DsoAcsStoreRowData.IndexColumns.sv_name -> svName.map(lengthLimited),
+      DsoAcsStoreRowData.IndexColumns.sv_name -> svName,
       DsoAcsStoreRowData.IndexColumns.wallet_party -> walletParty,
       DsoAcsStoreRowData.IndexColumns.conversion_rate_feed_publisher -> conversionRateFeedPublisher,
       DsoAcsStoreRowData.IndexColumns.reward_beneficiary_is_observer -> rewardBeneficiaryIsObserver,
-      DsoAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType.map(lengthLimited),
-      DsoAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject.map(
-        lengthLimited
-      ),
+      DsoAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType,
+      DsoAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject,
     )
   }
   object DsoAcsStoreRowData {

@@ -458,12 +458,13 @@ class DbScanStore private (
             GovernanceLock.COMPANION,
             // The type and subject use the index, but only the specification
             // also matches the vesting period and end time.
-            additionalWhere = sql"""
+            additionalWhere = (sql"""
               and governance_lock_type = ${lengthLimited(lockType.storeValue)}
-              and governance_lock_subject = ${lengthLimited(lockSubject)}
+              and """ ++ ScanTables.HashIndexedColumns.governanceLockSubject.equalTo(lockSubject) ++
+              sql"""
               and create_arguments->>'owner' = ${key.owner}
               and create_arguments->'specification' = $specification
-            """,
+            """).toActionBuilder,
             orderLimit = sql"""
               order by (create_arguments->>'amount')::numeric desc, event_number
               limit ${sqlLimit(limit)}

@@ -380,7 +380,8 @@ class DbUserWalletStore private (
               WalletTables.txLogTableName,
               domainMigrationId,
               txLogStoreId,
-              sql"entry_type = ${TxLogEntry.EntryType.TransferOfferTxLogEntry} and tracking_id = ${lengthLimited(trackingId)}",
+              (sql"entry_type = ${TxLogEntry.EntryType.TransferOfferTxLogEntry} and " ++
+                WalletTables.HashIndexedColumns.trackingId.equalTo(trackingId)).toActionBuilder,
               sql"order by entry_number desc limit 1",
             ).headOption,
             "getLatestTransferOfferEventByTrackingId",
@@ -406,7 +407,8 @@ class DbUserWalletStore private (
               WalletTables.txLogTableName,
               domainMigrationId,
               txLogStoreId,
-              sql"entry_type = ${TxLogEntry.EntryType.BuyTrafficRequestTxLogEntry} and tracking_id = ${lengthLimited(trackingId)}",
+              (sql"entry_type = ${TxLogEntry.EntryType.BuyTrafficRequestTxLogEntry} and " ++
+                WalletTables.HashIndexedColumns.trackingId.equalTo(trackingId)).toActionBuilder,
               sql"order by entry_number desc limit 1",
             ).headOption,
             "getLatestBuyTrafficRequestEventByTrackingId",

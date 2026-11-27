@@ -22,6 +22,7 @@ import org.lfdecentralizedtrust.splice.util.{Contract, TemplateJsonDecoder}
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
 import com.digitalasset.canton.topology.ParticipantId
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
@@ -79,13 +80,12 @@ class DbSvSvStore private (
             acsStoreId,
             domainMigrationId,
             ValidatorOnboarding.COMPANION,
-            where = sql"""
-              onboarding_secret = ${lengthLimited(secret)}
+            where = (SvTables.HashIndexedColumns.onboardingSecret.equalTo(secret) ++ sql"""
                 or (
                   onboarding_secret like '{%'
-                  and (onboarding_secret::jsonb ->> 'secret') = ${lengthLimited(secret)}
+                  and (onboarding_secret::jsonb ->> 'secret') = $secret
                 )
-              """,
+              """).toActionBuilder,
           ).headOption,
           "lookupValidatorOnboardingBySecretWithOffset",
         )
@@ -107,13 +107,12 @@ class DbSvSvStore private (
               acsStoreId,
               domainMigrationId,
               UsedSecret.COMPANION,
-              where = sql"""
-                  onboarding_secret = ${lengthLimited(secret)}
+              where = (SvTables.HashIndexedColumns.onboardingSecret.equalTo(secret) ++ sql"""
                   or (
                     onboarding_secret like '{%'
-                    and (onboarding_secret::jsonb ->> 'secret') = ${lengthLimited(secret)}
+                    and (onboarding_secret::jsonb ->> 'secret') = $secret
                   )
-                """,
+                """).toActionBuilder,
             ).headOption,
             "lookupUsedSecretWithOffset",
           )

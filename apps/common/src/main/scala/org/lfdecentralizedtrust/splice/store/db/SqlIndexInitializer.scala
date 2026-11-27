@@ -204,10 +204,6 @@ object SqlIndexInitializer {
           where featured_app_right_provider is not null
         """,
       ),
-    governanceLockTypeAndSubjectIndexAction("dso_acs_store"),
-    governanceLockTypeAndSubjectIndexAction("scan_acs_store"),
-    governanceLockTypeAndSubjectIndexAction("user_wallet_acs_store"),
-    governanceLockTypeAndSubjectIndexAction("external_party_wallet_acs_store"),
     IndexAction
       .Create(
         indexName = "scan_txlog_store_sid_effat_en_vot",
@@ -218,15 +214,94 @@ object SqlIndexInitializer {
         """,
       ),
     IndexAction.Drop(indexName = "scan_txlog_store_sid_en_vot"),
-  )
+  ) ++ hashKeyIndexActions
 
-  private def governanceLockTypeAndSubjectIndexAction(tableName: String): IndexAction =
-    IndexAction.Create(
-      indexName = s"${tableName}_sid_mid_glt_gls",
-      createAction = sqlu"""
-        create index concurrently if not exists #${tableName}_sid_mid_glt_gls
-        on #$tableName (store_id, migration_id, governance_lock_type, governance_lock_subject)
-        where governance_lock_type is not null
-      """,
-    )
+  /** Replaces the indexes on variable-length text and JSON columns by indexes on a fixed-size hash of the value
+    * (see `HashIndexedColumn`). Each new index is created before the old one is dropped; queries filter on both
+    * the hash and the raw value, so they can use either index in the meantime.
+    */
+  private def hashKeyIndexActions: List[IndexAction] = {
+    def replace(oldIndexName: String, newIndexName: String)(
+        createAction: DBIOAction[Int, NoStream, Effect.Write & Effect.Transactional]
+    ): List[IndexAction] =
+      List[IndexAction](
+        IndexAction.Create(newIndexName, createAction),
+        IndexAction.Drop(oldIndexName),
+      )
+
+    replace("dso_acs_store_sid_mid_pn_tid_cen_exp", "dso_acs_store_sid_mid_pn_tid_cenh_exp")(sqlu"""
+        create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_cenh_exp
+        on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                          splice_text_hash(ans_entry_name), contract_expires_at)
+        where ans_entry_name is not null and contract_expires_at is not null
+      """) ++
+      replace("dso_acs_store_sid_mid_pn_tid_scn", "dso_acs_store_sid_mid_pn_tid_scnh")(sqlu"""
+        create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_scnh
+        on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                          splice_text_hash(sv_candidate_name))
+        where sv_candidate_name is not null
+      """) ++
+      // There are only a few onboarding requests per candidate party, so the party alone is selective enough;
+      // queries recheck the name.
+      replace("dso_acs_store_sid_mid_pn_tid_scp_scn", "dso_acs_store_sid_mid_pn_tid_scp")(sqlu"""
+        create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_scp
+        on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, sv_candidate_party)
+        where sv_candidate_party is not null
+      """) ++
+      replace("dso_acs_store_sid_pn_tid_sot", "dso_acs_store_sid_pn_tid_soth")(sqlu"""
+        create index concurrently if not exists dso_acs_store_sid_pn_tid_soth
+        on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                          splice_text_hash(sv_onboarding_token))
+        where sv_onboarding_token is not null
+      """) ++
+      replace("dso_acs_store_sid_mid_pn_tid_ah_r", "dso_acs_store_sid_mid_pn_tid_ahh_r")(sqlu"""
+        create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_ahh_r
+        on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                          splice_jsonb_hash(action_requiring_confirmation), requester)
+        where action_requiring_confirmation is not null
+      """) ++
+      replace("dso_acs_store_sid_pn_tid_ah_c", "dso_acs_store_sid_pn_tid_ahh_c")(sqlu"""
+        create index concurrently if not exists dso_acs_store_sid_pn_tid_ahh_c
+        on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                          splice_jsonb_hash(action_requiring_confirmation), confirmer)
+        where action_requiring_confirmation is not null
+      """) ++
+      replace("sv_acs_store_sid_mid_pn_tid_asicn", "sv_acs_store_sid_mid_pn_tid_asicnh")(sqlu"""
+        create index concurrently if not exists sv_acs_store_sid_mid_pn_tid_asicnh
+        on sv_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                         splice_text_hash(sv_candidate_name))
+        where sv_candidate_name is not null
+      """) ++
+      replace("sv_acs_store_sid_mid_pn_tid_vocs", "sv_acs_store_sid_mid_pn_tid_vocsh")(sqlu"""
+        create index concurrently if not exists sv_acs_store_sid_mid_pn_tid_vocsh
+        on sv_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                         splice_text_hash(onboarding_secret))
+        where onboarding_secret is not null
+      """) ++
+      replace("validator_acs_store_sid_mid_pn_tid_un", "validator_acs_store_sid_mid_pn_tid_unh")(
+        sqlu"""
+        create index concurrently if not exists validator_acs_store_sid_mid_pn_tid_unh
+        on validator_acs_store (store_id, migration_id, package_name, template_id_qualified_name,
+                                splice_text_hash(user_name))
+        where user_name is not null
+      """
+      ) ++
+      replace("user_wallet_txlog_store_sid_tid", "user_wallet_txlog_store_sid_tidh")(sqlu"""
+        create index concurrently if not exists user_wallet_txlog_store_sid_tidh
+        on user_wallet_txlog_store (store_id, splice_text_hash(tracking_id))
+        where tracking_id is not null
+      """) ++
+      List("dso_acs_store", "scan_acs_store").flatMap(tableName =>
+        replace(s"${tableName}_sid_mid_glt_gls", s"${tableName}_sid_mid_glt_glsh")(sqlu"""
+          create index concurrently if not exists #${tableName}_sid_mid_glt_glsh
+          on #$tableName (store_id, migration_id, governance_lock_type, splice_text_hash(governance_lock_subject))
+          where governance_lock_type is not null
+        """)
+      ) ++
+      // No query of these stores looks up governance locks by type and subject.
+      List[IndexAction](
+        IndexAction.Drop("user_wallet_acs_store_sid_mid_glt_gls"),
+        IndexAction.Drop("external_party_wallet_acs_store_sid_mid_glt_gls"),
+      )
+  }
 }
