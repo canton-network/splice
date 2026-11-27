@@ -3,9 +3,9 @@
 ### Pull Request Checklist
 
 #### Cluster Testing
-- [ ] If a cluster test is required, comment `/cluster_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
-- [ ] If an upgrade test is required, comment `/upgrade_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
-- [ ] If a logical synchronizer upgrade test is required (from canton-3.5), comment `/lsu_test` on this PR to request it, and ping someone with access to the DA-internal system to approve it.
+- [ ] If a cluster test is required, comment `/cluster_test` on this PR to request it, and ping a maintainer to run it.
+- [ ] If an upgrade test is required, comment `/upgrade_test` on this PR to request it, and ping a maintainer to run it.
+- [ ] If a logical synchronizer upgrade test is required (from canton-3.5), comment `/lsu_test` on this PR to request it, and ping a maintainer to run it.
 
 #### PR Guidelines
 - [ ] Describe user-facing changes in the [release notes](https://github.com/canton-network/splice/blob/main/release-notes/release_notes_upcoming.mdx), i.e. any change visible to anyone deploying, operating, integrating with or using Splice.

@@ -1,4 +1,5 @@
-name: Trigger a cluster test on a PR
+
+name: Post cluster test instructions on a PR
 on:
   issue_comment: # zizmor: ignore[dangerous-triggers] gated by OWNER/MEMBER check
     types: [created]
@@ -12,220 +13,44 @@ on:
         required: true
 permissions:
   contents: read
-  issues: read
   pull-requests: write # To comment back on the PR # zizmor: ignore[excessive-permissions]
-  id-token: write # zizmor: ignore[excessive-permissions] required for GCP Workload Identity
 
 jobs:
 
-  get_head:
-    runs-on: ubuntu-24.04
-    # Only react to issue comments from repository members/collaborators.
-    if: github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association))
-    outputs:
-      sha: ${{ steps.get_head.outputs.sha }}
-      repo: ${{ steps.get_head.outputs.repo }}
-    steps:
-      - name: Get head SHA
-        id: get_head
-        env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
-          REPO_NAME: ${{ github.event.repository.name }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          pr_number="${ISSUE_NUMBER}${INPUT_PR_NUMBER}"
-          echo "PR number: $pr_number"
-          query="query pullRequestDetails { repository(name: \"${REPO_NAME}\", owner: \"${REPO_OWNER}\") { pullRequest(number: ${pr_number}) { headRef { target { oid } } } } }"
-          echo "query: $query"
-          payload=$(jq -n --arg query "$query" '{query: $query}')
-          result=$(curl -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json" -X POST -d "$payload" https://api.github.com/graphql)
-          if ! echo "$result" | jq empty > /dev/null 2>&1; then
-            echo "GitHub API did not return valid JSON. Response: $result"
-            exit 1
-          fi
-          sha=$(echo "$result" | jq -r '.data.repository.pullRequest.headRef.target.oid')
-          if [ "$sha" == "null" ] || [ -z "$sha" ]; then
-            echo "Failed to fetch SHA from API. Full response: $result"
-            exit 1
-          fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-
-  determine_test_type:
-    runs-on: ubuntu-24.04
-    # Only react to issue comments from repository members/collaborators.
-    if: github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association))
-    outputs:
-      workflow: ${{ steps.determine_test_type.outputs.workflow }}
-    steps:
-      - name: Determine test type
-        id: determine_test_type
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          INPUTS_WORKFLOW: ${{ inputs.workflow }}
-        with:
-          script: |
-            let workflow = '';
-
-            if (process.env.INPUTS_WORKFLOW !== '') {
-              workflow = process.env.INPUTS_WORKFLOW;
-            } else {
-              const body = context.payload.comment.body || '';
-
-              if (body.includes('/cluster_test')) {
-                workflow = 'cluster_test';
-              } else if (body.includes('/hdm_test')) {
-                workflow = 'hdm_test';
-              } else if (body.includes('/lsu_test')) {
-                workflow = 'lsu_test';
-              } else if (body.includes('/upgrade_test')) {
-                workflow = 'upgrade_test';
-              }
-            }
-
-            core.setOutput('workflow', workflow);
-
-  trigger_test:
-    needs:
-      - get_head
-      - determine_test_type
-    # Only react to issue comments from repository members/collaborators.
-    if: (github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association))) && needs.determine_test_type.outputs.workflow != '' && needs.determine_test_type.outputs.workflow != 'cluster_test'
-    uses: ./.github/workflows/cluster_tests.yml
-    secrets: inherit
-    with:
-      workflow: ${{ needs.determine_test_type.outputs.workflow }}
-      sha: ${{ needs.get_head.outputs.sha }}
-
   cluster_test_instructions:
     runs-on: ubuntu-24.04
-    needs:
-      - determine_test_type
-    if: needs.determine_test_type.outputs.workflow == 'cluster_test'
+    # Only react to issue comments from repository members/collaborators.
+    if: github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association))
     steps:
       - name: Comment instructions on the PR
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          INPUTS_WORKFLOW: ${{ inputs.workflow }}
+          PR_NUMBER: ${{ github.event.issue.number || inputs.pr_number }}
         with:
           script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: "To run a cluster test on this PR, a maintainer can run the following from a scratchnet checkout (`cluster/deployment/<scratchnet>`):\n\n`cncluster deploy_basic ${{ github.event.issue.number }}`\n\nThis grabs the cluster lock if free (use `cncluster lock` to lock explicitly), triggers the deploy workflow, and posts the run link back on this PR. Nothing was triggered by this comment."
-            });
+            // The test is triggered by a maintainer with cncluster; this job only tells them how.
+            const tests = {
+              cluster_test: { label: 'a cluster test', subcommand: 'deploy_basic' },
+              upgrade_test: { label: 'an upgrade test', subcommand: 'deploy_upgrade' },
+              lsu_test: { label: 'a logical synchronizer upgrade (LSU) test', subcommand: 'deploy_lsu' },
+            };
 
-  result_hdm:
-    runs-on: ubuntu-24.04
-    needs:
-      - get_head
-      - determine_test_type
-      - trigger_test
-    if: needs.determine_test_type.outputs.workflow == 'hdm_test'
-    steps:
-      - name: parse the result
-        id: parse
-        env:
-          TRIGGER_RESULT: ${{ needs.trigger_test.outputs.result }}
-          HEAD_SHA: ${{ needs.get_head.outputs.sha }}
-          HEAD_REPO: ${{ needs.get_head.outputs.repo }}
-          GITHUB_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          number=$(echo "$TRIGGER_RESULT" | jq -r '.number')
-          echo "Deploy scratchnet HDM pipeline triggered for [Commit $HEAD_SHA in $HEAD_REPO](https://github.com/$GITHUB_REPO/pull/$PR_NUMBER/files/$HEAD_SHA), please approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${number}"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-      - name: Comment on the PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          HEAD_SHA: ${{ needs.get_head.outputs.sha }}
-          HEAD_REPO: ${{ needs.get_head.outputs.repo }}
-          GITHUB_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-          PIPELINE_NUMBER: ${{ steps.parse.outputs.number }}
-        with:
-          script: |
-            const { HEAD_SHA, HEAD_REPO, GITHUB_REPO, PR_NUMBER, PIPELINE_NUMBER } = process.env;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Deploy HDM pipeline triggered for [Commit ${HEAD_SHA} in ${HEAD_REPO}](https://github.com/${GITHUB_REPO}/pull/${PR_NUMBER}/files/${HEAD_SHA}), please contact a Contributor to approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${PIPELINE_NUMBER}`
-            });
+            let workflow = process.env.INPUTS_WORKFLOW || '';
+            if (workflow === '') {
+              const body = context.payload.comment.body || '';
+              workflow = Object.keys(tests).find((name) => body.includes(`/${name}`)) || '';
+            }
+            const test = tests[workflow];
+            if (!test) {
+              core.info('No cluster test requested.');
+              return;
+            }
 
-  result_lsu:
-    runs-on: ubuntu-24.04
-    needs:
-      - get_head
-      - determine_test_type
-      - trigger_test
-    if: needs.determine_test_type.outputs.workflow == 'lsu_test'
-    steps:
-      - name: parse the result
-        id: parse
-        env:
-          TRIGGER_RESULT: ${{ needs.trigger_test.outputs.result }}
-          HEAD_SHA: ${{ needs.get_head.outputs.sha }}
-          HEAD_REPO: ${{ needs.get_head.outputs.repo }}
-          GITHUB_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          number=$(echo "$TRIGGER_RESULT" | jq -r '.number')
-          echo "Deploy scratchnet LSU pipeline triggered for [Commit $HEAD_SHA in $HEAD_REPO](https://github.com/$GITHUB_REPO/pull/$PR_NUMBER/files/$HEAD_SHA), please approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${number}"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-      - name: Comment on the PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          HEAD_SHA: ${{ needs.get_head.outputs.sha }}
-          HEAD_REPO: ${{ needs.get_head.outputs.repo }}
-          GITHUB_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-          PIPELINE_NUMBER: ${{ steps.parse.outputs.number }}
-        with:
-          script: |
-            const { HEAD_SHA, HEAD_REPO, GITHUB_REPO, PR_NUMBER, PIPELINE_NUMBER } = process.env;
+            const prNumber = Number(process.env.PR_NUMBER);
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Deploy LSU pipeline triggered for [Commit ${HEAD_SHA} in ${HEAD_REPO}](https://github.com/${GITHUB_REPO}/pull/${PR_NUMBER}/files/${HEAD_SHA}), please contact a Contributor to approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${PIPELINE_NUMBER}`
-            });
-
-  result_upgrade:
-    runs-on: ubuntu-24.04
-    needs:
-      - get_head
-      - determine_test_type
-      - trigger_test
-    if: needs.determine_test_type.outputs.workflow == 'upgrade_test'
-    steps:
-      - name: parse the result
-        id: parse
-        env:
-          TRIGGER_RESULT: ${{ needs.trigger_test.outputs.result }}
-          HEAD_SHA: ${{ needs.get_head.outputs.sha }}
-          HEAD_REPO: ${{ needs.get_head.outputs.repo }}
-          GITHUB_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          number=$(echo "$TRIGGER_RESULT" | jq -r '.number')
-          echo "Deploy scratchnet upgrade pipeline triggered for [Commit $HEAD_SHA in $HEAD_REPO](https://github.com/$GITHUB_REPO/pull/$PR_NUMBER/files/$HEAD_SHA), please approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${number}"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-      - name: Comment on the PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          HEAD_SHA: ${{ needs.get_head.outputs.sha }}
-          HEAD_REPO: ${{ needs.get_head.outputs.repo }}
-          GITHUB_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-          PIPELINE_NUMBER: ${{ steps.parse.outputs.number }}
-        with:
-          script: |
-            const { HEAD_SHA, HEAD_REPO, GITHUB_REPO, PR_NUMBER, PIPELINE_NUMBER } = process.env;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Deploy upgrade pipeline triggered for [Commit ${HEAD_SHA} in ${HEAD_REPO}](https://github.com/${GITHUB_REPO}/pull/${PR_NUMBER}/files/${HEAD_SHA}), please contact a Contributor to approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${PIPELINE_NUMBER}`
+              issue_number: prNumber,
+              body: `To run ${test.label} on this PR, a maintainer can run the following from a scratchnet checkout (\`cluster/deployment/<scratchnet>\`):\n\n\`cncluster ${test.subcommand} ${prNumber}\`\n\nThis grabs the cluster lock if free (use \`cncluster lock\` to lock explicitly), triggers the deploy workflow, and posts the run link back on this PR. Nothing was triggered by this comment.`
             });

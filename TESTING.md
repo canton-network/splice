@@ -76,15 +76,13 @@ still allow the PR to be merged, please include the text `[force]` in your last 
 
 ### Requesting Cluster Tests
 
-There are two types of cluster tests that can be requested on a PR:
-- A basic cluster test, which deploys a scratch cluster, and runs the test suite against it.
-- A Hard Migration test, which tests the full hard migration workflow on a scratch cluster.
+There are three types of cluster tests that can be requested on a PR:
+- A basic cluster test (`/cluster_test`), which deploys a scratch cluster, and runs the test suite against it.
+- An upgrade test (`/upgrade_test`).
+- A logical synchronizer upgrade test (`/lsu_test`).
 
-To request a cluster test to be run on your PR, comment `/cluster_test` on the PR. The job will paste a comment with instructions for
-maintainers.
-To request an `/upgrade_test`, `/hdm_test` or `/lsu_test`,
-comment on your PR. After commenting, the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
-contact an existing maintainer to approve it.
+To request one, comment the corresponding command on the PR. The job will paste a comment with the `cncluster` command
+a maintainer can run to trigger the test; nothing is triggered by the comment itself.
 
 ## Running Tests Locally
 
