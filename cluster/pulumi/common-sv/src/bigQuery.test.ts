@@ -24,7 +24,8 @@ const legacyDatasetId = 'mock_scan';
 async function installBigQuery(
   enableLegacyDatastream: boolean,
   enableStagProdDatastream: boolean,
-  flywayMigrationToWaitFor: FlywayMigrationToWaitFor
+  flywayMigrationToWaitFor: FlywayMigrationToWaitFor,
+  legacyMinSafeStalenessSeconds: number = 4 * 3600
 ): Promise<pulumi.Resource[]> {
   // imported here so the environment above is in place when the config modules load
   const { configureScanBigQuery } = await import('./bigQuery');
@@ -38,6 +39,7 @@ async function installBigQuery(
         enableStagProdDatastream,
         legacyDesiredState: 'RUNNING',
         stagProdDesiredState: 'RUNNING',
+        legacyMinSafeStalenessSeconds,
         retentionPeriodSeconds: 7 * 24 * 3600,
         flywayMigrationToWaitFor,
       } satisfies ScanBigQueryConfig,
@@ -341,6 +343,51 @@ describe('configureScanBigQuery', () => {
     expect(sql).toContain('PARTITION BY verdict_row_id, view_id');
     expect(sql).toMatch(/staging\.`verdict_row_id`,\s+staging\.`view_id`,\s+staging\.`x`\n/);
     expect(sql).toContain('TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)');
+  });
+
+  test.each([true, false])(
+    'enabling the legacy Datastream (%s) installs its max_staleness check',
+    async enableLegacyDatastream => {
+      const resources = await installBigQuery(
+        enableLegacyDatastream,
+        true,
+        'V074__string_interning.sql',
+        3600
+      );
+      const checks: string[] = [];
+      for (const config of resources.filter(gcp.bigquery.DataTransferConfig.isInstance)) {
+        if ((await outputValue(config.displayName)).includes('max_staleness')) {
+          checks.push((await outputValue(config.params)).query);
+        }
+      }
+      expect(checks).toHaveLength(enableLegacyDatastream ? 1 : 0);
+      if (enableLegacyDatastream) {
+        const [query] = checks;
+        // the tables the legacy Datastream writes, by Datastream's naming
+        const tableList = /WHERE t\.table_name IN \(([^)]*)\)/.exec(query)?.[1];
+        expect(tableList?.split(', ')).toEqual(
+          [
+            'update_history_creates',
+            'update_history_exercises',
+            'scan_verdict_store',
+            'scan_verdict_transaction_view_store',
+            'app_activity_record_store',
+            'interned_strings',
+          ].map(tableName => `'scan_sv_1_${tableName}'`)
+        );
+        expect(query).toContain('FROM `da-cn-devnet.mock_scan.INFORMATION_SCHEMA.TABLES` t');
+        expect(query).toContain('MAKE_INTERVAL(second => 3600)');
+        const { legacyMaxStalenessErrorTag } = await import('./bigQueryAlerts');
+        expect(query).toContain(
+          `RAISE USING MESSAGE = CONCAT('${legacyMaxStalenessErrorTag('mock')}: max_staleness below 3600s on '`
+        );
+      }
+    }
+  );
+
+  test('both Datastreams share one scheduled query IAM member', async () => {
+    const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
+    expect(resources.filter(gcp.projects.IAMMember.isInstance)).toHaveLength(1);
   });
 
   test('neither Datastream backfills automatically', async () => {
