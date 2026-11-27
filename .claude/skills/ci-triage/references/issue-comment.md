@@ -82,8 +82,16 @@ name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--dup
 already.
 
 Every body file ends with a hidden marker line `<!-- ci-triage:<ref> -->`. The hand-over script finds its own earlier
-comment by that marker and updates it in place, so a reworded comment never becomes a second comment on the issue.
-(Searching for a phrase of the text breaks as soon as the text changes: 11775 got two copies that way.)
+comment by that marker and then posts nothing, so a re-run never makes a second copy. (Searching for a phrase of the
+text breaks as soon as the text changes: 11775 got two copies that way.)
+
+A posted comment is never overwritten: people have read it and may have answered it. A correction or a new finding
+after posting is a new follow-up comment, body file `comments/<ref>-update-<n>.md` with marker
+`<!-- ci-triage:<ref>-update-<n> -->`, posted once by its own marker. It starts with `## Update: <what changed>` and
+says in its first sentence what in the earlier comment was wrong or is new (11784: the read regression was blamed on
+the DB, but most of it is outside the DB timers). The body file of the original stays as posted. Before writing the
+correction, check whether the original is posted (search the issue's comments for its marker): if it is not posted
+yet, fix the original file instead.
 
 Body files (shell rules for the commands: `<D>/CLAUDE.md`, Commands for the user). A comment that is a single line
 of plain text (no Markdown, backticks, quotes, backslashes or `$`) is passed inline with `--body` or `--comment`;
