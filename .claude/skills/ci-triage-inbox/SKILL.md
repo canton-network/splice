@@ -108,6 +108,19 @@ round directory, and the limits:
   "Lesson: none", and the suggested action with its commands.
 Do not repeat an agent's work in the main thread. Start presenting as soon as the first group in queue order lands.
 
+Model per agent (the Agent tool's `model`): pick it per group from the work the group needs, and name the choice in
+the queue line.
+- `sonnet` for mechanical work: confirming a duplicate of a known family (step 3 grep, then the comment), rewriting
+  an old-format comment whose verdict is settled, fetching logs, resolving runs and jobs, counting rates, writing
+  GCP or `gh` export scripts.
+- `opus` for reasoning: a new failure with no family match or a first hit; a cause that rests on timing across
+  several logs (a race, a stall, an ordering step); a cause in code or version logic (11811: a Daml check and the
+  app's package-version gate); a contested owner; an independent second opinion on a verdict before it is posted.
+- Escalate: when a `sonnet` agent returns "not established", a "likely" link it could not show, or a mechanism
+  that the main-thread check of its quotes does not support, re-run that group on `opus` instead of presenting it.
+  Both 11766 and 11773 had the mechanism wrong in the first pass.
+In a typical inbox most groups are duplicates (`sonnet`); `opus` goes to the few groups with a new mechanism.
+
 ## 4. Present one group at a time
 
 Write in the style of the comment (`issue-comment.md`, Style): short, direct sentences, one idea each. Use the sections of the comment (`ci-triage/references/issue-comment.md`, Shape), in this order, with a diagram in
