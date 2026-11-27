@@ -26,7 +26,7 @@ class UpdateHistoryPruningMetrics(metricsFactory: LabeledMetricsFactory)(implici
   private val updateHistoryPrunedUpTo: Gauge[Long] = metricsFactory.gauge(
     MetricInfo(
       name = prefix :+ "update_history_pruned_up_to_seconds",
-      summary = "End of the most recently dropped day of update history, in epoch seconds",
+      summary = "Start of the update history still stored, in epoch seconds",
       qualification = Debug,
     ),
     -1L,

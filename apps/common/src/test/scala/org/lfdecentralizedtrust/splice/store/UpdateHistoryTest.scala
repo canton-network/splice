@@ -92,6 +92,26 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           result.map(_.update.recordTime) shouldBe Seq(daysAfter(1).plusSeconds(10))
         }
       }
+
+      "finish a day where only some of its partitions were detached" in {
+        val store = mkStore()
+        for {
+          _ <- initStore(store, timeStart = CantonTimestamp.Epoch, partitionRunwayDays = 3)
+          _ <- storage.underlying
+            .update(
+              sqlu"alter table update_history_creates detach partition update_history_creates_19700101",
+              "detachOnePartition",
+            )
+            .failOnShutdown
+          before <- store.listDatesWithAnyPartition()
+          _ <- store.dropPartitions(day0)
+          after <- store.listDatesWithAnyPartition()
+        } yield {
+          before should contain(day0)
+          after should not contain day0
+          after should contain(day0.plusDays(1))
+        }
+      }
     }
 
     "legacyTablesExist" should {

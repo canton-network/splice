@@ -412,20 +412,48 @@ class UpdateHistory private (
   def dropPartitions(day: LocalDate)(implicit tc: TraceContext): Future[Unit] = {
     val tableSuffix = day.format(DateTimeFormatter.BASIC_ISO_DATE)
     storage.queryAndUpdate(
-      AdvisoryLocks.withBlockingTransactionalLock(
-        profile,
-        AdvisoryLockIds.createUpdateHistoryPartitionStatement,
-        DBIO.seq(
-          sqlu"set local lock_timeout = '5s'",
-          AdvisoryLocks.withDdlLock(
-            DBIO.seq(PartitionedTables.map { table =>
-              sqlu"drop table if exists #${table}_#$tableSuffix"
-            }*)
-          ),
-        ),
+      AdvisoryLocks.withDdlLock(
+        AdvisoryLocks.withSessionLock(
+          AdvisoryLockIds.createUpdateHistoryPartitionStatement,
+          DBIO.seq(PartitionedTables.map { table =>
+            val partition = s"${table}_$tableSuffix"
+            for {
+              detachPending <-
+                sql"select inhdetachpending from pg_inherits where inhrelid = to_regclass('#$partition')"
+                  .as[Boolean]
+                  .headOption
+              _ <- detachPending match {
+                case Some(false) =>
+                  sqlu"alter table #$table detach partition #$partition concurrently"
+                case Some(true) => sqlu"alter table #$table detach partition #$partition finalize"
+                case None => DBIO.successful(0)
+              }
+              _ <- sqlu"drop table if exists #$partition"
+            } yield ()
+          }*),
+        )
       ),
       "dropPartitions",
     )
+  }
+
+  def listDatesWithAnyPartition()(implicit tc: TraceContext): Future[Set[LocalDate]] = {
+    val partitionName = s"(?:${PartitionedTables.mkString("|")})_(\\d{8})".r
+    storage
+      .query(
+        sql"""
+          select c.relname
+          from pg_class c
+          join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = current_schema
+            and c.relkind = 'r'
+            and c.relname like 'update_history_%'
+        """.as[String],
+        "listDatesWithAnyPartition",
+      )
+      .map(_.collect { case partitionName(day) =>
+        LocalDate.parse(day, DateTimeFormatter.BASIC_ISO_DATE)
+      }.toSet)
   }
 
   def legacyTablesExist()(implicit tc: TraceContext): Future[Boolean] =

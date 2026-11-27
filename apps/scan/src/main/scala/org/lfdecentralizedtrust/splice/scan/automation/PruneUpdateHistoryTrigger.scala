@@ -48,7 +48,7 @@ class PruneUpdateHistoryTrigger(
         case false =>
           for {
             committed <- bulkStorage.getCommittedProgressTimestamp(Some(BulkObjectKind.Updates))
-            days <- updateHistory.listDatesWithAllPartitions()
+            days <- updateHistory.listDatesWithAnyPartition()
           } yield PruneUpdateHistoryTrigger
             .prunable(days, updateHistory.startAnalyzableTimeWindow, committed)
             .map(PrunableDay(_))
