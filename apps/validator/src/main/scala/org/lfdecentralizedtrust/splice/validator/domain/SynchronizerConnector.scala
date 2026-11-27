@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.validator.domain
 
-import cats.implicits.catsSyntaxApplicativeId
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
 import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
@@ -82,19 +81,12 @@ class SynchronizerConnector(
   private def getDecentralizedSynchronizerConfigs(clock: Clock)(implicit
       tc: TraceContext
   ): Future[SynchronizerConnectionConfig] = {
+    val alias = config.domains.global.alias
     config.domains.global.url match {
       case None =>
-        participantAdminConnection
-          .lookupPhysicalSynchronizerId(config.domains.global.alias)
+        psidForSync(alias)
           .flatMap {
-            case Some(psid) =>
-              waitForSequencerConnectionsFromScan(clock, psid.serial).map(connections =>
-                buildSynchronizerConfig(
-                  config.domains.global.alias,
-                  Some(psid),
-                  connections,
-                )
-              )
+            case Some(psid) => Future.successful(psid.serial)
             case None =>
               logger.info("No registered physical synchronizer id, using active id from scan")
               retryProvider
@@ -106,20 +98,12 @@ class SynchronizerConnector(
                     .getActivePhysicalSynchronizerSerial(),
                   logger,
                 )
-                .flatMap(
-                  waitForSequencerConnectionsFromScan(clock, _).map(connections =>
-                    buildSynchronizerConfig(
-                      config.domains.global.alias,
-                      None,
-                      connections,
-                    )
-                  )
-                )
           }
+          .flatMap(waitForSequencerConnectionsFromScan(clock, _))
+          .flatMap(buildSynchronizerConfig(alias, _))
       case Some(url) =>
         buildSynchronizerConfig(
-          config.domains.global.alias,
-          None,
+          alias,
           SequencerConnections
             .tryMany(
               connections = Seq(
@@ -142,31 +126,39 @@ class SynchronizerConnector(
               sequencerConnectionPoolDelays = config.sequencerConnectionPoolDelays.toInternal,
               subscriptionLivenessLimits = config.subscriptionLivenessLimits.toInternal,
             ),
-        ).pure[Future]
+        )
     }
   }
 
+  private def psidForSync(alias: SynchronizerAlias)(implicit
+      tc: TraceContext
+  ): Future[Option[PhysicalSynchronizerId]] =
+    retryProvider.getValueWithRetries(
+      RetryFor.WaitingOnInitDependency,
+      "participant_physical_synchronizer_id",
+      s"physical synchronizer id for $alias",
+      participantAdminConnection.lookupPhysicalSynchronizerId(alias),
+      logger,
+    )
+
   def ensureExtraDomainsRegistered()(implicit tc: TraceContext): Future[Unit] =
     MonadUtil.sequentialTraverse_(config.domains.extra)(synchronizer =>
-      ensureDomainRegistered(
-        buildSynchronizerConfig(
-          synchronizer.alias,
-          None,
-          SequencerConnections.single(
-            GrpcSequencerConnection
-              .create(synchronizer.url)
-              .fold(
-                error =>
-                  throw Status.INVALID_ARGUMENT
-                    .withDescription(
-                      s"Invalid synchronizer url for synchronizer $synchronizer: $error"
-                    )
-                    .asRuntimeException(),
-                identity,
-              )
-          ),
-        )
-      )
+      buildSynchronizerConfig(
+        synchronizer.alias,
+        SequencerConnections.single(
+          GrpcSequencerConnection
+            .create(synchronizer.url)
+            .fold(
+              error =>
+                throw Status.INVALID_ARGUMENT
+                  .withDescription(
+                    s"Invalid synchronizer url for synchronizer $synchronizer: $error"
+                  )
+                  .asRuntimeException(),
+              identity,
+            )
+        ),
+      ).flatMap(ensureDomainRegistered)
     )
 
   private def ensureDomainRegistered(
@@ -186,19 +178,19 @@ class SynchronizerConnector(
 
   private def buildSynchronizerConfig(
       alias: SynchronizerAlias,
-      psid: Option[PhysicalSynchronizerId],
       sequencerConnections: SequencerConnections,
-  ) = {
-    SynchronizerConnectionConfig(
-      alias,
-      sequencerConnections,
-      psid = psid,
-      timeTracker = SynchronizerTimeTrackerConfig(
-        minObservationDuration = config.timeTrackerMinObservationDuration,
-        observationLatency = config.timeTrackerObservationLatency,
-      ),
-    )
-  }
+  )(implicit tc: TraceContext): Future[SynchronizerConnectionConfig] =
+    psidForSync(alias).map { psid =>
+      SynchronizerConnectionConfig(
+        alias,
+        sequencerConnections,
+        psid = psid,
+        timeTracker = SynchronizerTimeTrackerConfig(
+          minObservationDuration = config.timeTrackerMinObservationDuration,
+          observationLatency = config.timeTrackerObservationLatency,
+        ),
+      )
+    }
 
   private def waitForSequencerConnectionsFromScan(clock: Clock, synchronizerSerial: NonNegativeInt)(
       implicit tc: TraceContext
