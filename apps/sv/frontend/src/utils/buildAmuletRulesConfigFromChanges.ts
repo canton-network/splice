@@ -228,6 +228,12 @@ export function buildAmuletRulesConfigFromChanges(
         getValue('governanceLockConfigFeaturedAppLockVestingDuration', true)
       ),
     }),
+
+    // Empty fields use the CIP defaults.
+    credentialRegistryConfig: nullIfAllNull({
+      freePeriod: wrapMicroseconds(getValue('credentialRegistryConfigFreePeriod', true)),
+      extensionUsdPerYear: getValue('credentialRegistryConfigExtensionUsdPerYear', true),
+    }),
   };
 
   return amuletConfig;

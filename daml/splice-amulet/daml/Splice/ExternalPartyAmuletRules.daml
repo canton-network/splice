@@ -11,6 +11,7 @@ import DA.Optional
 import qualified DA.TextMap as TextMap
 import DA.Time
 
+import Splice.Api.Credential.RegistryPublicationV1 qualified as PublicationV1
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as Api.Token.TransferInstructionV1
 import Splice.Api.Token.HoldingV1 qualified as V1
@@ -29,7 +30,8 @@ import Splice.AmuletAllocation as AmuletAllocationV1
 import Splice.AmuletAllocationV2 as AmuletAllocationV2
 import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
-import Splice.GovernanceLock (assertInPast24Hours, lockManagerParty)
+import Splice.Credentials (updateCredentials)
+import Splice.GovernanceLock (lockManagerParty)
 import Splice.GovernanceLock.Request (governanceLock_transferFactoryV1_transferImpl)
 import Splice.DecentralizedSynchronizer (MemberTrafficPurchase(..), parseTrafficPurchaseMemo)
 import Splice.Round (OpenMiningRound(..))
@@ -195,6 +197,15 @@ template ExternalPartyAmuletRules
         meta = emptyMetadata
 
       eventLog_holdingsChangeImpl = eventLog_holdingsChangeDefaultImpl dso
+
+    interface instance PublicationV1.CredentialFactory for ExternalPartyAmuletRules where
+      view = PublicationV1.CredentialFactoryView with
+        admin = dso
+        meta = emptyMetadata
+
+      credentialFactory_publicFetchImpl _self _arg = pure (view (toInterface @PublicationV1.CredentialFactory this))
+
+      credentialFactory_updateCredentialsImpl _self arg = updateCredentials dso arg
 
 
 -- Legacy transfer commands

@@ -99,6 +99,31 @@ data RewardConfig = RewardConfig with
       -- featured asset moving app. Default: 0.1.
   deriving (Eq, Show, Serializable)
 
+-- | Configuration for the credential registry.
+--
+-- All fields are optional, so that the registry runs with the CIP defaults without a config vote.
+-- Read them with `credentialRegistryFreePeriod` and `credentialRegistryExtensionUsdPerYear`.
+data CredentialRegistryConfig = CredentialRegistryConfig with
+    freePeriod : Optional RelTime
+      -- ^ Free registry lease of a newly published credential record. Default: 90 days.
+    extensionUsdPerYear : Optional Decimal
+      -- ^ USD price of one extra year of registry lease. Default: 1.0 USD.
+  deriving (Eq, Show, Serializable)
+
+-- | Free registry lease, defaulting to 90 days.
+credentialRegistryFreePeriod : Optional CredentialRegistryConfig -> RelTime
+credentialRegistryFreePeriod config =
+  fromOptional (days 90) $ do
+    registryConfig <- config
+    registryConfig.freePeriod
+
+-- | USD price of one extra year of registry lease, defaulting to 1.0 USD.
+credentialRegistryExtensionUsdPerYear : Optional CredentialRegistryConfig -> Decimal
+credentialRegistryExtensionUsdPerYear config =
+  fromOptional 1.0 $ do
+    registryConfig <- config
+    registryConfig.extensionUsdPerYear
+
 
 -- Full AmuletConfig
 --------------------
@@ -131,6 +156,8 @@ data AmuletConfig unit = AmuletConfig with
     amuletSwitchOverTimes : Optional (TextMap Time)
       -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
     governanceLockConfig : Optional GovernanceLockConfig -- ^ Governance lock configuration.
+    credentialRegistryConfig : Optional CredentialRegistryConfig
+      -- ^ Configuration for the credential registry.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -164,6 +191,7 @@ validAmuletConfig AmuletConfig
     , featuredAppActivityMarkerAmount
     , rewardConfig
     , minDevelopmentFundMintingDelay
+    , credentialRegistryConfig
     }
   =
     validTransferConfig transferConfig &&
@@ -175,7 +203,8 @@ validAmuletConfig AmuletConfig
     optional True (>= 0.0) featuredAppActivityMarkerAmount &&
     featuredAppActivityMarkerAmount == Some transferConfig.extraFeaturedAppRewardAmount &&
     optional True validRewardConfig rewardConfig &&
-    optional True (>= days 0) minDevelopmentFundMintingDelay
+    optional True (>= days 0) minDevelopmentFundMintingDelay &&
+    optional True validCredentialRegistryConfig credentialRegistryConfig
 
 validTransferConfig : TransferConfig unit -> Bool
 validTransferConfig TransferConfig
@@ -237,6 +266,11 @@ data PackageConfig = PackageConfig
 validPackageConfig : PackageConfig -> Bool
 validPackageConfig _ = True
 
+validCredentialRegistryConfig : CredentialRegistryConfig -> Bool
+validCredentialRegistryConfig config =
+  optional True (>= days 0) config.freePeriod &&
+  optional True (> 0.0) config.extensionUsdPerYear
+
 -- | Config record grouping config values for governance locks.
 --
 -- All fields are optional to support changes to individual fields without requiring
@@ -283,6 +317,7 @@ instance Patchable (AmuletConfig USD) where
     minDevelopmentFundMintingDelay = patch new.minDevelopmentFundMintingDelay base.minDevelopmentFundMintingDelay current.minDevelopmentFundMintingDelay
     amuletSwitchOverTimes = patch new.amuletSwitchOverTimes base.amuletSwitchOverTimes current.amuletSwitchOverTimes
     governanceLockConfig = patch new.governanceLockConfig base.governanceLockConfig current.governanceLockConfig
+    credentialRegistryConfig = patch new.credentialRegistryConfig base.credentialRegistryConfig current.credentialRegistryConfig
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with
@@ -315,6 +350,11 @@ instance Patchable PackageConfig where
     validatorLifecycle = patch new.validatorLifecycle base.validatorLifecycle current.validatorLifecycle
     wallet = patch new.wallet base.wallet current.wallet
     walletPayments = patch new.walletPayments base.walletPayments current.walletPayments
+
+instance Patchable CredentialRegistryConfig where
+  patch new base current = CredentialRegistryConfig with
+    freePeriod = patch new.freePeriod base.freePeriod current.freePeriod
+    extensionUsdPerYear = patch new.extensionUsdPerYear base.extensionUsdPerYear current.extensionUsdPerYear
 
 instance Patchable GovernanceLockConfig where
   patch new base current = GovernanceLockConfig with

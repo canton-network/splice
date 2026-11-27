@@ -734,7 +734,7 @@ testAmuletRulesTickDurationChange = do
     requester = sv1
     action = ARC_AmuletRules with
       amuletRulesAction = CRARC_SetConfig AmuletRules_SetConfig with
-        newConfig = newConfig
+        newConfig
         baseConfig = amuletRules.configSchedule.initialValue
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None

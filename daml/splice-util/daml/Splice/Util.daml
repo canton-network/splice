@@ -7,6 +7,10 @@ module Splice.Util
   -- * Better assertion messages
   require,
 
+  -- * Time bounds
+  assertInPast24Hours,
+  assertInNext24Hours,
+
   -- * Fetching contracts
   requireMatchingContract,
 
@@ -33,7 +37,8 @@ module Splice.Util
 ) where
 
 import DA.Action (unless)
-import DA.Time (RelTime)
+import DA.Assert (assertDeadlineExceeded, assertWithinDeadline)
+import DA.Time (RelTime, addRelTime, days)
 import DA.Set (Set, difference, union)
 import qualified DA.Set as Set
 import DA.Map (Map)
@@ -55,6 +60,18 @@ requireMatchingContract cid expectedCo = do
 require : CanAssert m => Text -> Bool -> m ()
 require msg invariant =
   assertMsg ("The requirement '" <> msg <> "' was not met.") invariant
+
+-- | Assert that `time` is in the past, but not more than 24 hours ago.
+assertInPast24Hours : Text -> Time -> Update ()
+assertInPast24Hours desc time = do
+  assertDeadlineExceeded desc time
+  assertWithinDeadline (desc <> " + 1 day") (time `addRelTime` days 1)
+
+-- | Assert that `time` is in the future, but not more than 24 hours ahead.
+assertInNext24Hours : Text -> Time -> Update ()
+assertInNext24Hours desc time = do
+  assertWithinDeadline desc time
+  assertDeadlineExceeded (desc <> " - 1 day") (time `addRelTime` days (-1))
 
 -- | Contracts typically come in groups. For example, all contracts managed by a specific DSO party.
 --

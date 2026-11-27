@@ -695,6 +695,8 @@ class SV1Initializer(
                   initialRewardConfig = sv1Config.initialRewardConfig.map(_.toRewardConfig),
                   initialGovernanceLockConfig =
                     sv1Config.initialGovernanceLockConfig.map(_.toGovernanceLockConfig),
+                  initialCredentialRegistryConfig =
+                    sv1Config.initialCredentialRegistryConfig.map(_.toCredentialRegistryConfig),
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(

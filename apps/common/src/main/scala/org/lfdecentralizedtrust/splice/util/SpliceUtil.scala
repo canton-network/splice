@@ -370,6 +370,7 @@ object SpliceUtil {
       optValidatorFaucetCap: Option[BigDecimal] = None,
       initialRewardConfig: Option[splice.amuletconfig.RewardConfig] = None,
       initialGovernanceLockConfig: Option[splice.amuletconfig.GovernanceLockConfig] = None,
+      initialCredentialRegistryConfig: Option[splice.amuletconfig.CredentialRegistryConfig] = None,
   ): splice.amuletconfig.AmuletConfig[splice.amuletconfig.USD] =
     new splice.amuletconfig.AmuletConfig(
       // transferConfig
@@ -408,6 +409,7 @@ object SpliceUtil {
       // amuletSwitchOverTimes
       Optional.empty(),
       initialGovernanceLockConfig.toJava,
+      initialCredentialRegistryConfig.toJava,
     )
 
   def defaultAnsConfig(

@@ -526,6 +526,7 @@ class SvStateManagementIntegrationTest
       initialConfig.minDevelopmentFundMintingDelay,
       initialConfig.amuletSwitchOverTimes,
       initialConfig.governanceLockConfig,
+      initialConfig.credentialRegistryConfig,
     )
 
     val (_, voteRequestCid) = actAndCheck(

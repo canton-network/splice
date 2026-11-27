@@ -138,6 +138,8 @@ object SvOnboardingConfig {
       ),
       initialProtocolVersion: ProtocolVersion = ProtocolVersion.v37,
       initialGovernanceLockConfig: Option[InitialGovernanceLockConfig] = None,
+      // Unset by default: the credential registry runs with the CIP defaults without a config.
+      initialCredentialRegistryConfig: Option[InitialCredentialRegistryConfig] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -327,6 +329,26 @@ final case class InitialGovernanceLockConfig(
       toRelTime(featuredAppLockVestingDuration),
     )
   }
+}
+
+/** Free period and yearly extension price of the credential registry.
+  * Unset fields use the CIP defaults: 90 days and 1.0 USD per year.
+  */
+final case class InitialCredentialRegistryConfig(
+    freePeriod: Option[NonNegativeFiniteDuration] = None,
+    extensionUsdPerYear: Option[PositiveNumeric[BigDecimal]] = None,
+) {
+  final def toCredentialRegistryConfig: splice.amuletconfig.CredentialRegistryConfig =
+    new splice.amuletconfig.CredentialRegistryConfig(
+      freePeriod
+        .map(duration =>
+          new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
+            TimeUnit.NANOSECONDS.toMicros(duration.duration.toNanos)
+          )
+        )
+        .toJava,
+      extensionUsdPerYear.map(_.value.bigDecimal).toJava,
+    )
 }
 
 final case class SynchronizerFeesConfig(

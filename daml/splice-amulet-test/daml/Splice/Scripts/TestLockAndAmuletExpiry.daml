@@ -40,6 +40,7 @@ scaleAmuletConfig amuletPrice config = AmuletConfig with
   minDevelopmentFundMintingDelay = config.minDevelopmentFundMintingDelay
   amuletSwitchOverTimes = config.amuletSwitchOverTimes
   governanceLockConfig = None
+  credentialRegistryConfig = config.credentialRegistryConfig
 
 test : Script ()
 test = script do

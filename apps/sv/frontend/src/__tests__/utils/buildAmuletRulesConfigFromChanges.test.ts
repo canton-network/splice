@@ -611,6 +611,51 @@ describe('buildAmuletRulesConfigFromChanges', () => {
 
     expect(result.governanceLockConfig).toBeNull();
   });
+
+  describe('credential registry config', () => {
+    const changes = (freePeriod: string, extensionUsdPerYear: string): ConfigChange[] => [
+      {
+        fieldName: 'credentialRegistryConfigFreePeriod',
+        label: 'Credential registry: free period (microseconds)',
+        currentValue: '',
+        newValue: freePeriod,
+      },
+      {
+        fieldName: 'credentialRegistryConfigExtensionUsdPerYear',
+        label: 'Credential registry: extension fee (USD per year)',
+        currentValue: '',
+        newValue: extensionUsdPerYear,
+      },
+    ];
+
+    test('builds the config when both fields are set', () => {
+      const result = buildAmuletRulesConfigFromChanges(changes('7776000000000', '1.0'));
+      expect(result.credentialRegistryConfig).toEqual({
+        freePeriod: { microseconds: '7776000000000' },
+        extensionUsdPerYear: '1.0',
+      });
+    });
+
+    test('maps both empty fields to null', () => {
+      const result = buildAmuletRulesConfigFromChanges(changes('', ''));
+      expect(result.credentialRegistryConfig).toBeNull();
+    });
+
+    test('keeps a single set field and leaves the other one to the default', () => {
+      expect(
+        buildAmuletRulesConfigFromChanges(changes('7776000000000', '')).credentialRegistryConfig
+      ).toEqual({
+        freePeriod: { microseconds: '7776000000000' },
+        extensionUsdPerYear: null,
+      });
+      expect(
+        buildAmuletRulesConfigFromChanges(changes('', '2.5')).credentialRegistryConfig
+      ).toEqual({
+        freePeriod: null,
+        extensionUsdPerYear: '2.5',
+      });
+    });
+  });
 });
 
 describe('buildAmuletRulesConfigFromChanges switch-over times', () => {

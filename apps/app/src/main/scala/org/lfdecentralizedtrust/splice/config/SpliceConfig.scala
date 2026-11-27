@@ -68,7 +68,7 @@ import com.digitalasset.canton.config.ConfigErrors.{
 import com.digitalasset.canton.config.NonNegativeFiniteDurationAccess.*
 import com.digitalasset.canton.config.PositiveFiniteDurationAccess.*
 import com.digitalasset.canton.config.{PerClientIpRateLimitConfig as _, RateLimitersConfig as _, *}
-import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeNumeric, PositiveNumeric}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.participant.config.RemoteParticipantConfig
@@ -418,6 +418,14 @@ object SpliceConfig {
     )
     implicit val nonNegativeBigDecimalReader: ConfigReader[NonNegativeNumeric[BigDecimal]] =
       NonNegativeNumeric.nonNegativeNumericReader[BigDecimal]
+    implicit val positiveBigDecimalReader: ConfigReader[PositiveNumeric[BigDecimal]] =
+      ConfigReader[BigDecimal].emap(value =>
+        Either.cond(
+          value > 0,
+          PositiveNumeric.tryCreate(value),
+          CannotConvert(value.toString, "PositiveNumeric[BigDecimal]", "must be positive"),
+        )
+      )
 
     implicit val authConfigHint: FieldCoproductHint[AuthConfig] =
       new FieldCoproductHint[AuthConfig]("algorithm")
@@ -609,6 +617,9 @@ object SpliceConfig {
       deriveReader[InitialRewardConfig]
     implicit val initialGovernanceLockConfigReader: ConfigReader[InitialGovernanceLockConfig] =
       deriveReader[InitialGovernanceLockConfig]
+    implicit val initialCredentialRegistryConfigReader
+        : ConfigReader[InitialCredentialRegistryConfig] =
+      deriveReader[InitialCredentialRegistryConfig]
     implicit val svOnboardingFoundDsoReader: ConfigReader[SvOnboardingConfig.FoundDso] =
       deriveReader[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyReader: ConfigReader[SvOnboardingConfig.JoinWithKey] =
@@ -999,6 +1010,8 @@ object SpliceConfig {
 
     implicit val nonNegativeBigDecimalWriter: ConfigWriter[NonNegativeNumeric[BigDecimal]] =
       ConfigWriter.toString(x => x.unwrap.toString)
+    implicit val positiveBigDecimalWriter: ConfigWriter[PositiveNumeric[BigDecimal]] =
+      ConfigWriter.toString(x => x.unwrap.toString)
 
     // Use a `confidentialWriter` if a config can contain confidential values!
     // Also consider revisiting if the "leaked secrets check" in
@@ -1164,6 +1177,9 @@ object SpliceConfig {
       deriveWriter[InitialRewardConfig]
     implicit val initialGovernanceLockConfigWriter: ConfigWriter[InitialGovernanceLockConfig] =
       deriveWriter[InitialGovernanceLockConfig]
+    implicit val initialCredentialRegistryConfigWriter
+        : ConfigWriter[InitialCredentialRegistryConfig] =
+      deriveWriter[InitialCredentialRegistryConfig]
     implicit val svOnboardingFoundDsoWriter: ConfigWriter[SvOnboardingConfig.FoundDso] =
       deriveWriter[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyWriter: ConfigWriter[SvOnboardingConfig.JoinWithKey] =

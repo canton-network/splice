@@ -71,7 +71,6 @@ module Splice.GovernanceLock (
   lockAmulet,
   lockAmuletFor,
   unlockAmulet,
-  assertInPast24Hours,
 ) where
 
 import Prelude hiding (forA)
@@ -576,16 +575,6 @@ vestingDurationFor (GLK_SuperValidatorRightsOwner _) config = governanceLockSupe
 requireMinimumLock : ExternalPartyConfigState -> Decimal -> Update ()
 requireMinimumLock context amount = do
   require' ("locked amount", amount) isGreaterOrEqualR ("minimum governance lock amount", governanceLockMinimumLockAmount context.governanceLockConfig)
-
-assertInPast24Hours : Text -> Time -> Update ()
-assertInPast24Hours desc time = do
-  assertDeadlineExceeded desc time
-  assertWithinDeadline (desc <> " + 1 day") (time `addRelTime` days 1)
-
-assertInNext24Hours : Text -> Time -> Update ()
-assertInNext24Hours desc time = do
-  assertWithinDeadline desc time
-  assertDeadlineExceeded (desc <> " - 1 day") (time `addRelTime` days (-1))
 
 unfeaturedPaymentContextAndConfigFromChoiceContext : Party -> ChoiceContext -> Update (ExternalPartyTransferContext, ExternalPartyConfigState)
 unfeaturedPaymentContextAndConfigFromChoiceContext dso choiceContext = do
