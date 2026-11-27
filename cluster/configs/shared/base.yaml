@@ -156,7 +156,7 @@ monitoring:
         # This task repeats every ~3h
         saveLatencyThresholdSeconds: 5400
         # This task repeats every ~30sec
-        updateLatencyThresholdSeconds: 3
+        updateLatencyThresholdSeconds: 10
       sequencerRateLimits:
         rejectionRateThreshold: 0
         circuitBreakerStateThreshold: 0.5
