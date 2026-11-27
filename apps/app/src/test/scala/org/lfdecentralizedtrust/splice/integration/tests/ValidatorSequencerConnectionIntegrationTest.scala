@@ -478,12 +478,13 @@ class ValidatorSequencerConnectionIntegrationTest
           synchronizerId.toProtoPrimitive,
           update(synchronizerNodeConfig),
           rulesAndState.svNodeState.contractId,
-          otherSvNodeStateCids,
+          otherSvNodeStateCids.cids,
         )
       )
       _ <- connection
         .submit(Seq(svParty), Seq(dsoParty), cmd)
         .noDedup
+        .withPreferredPackage(otherSvNodeStateCids.preferredPackageIds)
         .yieldResult()
     } yield ()
   }
