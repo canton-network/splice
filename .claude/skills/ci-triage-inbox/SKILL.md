@@ -108,18 +108,19 @@ round directory, and the limits:
   "Lesson: none", and the suggested action with its commands.
 Do not repeat an agent's work in the main thread. Start presenting as soon as the first group in queue order lands.
 
-Model per agent (the Agent tool's `model`): pick it per group from the work the group needs, and name the choice in
-the queue line.
-- `sonnet` for mechanical work: confirming a duplicate of a known family (step 3 grep, then the comment), rewriting
-  an old-format comment whose verdict is settled, fetching logs, resolving runs and jobs, counting rates, writing
-  GCP or `gh` export scripts.
-- `opus` for reasoning: a new failure with no family match or a first hit; a cause that rests on timing across
-  several logs (a race, a stall, an ordering step); a cause in code or version logic (11811: a Daml check and the
-  app's package-version gate); a contested owner; an independent second opinion on a verdict before it is posted.
-- Escalate: when a `sonnet` agent returns "not established", a "likely" link it could not show, or a mechanism
-  that the main-thread check of its quotes does not support, re-run that group on `opus` instead of presenting it.
-  Both 11766 and 11773 had the mechanism wrong in the first pass.
-In a typical inbox most groups are duplicates (`sonnet`); `opus` goes to the few groups with a new mechanism.
+Models (the Agent tool's `model`): `sonnet` triages every group first, so results come early; `opus` reviews the
+verdicts that claim a mechanism before they are presented.
+- Duplicate of a known family with a clean confirming grep: `sonnet` only; the main thread checks its quotes.
+- Root cause, new mechanism or first hit: `sonnet` first pass, then an `opus` review before presenting. The review
+  brief is adversarial: verify every claim against the raw log or code it names, check what each quoted metric or
+  timer measures, check that the cause accounts for the size of the failure (Rules of evidence in the ci-triage
+  skill), try to refute the mechanism and look for a different one, and return the disagreements with evidence,
+  not a confirmation. Present with a line "Reviewed: no change" or the list of what changed.
+- `sonnet` returns "not established" or a "likely" link it could not show: `opus` takes the group over instead of
+  reviewing it.
+- Owner contested (authorship versus cause): `opus` reviews the Owner section.
+Name the model plan in the queue line. Precedents: 11766 and 11773 had the mechanism wrong in the first pass; 11784
+blamed a partition probe that explains about 90 ms of a 1.9 s regression and was posted before review.
 
 ## 4. Present one group at a time
 

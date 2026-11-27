@@ -171,5 +171,14 @@ to `log/ci-triage-export/<ref>/`.
 - The suite list of a checkErrors shard is not the culprit: the WARN's suite is the one running at the flagged
   timestamp, and commitment or ack WARNs often land minutes after the causing step.
 - A packet without the commands that produced its conclusions is not accepted.
+- Magnitude: a cause must account for the size of what failed. Put a number on it: how much of the delay, the
+  regression or the breach the mechanism explains ("explains 90 ms of +1.9 s"). When it explains only a small part,
+  it is a contributing factor and the cause is not established; say so and name the unexplained part. A fix must
+  bring the measured value under the limit, not only improve it.
+- Know what a number measures before attributing it: read the code of the timer, metric or log field (whole
+  operation, DB time, one query, wall clock or CPU) and use its scope in the comment. 11784: `getUpdate` is the whole
+  read, of which DB time grew 115 ms; the comment treated it as the DB step.
+- Performance regressions: compare the breakdown before and after (total, DB, outside DB, per query) from the same
+  log lines, over several samples when the test prints them; one cold sample is not a measurement.
 - Every quoted log line names the file it comes from (artifact file name, or job log and step), in the packet and in the
   comment, so that anyone can verify it by hand.
