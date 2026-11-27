@@ -70,6 +70,87 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
       }
     }
 
+    "dropPartitions" should {
+
+      val day0 = LocalDate.ofInstant(CantonTimestamp.Epoch.toInstant, ZoneOffset.UTC)
+      def daysAfter(days: Long) = CantonTimestamp.Epoch.plus(java.time.Duration.ofDays(days))
+
+      "drop the updates of that day only, and not recreate the day" in {
+        val store = mkStore()
+        for {
+          _ <- initStore(store, timeStart = CantonTimestamp.Epoch, partitionRunwayDays = 3)
+          _ <- create(domain1, cid1, offset1, party1, store, daysAfter(0).plusSeconds(10))
+          _ <- create(domain1, cid2, offset2, party1, store, daysAfter(1).plusSeconds(10))
+          _ <- store.dropPartitions(day0)
+          _ <- store.dropPartitions(day0)
+          _ <- store.ingestionSink.initialize(mockLedgerConnection())
+          days <- store.listDatesWithAllPartitions()
+          result <- updates(store)
+        } yield {
+          days should not contain day0
+          days should contain(day0.plusDays(1))
+          result.map(_.update.recordTime) shouldBe Seq(daysAfter(1).plusSeconds(10))
+        }
+      }
+
+      "finish a day where only some of its partitions were detached" in {
+        val store = mkStore()
+        for {
+          _ <- initStore(store, timeStart = CantonTimestamp.Epoch, partitionRunwayDays = 3)
+          _ <- storage.underlying
+            .update(
+              sqlu"alter table update_history_creates detach partition update_history_creates_19700101",
+              "detachOnePartition",
+            )
+            .failOnShutdown
+          before <- store.listDatesWithAnyPartition()
+          _ <- store.dropPartitions(day0)
+          after <- store.listDatesWithAnyPartition()
+        } yield {
+          before should contain(day0)
+          after should not contain day0
+          after should contain(day0.plusDays(1))
+        }
+      }
+    }
+
+    "legacyTablesExist" should {
+
+      "be true while any legacy table exists, and false once all are gone" in {
+        val legacyTables = Seq(
+          "update_history_transactions_legacy",
+          "update_history_creates_legacy",
+          "update_history_exercises_legacy",
+          "update_history_assignments_legacy",
+          "update_history_unassignments_legacy",
+        )
+        def rename(tables: Seq[String], from: String => String, to: String => String) =
+          MonadUtil.sequentialTraverse(tables) { table =>
+            storage.underlying
+              .update(
+                sqlu"alter table #${from(table)} rename to #${to(table)}",
+                "renameLegacyTable",
+              )
+              .failOnShutdown
+          }
+        val hidden = (table: String) => s"${table}_hidden"
+        val store = mkStore()
+        for {
+          _ <- initStore(store)
+          allExist <- store.legacyTablesExist()
+          _ <- rename(legacyTables.drop(1), identity, hidden)
+          oneExists <- store.legacyTablesExist()
+          _ <- rename(legacyTables.take(1), identity, hidden)
+          noneExists <- store.legacyTablesExist()
+          _ <- rename(legacyTables, hidden, identity)
+        } yield {
+          allExist shouldBe true
+          oneExists shouldBe true
+          noneExists shouldBe false
+        }
+      }
+    }
+
     "analyzePartitionedTables" should {
 
       "use ANALYZE ONLY from Postgres 18 and plain ANALYZE before" in {

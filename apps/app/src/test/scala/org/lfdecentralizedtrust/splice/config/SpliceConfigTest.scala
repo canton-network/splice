@@ -31,6 +31,17 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       "topup interval 1 second must not be smaller than the polling interval 30 seconds"
     )
   }
+  "Scan update history pruning is rejected until it can be enabled" in {
+    val overwrite = ConfigFactory.parseString(
+      """
+      |canton.scan-apps.sv1Scan.pruning.update-history.enabled = true
+     """.stripMargin
+    )
+    val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+    SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(
+      "pruning.update-history.enabled cannot be set yet"
+    )
+  }
   "disableSvValidatorBftSequencerConnection" should {
     "be rejected if svValidator is not true" in {
       val overwrite = ConfigFactory.parseString(

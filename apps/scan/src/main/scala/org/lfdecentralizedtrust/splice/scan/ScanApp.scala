@@ -423,6 +423,9 @@ class ScanApp(
         kvStore,
       )
       _ = automation.registerHistoryStartTrigger(historyStart)
+      _ = bulkStorage
+        .filter(_ => config.pruning.updateHistory.enabled)
+        .foreach(bulk => automation.registerPruneUpdateHistoryTrigger(bulk.reader))
       scanVerdictStore = DbScanVerdictStore(
         storage,
         updateHistory,

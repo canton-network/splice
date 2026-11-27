@@ -25,6 +25,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanSnapshotPruningConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
+  ScanUpdateHistoryPruningConfig,
   TokenStandardConfig,
   CacheConfig as SpliceCacheConfig,
 }
@@ -549,6 +550,17 @@ object SpliceConfig {
       deriveReader[AnalyzableTimeWindowConfig]
     implicit val scanSnapshotPruningConfigReader: ConfigReader[ScanSnapshotPruningConfig] =
       deriveReader[ScanSnapshotPruningConfig]
+    implicit val scanUpdateHistoryPruningConfigReader
+        : ConfigReader[ScanUpdateHistoryPruningConfig] =
+      deriveReader[ScanUpdateHistoryPruningConfig].emap { conf =>
+        Either.cond(
+          !conf.enabled,
+          conf,
+          ConfigValidationFailed(
+            "pruning.update-history.enabled cannot be set yet: pruning update history must wait for the DsoRules and votes backfills, a serving boundary for pruned data and E6 (see #6462)"
+          ),
+        )
+      }
     implicit val scanPruningConfigReader: ConfigReader[ScanPruningConfig] =
       deriveReader[ScanPruningConfig]
     implicit val scanConfigReader: ConfigReader[ScanAppBackendConfig] =
@@ -1098,6 +1110,9 @@ object SpliceConfig {
       deriveWriter[AnalyzableTimeWindowConfig]
     implicit val scanSnapshotPruningConfigWriter: ConfigWriter[ScanSnapshotPruningConfig] =
       deriveWriter[ScanSnapshotPruningConfig]
+    implicit val scanUpdateHistoryPruningConfigWriter
+        : ConfigWriter[ScanUpdateHistoryPruningConfig] =
+      deriveWriter[ScanUpdateHistoryPruningConfig]
     implicit val scanPruningConfigWriter: ConfigWriter[ScanPruningConfig] =
       deriveWriter[ScanPruningConfig]
     implicit val scanConfigWriter: ConfigWriter[ScanAppBackendConfig] =

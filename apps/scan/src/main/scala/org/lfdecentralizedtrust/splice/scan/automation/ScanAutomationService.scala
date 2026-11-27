@@ -32,6 +32,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanStore,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanAppRewardsStore, DbScanVerdictStore}
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{HistoryReadiness, ScanHistoryStart}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
@@ -114,6 +115,9 @@ class ScanAutomationService(
         triggerContext,
       )
     )
+
+  def registerPruneUpdateHistoryTrigger(bulkStorage: BulkStorageReader): Unit =
+    registerTrigger(new PruneUpdateHistoryTrigger(updateHistory, bulkStorage, triggerContext))
 
   registerUpdateHistoryIngestion(updateHistory)
   registerTrigger(
