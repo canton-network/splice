@@ -486,7 +486,6 @@ scan_verdict_store
   history_id bigint not null
   total_traffic_cost bigint
   envelope_traffic_costs jsonb
-  round_number bigint
   constraint scan_verdict_store_pkey PRIMARY KEY (row_id)
 
 scan_verdict_transaction_view_store
