@@ -43,13 +43,14 @@ nothing to say.
    merger instead; ci-triage-inbox, Assignee). Left out when no owner was found.
 Length: super short and crisp. Keep only what a reader needs to act: what failed, the proof, the cause, the fix, the
 owner. Aim for about 300 words for a root cause and less for a duplicate. Per section: Summary one line; Test Purpose
-and Expected Behavior one or two sentences; Test Environment two or three sentences and one small diagram; Actual
-Behavior three to five sentences, one timeline, one log block of two to four lines (a second block only when a
+and Expected Behavior one or two sentences; Test Environment two or three sentences; Actual
+Behavior three to five sentences, one log block of two to four lines (a second block only when a
 different file proves a different step); Repro Rate one line; Root Cause two to four sentences; Fix one to three
 lines; Owner one line with the reason. Leave out: investigation steps, timing tables and breakdowns (they stay in the
 packet), ruled-out alternatives unless a reader would suspect them, related issues that are not the parent, caveats
 about what was not checked unless they change the action, and repeated facts. When in doubt, cut it; the packet keeps
-the detail. (11780: the first version had 1266 words; the posted one 344.)
+the detail. The diagrams are not cut: keep the full network diagram (Test Environment) and the full timeline
+(Actual Behavior) as described under Diagrams; the word budget is for the text. (11780: the first version had 1266 words; the posted one 344.)
 Style: write for a quick read. Simple, direct sentences: one idea per sentence, about 20 words at most, active voice,
 plain words, the subject first. No chains of clauses joined by commas, semicolons or "which"; split them. A fix or a
 list of steps is a short numbered list or a small code block, not one long sentence. Keep the facts and the names
