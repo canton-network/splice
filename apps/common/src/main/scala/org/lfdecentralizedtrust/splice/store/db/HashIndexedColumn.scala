@@ -20,15 +20,15 @@ sealed trait HashIndexedColumn {
   def name: String
 }
 
-/** A text column indexed by `splice_text_key(column)`. */
+/** A text column indexed by `splice_text_hash(column)`. */
 final case class HashIndexedTextColumn(name: String) extends HashIndexedColumn {
 
   /** Filters for rows where this column equals `value`. */
   def equalTo(value: String): SQLActionBuilder =
-    sql"(splice_text_key(#$name) = splice_text_key($value) and #$name = $value)"
+    sql"(splice_text_hash(#$name) = splice_text_hash($value) and #$name = $value)"
 }
 
-/** A jsonb column indexed by `splice_jsonb_key(column)`, which is consistent with jsonb equality,
+/** A jsonb column indexed by `splice_jsonb_hash(column)`, which is consistent with jsonb equality,
   * e.g. numbers that are equal but written with a different scale have the same key.
   */
 final case class HashIndexedJsonbColumn(name: String) extends HashIndexedColumn {
@@ -36,7 +36,7 @@ final case class HashIndexedJsonbColumn(name: String) extends HashIndexedColumn 
   /** Filters for rows where this column equals `value`. */
   def equalTo(value: Json): SQLActionBuilder = {
     val json = value.noSpaces
-    sql"""(splice_jsonb_key(#$name) = splice_jsonb_key(cast($json as jsonb))
+    sql"""(splice_jsonb_hash(#$name) = splice_jsonb_hash(cast($json as jsonb))
           and #$name = cast($json as jsonb))"""
   }
 }

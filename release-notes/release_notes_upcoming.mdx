@@ -17,7 +17,7 @@
 
     - Some database indexes of the SV, Scan, validator and wallet stores now use smaller, fixed-size keys.
       The apps rebuild these indexes in the background after starting, without delaying the startup or blocking writes.
-      On SV nodes with a large DSO store, the rebuild can take several minutes and adds read load on the database
+      On SV nodes with a large DSO store, the rebuild can take several minutes and adds read and index-write load on the database
       during that time.
 
   - Scan App

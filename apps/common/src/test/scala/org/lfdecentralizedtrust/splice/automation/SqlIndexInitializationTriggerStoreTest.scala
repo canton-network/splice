@@ -51,6 +51,7 @@ class SqlIndexInitializationTriggerStoreTest
     "sv_acs_store_sid_mid_pn_tid_vocsh",
     "validator_acs_store_sid_mid_pn_tid_unh",
     "user_wallet_txlog_store_sid_tidh",
+    "dso_acs_store_sid_mid_glt_glsh",
     "scan_acs_store_sid_mid_glt_glsh",
   )
 

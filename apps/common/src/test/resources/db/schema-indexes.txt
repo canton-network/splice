@@ -76,9 +76,10 @@ dso_acs_store
   dso_acs_contract_id_hash_idx (store_id integer, migration_id bigint, stable_int32_hash(contract_id) integer) where package_name = 'splice-amulet'::text AND template_id_qualified_name = 'Splice.Amulet:FeaturedAppActivityMarker'::text
   dso_acs_store_coupons (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, reward_round bigint, reward_party text, app_reward_is_featured boolean) where reward_round IS NOT NULL AND reward_party IS NOT NULL
   primary key dso_acs_store_pkey (event_number bigint)
+  dso_acs_store_sid_mid_glt_glsh (store_id integer, migration_id bigint, governance_lock_type text, splice_text_hash(governance_lock_subject) uuid) where governance_lock_type IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_acecc (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, action_ans_entry_context_cid text) where action_ans_entry_context_cid IS NOT NULL
-  dso_acs_store_sid_mid_pn_tid_ahh_r (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_jsonb_key(action_requiring_confirmation) bigint, requester text) where action_requiring_confirmation IS NOT NULL
-  dso_acs_store_sid_mid_pn_tid_cenh_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_key(ans_entry_name) uuid, contract_expires_at bigint) where ans_entry_name IS NOT NULL AND contract_expires_at IS NOT NULL
+  dso_acs_store_sid_mid_pn_tid_ahh_r (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_jsonb_hash(action_requiring_confirmation) bigint, requester text) where action_requiring_confirmation IS NOT NULL
+  dso_acs_store_sid_mid_pn_tid_cenh_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_hash(ans_entry_name) uuid, contract_expires_at bigint) where ans_entry_name IS NOT NULL AND contract_expires_at IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_en (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, event_number bigint)
   dso_acs_store_sid_mid_pn_tid_ere_r (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, election_request_epoch bigint, requester text) where election_request_epoch IS NOT NULL AND requester IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
@@ -86,15 +87,15 @@ dso_acs_store
   dso_acs_store_sid_mid_pn_tid_mtm_mtd (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, member_traffic_member text, member_traffic_domain text) where member_traffic_member IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_rbio (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, reward_party text) where reward_beneficiary_is_observer = false
   dso_acs_store_sid_mid_pn_tid_sccid (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, subscription_reference_contract_id text) where subscription_reference_contract_id IS NOT NULL
-  dso_acs_store_sid_mid_pn_tid_scnh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_key(sv_candidate_name) uuid) where sv_candidate_name IS NOT NULL
+  dso_acs_store_sid_mid_pn_tid_scnh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_hash(sv_candidate_name) uuid) where sv_candidate_name IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_scp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, sv_candidate_party text) where sv_candidate_party IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_snpd (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, subscription_next_payment_due_at bigint) where subscription_next_payment_due_at IS NOT NULL
   dso_acs_store_sid_mid_pn_tid_v_tp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, validator text, total_traffic_purchased bigint) where validator IS NOT NULL
   dso_acs_store_sid_mid_tid_pub (store_id integer, migration_id bigint, template_id_qualified_name text, conversion_rate_feed_publisher text, event_number bigint desc) where conversion_rate_feed_publisher IS NOT NULL
-  dso_acs_store_sid_pn_tid_ahh_c (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_jsonb_key(action_requiring_confirmation) bigint, confirmer text) where action_requiring_confirmation IS NOT NULL
+  dso_acs_store_sid_pn_tid_ahh_c (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_jsonb_hash(action_requiring_confirmation) bigint, confirmer text) where action_requiring_confirmation IS NOT NULL
   dso_acs_store_sid_pn_tid_croe (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, amulet_round_of_expiry bigint) where amulet_round_of_expiry IS NOT NULL
   dso_acs_store_sid_pn_tid_mr (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, mining_round bigint) where mining_round IS NOT NULL
-  dso_acs_store_sid_pn_tid_soth (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_key(sv_onboarding_token) uuid) where sv_onboarding_token IS NOT NULL
+  dso_acs_store_sid_pn_tid_soth (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_hash(sv_onboarding_token) uuid) where sv_onboarding_token IS NOT NULL
   dso_acs_store_sid_pn_tid_tcid (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, vote_request_tracking_cid text) where vote_request_tracking_cid IS NOT NULL
   unique dso_acs_store_store_id_migration_id_contract_id_idx (store_id integer, migration_id bigint, contract_id text)
   dso_acs_store_wallet_party_idx (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, wallet_party text) where wallet_party IS NOT NULL
@@ -140,7 +141,7 @@ round_totals
 scan_acs_store
   primary key scan_acs_store_pkey (event_number bigint)
   scan_acs_store_sid_mid_deo_den_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, ans_entry_owner text, ans_entry_name text, contract_expires_at bigint) where ans_entry_owner IS NOT NULL AND ans_entry_name IS NOT NULL AND contract_expires_at IS NOT NULL
-  scan_acs_store_sid_mid_glt_glsh (store_id integer, migration_id bigint, governance_lock_type text, splice_text_key(governance_lock_subject) uuid) where governance_lock_type IS NOT NULL
+  scan_acs_store_sid_mid_glt_glsh (store_id integer, migration_id bigint, governance_lock_type text, splice_text_hash(governance_lock_subject) uuid) where governance_lock_type IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_aen_tpo_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, ans_entry_name text text_pattern_ops, contract_expires_at bigint) where ans_entry_name IS NOT NULL AND contract_expires_at IS NOT NULL
   scan_acs_store_sid_mid_pn_tid_en (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, event_number bigint)
   scan_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
@@ -195,10 +196,10 @@ store_last_ingested_offsets
 
 sv_acs_store
   primary key sv_acs_store_pkey (event_number bigint)
-  sv_acs_store_sid_mid_pn_tid_asicnh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_key(sv_candidate_name) uuid) where sv_candidate_name IS NOT NULL
+  sv_acs_store_sid_mid_pn_tid_asicnh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_hash(sv_candidate_name) uuid) where sv_candidate_name IS NOT NULL
   sv_acs_store_sid_mid_pn_tid_en (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, event_number bigint)
   sv_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
-  sv_acs_store_sid_mid_pn_tid_vocsh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_key(onboarding_secret) uuid) where onboarding_secret IS NOT NULL
+  sv_acs_store_sid_mid_pn_tid_vocsh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_hash(onboarding_secret) uuid) where onboarding_secret IS NOT NULL
   unique sv_acs_store_store_id_migration_id_contract_id_idx (store_id integer, migration_id bigint, contract_id text)
 
 txlog_backfilling_status
@@ -303,7 +304,7 @@ user_wallet_txlog_store
   primary key user_wallet_txlog_store_pkey (entry_number bigint)
   unique user_wallet_txlog_store_si_ti_ei_key (store_id integer, tx_log_id text, event_id text)
   user_wallet_txlog_store_sid_mid_did_rt (store_id integer, migration_id integer, domain_id text, record_time bigint)
-  user_wallet_txlog_store_sid_tidh (store_id integer, splice_text_key(tracking_id) uuid) where tracking_id IS NOT NULL
+  user_wallet_txlog_store_sid_tidh (store_id integer, splice_text_hash(tracking_id) uuid) where tracking_id IS NOT NULL
   user_wallet_txlog_store_store_id_entry_type_idx (store_id integer, entry_type text)
   user_wallet_txlog_store_store_id_migration_id_domain_id_rec_idx (store_id integer, migration_id integer, domain_id text, record_time bigint)
 
@@ -313,7 +314,7 @@ validator_acs_store
   validator_acs_store_sid_mid_pn_tid_exp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, contract_expires_at bigint) where contract_expires_at IS NOT NULL
   validator_acs_store_sid_mid_pn_tid_pp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, provider_party text) where provider_party IS NOT NULL
   validator_acs_store_sid_mid_pn_tid_tdi (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, traffic_domain_id text) where traffic_domain_id IS NOT NULL
-  validator_acs_store_sid_mid_pn_tid_unh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_key(user_name) uuid) where user_name IS NOT NULL
+  validator_acs_store_sid_mid_pn_tid_unh (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, splice_text_hash(user_name) uuid) where user_name IS NOT NULL
   validator_acs_store_sid_mid_pn_tid_up (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, user_party text) where user_party IS NOT NULL
   validator_acs_store_sid_mid_pn_tid_vp (store_id integer, migration_id bigint, package_name text, template_id_qualified_name text, validator_party text) where validator_party IS NOT NULL
   unique validator_acs_store_store_id_migration_id_contract_id_idx (store_id integer, migration_id bigint, contract_id text)
