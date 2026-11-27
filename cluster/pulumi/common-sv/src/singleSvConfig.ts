@@ -105,6 +105,11 @@ export type BulkStorageConfig = z.infer<typeof BulkStorageConfigSchema>;
 // 1. Extract ScanBigQueryConfigSchema to validate all Datastream settings.
 //    All new fields are optional to ensure existing deployments do not fail parsing.
 const SECONDS_PER_DAY = 24 * 3600;
+// The legacy Datastream's dataFreshness on prod-like clusters, which
+// becomes its tables' max_staleness when it creates them. Existing
+// tables must be altered by hand, see
+// https://github.com/canton-network/splice/issues/2011
+export const LEGACY_DATASTREAM_DATA_FRESHNESS_SECONDS = 4 * 3600;
 export const ScanBigQueryConfigSchema = z
   .object({
     dataset: z.string(),
@@ -116,6 +121,13 @@ export const ScanBigQueryConfigSchema = z
     enableStagProdDatastream: z.boolean().default(false),
     legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    // Alert when a legacy Datastream table's max_staleness is below this,
+    // e.g. when it was lowered for debugging and not raised again.
+    legacyMinSafeStalenessSeconds: z
+      .number()
+      .int()
+      .positive()
+      .default(LEGACY_DATASTREAM_DATA_FRESHNESS_SECONDS),
     retentionPeriodSeconds: z
       .number()
       .min(3 * SECONDS_PER_DAY, {
