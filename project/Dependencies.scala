@@ -83,5 +83,6 @@ object Dependencies {
     "org.apache.httpcomponents.core5" % "httpcore5-h2" % "5.4.4",
     "org.apache.logging.log4j" % "log4j-core" % "2.25.5",
     "org.apache.logging.log4j" % "log4j-api" % "2.25.5",
+    "commons-codec" % "commons-codec" % "1.23.0",
   )
 }
