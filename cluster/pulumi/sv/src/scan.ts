@@ -15,6 +15,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import {
   CantonBftSynchronizerNode,
+  scanBulkStorageValues,
   SynchronizerNodes,
 } from '@canton-network/splice-pulumi-common-sv';
 import { SvConfig, svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
@@ -93,24 +94,7 @@ export function installScan(
       .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
       .concat(scanRateLimitEnvVars()),
     resources: config.scanApp?.resources,
-    ...(config.bulkStorageBuckets
-      ? {
-          bulkStorage: {
-            staging: {
-              region: config.bulkStorageBuckets.staging.region,
-              bucketName: config.bulkStorageBuckets.staging.bucket.name,
-              endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
-              secretName: config.bulkStorageBuckets.staging.secret.metadata.name,
-            },
-            committed: {
-              region: config.bulkStorageBuckets.committed.region,
-              bucketName: config.bulkStorageBuckets.committed.bucket.name,
-              endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
-              secretName: config.bulkStorageBuckets.committed.secret.metadata.name,
-            },
-          },
-        }
-      : {}),
+    ...scanBulkStorageValues(config.bulkStorageBuckets),
     publicUrl: publicScanUrl(config),
     pvc: persistentHeapDumpsPvc(),
     participantClient: {

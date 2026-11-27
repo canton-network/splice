@@ -46,6 +46,20 @@
           }
         }
       },
+      "bulkStorage": {
+        "committed": {
+          "bucketName": "mock-sv-bulk-committed",
+          "endpoint": "https://storage.googleapis.com",
+          "region": "europe-west6",
+          "secretName": "splice-app-bulk-storage-credentials"
+        },
+        "staging": {
+          "bucketName": "mock-sv-bulk-staging",
+          "endpoint": "https://storage.googleapis.com",
+          "region": "europe-west6",
+          "secretName": "splice-app-bulk-storage-credentials"
+        }
+      },
       "enablePostgresMetrics": true,
       "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
       "metrics": {

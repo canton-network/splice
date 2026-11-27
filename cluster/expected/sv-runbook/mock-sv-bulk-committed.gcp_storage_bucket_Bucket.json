@@ -1,0 +1,12 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "forceDestroy": true,
+    "location": "europe-west6",
+    "name": "mock-sv-bulk-committed"
+  },
+  "name": "mock-sv-bulk-committed",
+  "provider": "",
+  "type": "gcp:storage/bucket:Bucket"
+}

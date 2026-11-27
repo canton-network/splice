@@ -48,6 +48,7 @@ import {
   clusterNetwork,
   CnChartVersion,
   envoyClientIpHeaderEnvVar,
+  supportsSvRunbookReset,
 } from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
@@ -55,6 +56,9 @@ import {
   CantonBftSynchronizerNode,
   configForSv,
   installLoopback,
+  installScanBulkStorage,
+  scanBulkStorageDependencies,
+  scanBulkStorageValues,
   svsConfig,
   svRunbookConfig,
   SynchronizerNodes,
@@ -391,6 +395,9 @@ async function installSvAndValidator(
         : {}),
     },
   };
+  const bulkStorageBuckets = svConfig.scanApp?.bulkStorage
+    ? installScanBulkStorage(xns, svConfig.scanApp.bulkStorage, supportsSvRunbookReset)
+    : undefined;
   const scanValues: ChartValues = {
     ...defaultScanValues,
     ...persistenceForPostgres(appsPg, defaultScanValues),
@@ -405,6 +412,7 @@ async function installSvAndValidator(
       .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
       .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
+    ...scanBulkStorageValues(bulkStorageBuckets),
     pvc: persistentHeapDumpsPvc(),
     participantClient: {
       adminApi: {
@@ -426,7 +434,12 @@ async function installSvAndValidator(
     fixedTokens() ? scanValuesWithFixedTokens : scanValues,
     activeVersion,
     {
-      dependsOn: imagePullDeps.concat(svAppSecrets).concat([appsPg]),
+      dependsOn: [
+        ...imagePullDeps,
+        ...svAppSecrets,
+        appsPg,
+        ...scanBulkStorageDependencies(bulkStorageBuckets),
+      ],
     }
   );
 

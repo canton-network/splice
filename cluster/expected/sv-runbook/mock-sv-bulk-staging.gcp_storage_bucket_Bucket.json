@@ -1,0 +1,12 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "forceDestroy": true,
+    "location": "europe-west6",
+    "name": "mock-sv-bulk-staging"
+  },
+  "name": "mock-sv-bulk-staging",
+  "provider": "",
+  "type": "gcp:storage/bucket:Bucket"
+}
