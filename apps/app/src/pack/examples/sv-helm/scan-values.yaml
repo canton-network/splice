@@ -23,6 +23,7 @@ spliceInstanceNames:
   nameServiceName: # Please provide a value as provided in the docs
   nameServiceNameAcronym: # Please provide a value as provided in the docs
 
+# BULK_STORAGE_START
 # bulk storage configuration
 # bulkStorage:
 #   staging:
@@ -35,3 +36,4 @@ spliceInstanceNames:
 #     region: COMMITTED_REGION
 #     endpoint: COMMITTED_ENDPOINT
 #     secretName: splice-app-bulk-storage-committed-credentials
+# BULK_STORAGE_END
