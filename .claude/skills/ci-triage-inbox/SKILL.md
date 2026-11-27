@@ -53,7 +53,13 @@ Authorship alone does not make someone the owner; decide from the root cause whi
 - it comes from old, long-standing code (a latent race, an old timeout): not its original author by default, but
   whoever maintains or recently changed that area, and the author only when still active there.
 A reviewer who only approved a change, or someone whose recent edits to the same file are unrelated to the cause, is
-not an owner. Name the evidence next to every suggested login (the PR or commit) and the case it falls under. External contributors: when the person found is an external contributor (not a member of the organisation; a
+not an owner.
+For old code, the owner is who owns the behaviour that fails: the author of the mechanism who is still active, or the
+person who made the latest decision about it (on its tracker, its design issue). Who last edited a nearby line or the
+list the fix extends is not the owner by that alone; recency only breaks a tie between people who own the behaviour
+(11780: the breaker's author, who decided its tracker, not the author of a later one-entry ignore).
+An owner is a critical decision: when the reviewer changes it, or the main thread wants to change it after the triage,
+it is a contested owner. Present the candidates with their evidence and let the user choose; do not pick one alone. Name the evidence next to every suggested login (the PR or commit) and the case it falls under. External contributors: when the person found is an external contributor (not a member of the organisation; a
 login ending in `-da` is only a hint, check with `gh api orgs/<org>/members/<login>` or the PR's `author_association`),
 do not assign them; assign the internal owner or reviewer of that test or production change instead: the reviewers
 who approved and the person who merged the PR (`gh pr view <n> --json reviews,mergedBy,author`), the `CODEOWNERS`
