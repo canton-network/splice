@@ -271,6 +271,14 @@ class WalletTimeBasedIntegrationTest
           expired.payload.expiresAt should be < getLedgerTime.toInstant
         }
 
+        clue("Renewal automation skips the expired TransferPreapproval") {
+          // Renewing an expired `TransferPreapproval` is blocked in Daml
+          advanceTime(aliceValidatorBackend.config.automation.clockSkewAutomationDelay.asJava)
+          runExpectingNoTask(
+            aliceValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
+          )
+        }
+
         actAndCheck(
           "Alice creates another TransferPreapprovalProposal",
           aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands

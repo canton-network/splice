@@ -18,6 +18,11 @@
     - Removed the legacy "Update Featured Application Metadata (use before Splice 0.10.0)" proposal option from the SV UI.
       Use "Update Featured Application Metadata" instead. Existing votes of the old type are still displayed.
 
+  - Validator
+
+    - Fix bug causing the validator app to retry renewing transfer preapprovals that have already expired.
+      Such renewals always fail and retrying them can in some cases prevent the renewal of other preapprovals.
+
 ## Upcoming for next minor release (template):
 
   - Helm charts and Docker images
