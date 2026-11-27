@@ -28,6 +28,7 @@ import scala.jdk.OptionConverters.*
 
 /** Migrates the contract state schema of AmuletRules to the latest version known to this SV app
   * by exercising DsoRules_AmuletRules_MigrateContractStateSchema.
+  * At the moment this trigger does not do anything, as latestContractStateSchemaVersion == 0
   */
 class AmuletRulesContractStateMigrationTrigger(
     override protected val context: TriggerContext,
@@ -93,7 +94,7 @@ class AmuletRulesContractStateMigrationTrigger(
 object AmuletRulesContractStateMigrationTrigger {
 
   // This should be kept in sync with the value defined in Splice.AmuletRules
-  val latestContractStateSchemaVersion: Long = 1L
+  val latestContractStateSchemaVersion: Long = 0L
 
   final case class Task(
       amuletRulesCid: splice.amuletrules.AmuletRules.ContractId,
