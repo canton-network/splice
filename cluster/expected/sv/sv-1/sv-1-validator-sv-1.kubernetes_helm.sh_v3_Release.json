@@ -49,7 +49,7 @@
         "apiRequestLogLevel": "DEBUG",
         "appDars": [],
         "auth": {
-          "audience": "https://canton.network.global",
+          "audience": "https://validator.sv-1.mock.canton.network/api",
           "jwksUrl": "https://canton-network-dev.us.auth0.com/.well-known/jwks.json"
         },
         "cluster": {

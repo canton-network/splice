@@ -3,7 +3,7 @@
   "id": "",
   "inputs": {
     "allowOfflineAccess": true,
-    "identifier": "https://ledger_api.sv-da-1.test-stack.canton.network",
+    "identifier": "https://ledger_api.sv-da-1.mock.canton.network",
     "name": "Ledger API for SV sv-da-1 on test-stack (Pulumi managed)",
     "tokenLifetime": 86400
   },

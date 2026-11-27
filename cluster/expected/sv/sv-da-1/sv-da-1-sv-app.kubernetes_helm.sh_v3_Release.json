@@ -90,7 +90,7 @@
           }
         ],
         "auth": {
-          "audience": "https://canton.network.global",
+          "audience": "https://sv.sv-da-1.mock.canton.network/api",
           "jwksUrl": "https://canton-network-dev.us.auth0.com/.well-known/jwks.json"
         },
         "cluster": {

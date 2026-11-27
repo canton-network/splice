@@ -42,12 +42,11 @@ import {
   getAdditionalJvmOptions,
   persistentHeapDumpsPvc,
   installSvAppSecrets,
-  getSvAppApiAudience,
-  getValidatorAppApiAudience,
   externalIpRangesFile,
   clusterNetwork,
   CnChartVersion,
   envoyClientIpHeaderEnvVar,
+  getApiAudience,
 } from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
@@ -318,7 +317,7 @@ async function installSvAndValidator(
     ...persistenceForPostgres(appsPg, svValues),
     auth: {
       ...svValues.auth,
-      audience: getSvAppApiAudience(auth0Config, xns.logicalName),
+      audience: getApiAudience('svAppApi', xns.logicalName),
     },
   };
 
@@ -480,7 +479,7 @@ async function installSvAndValidator(
     ...persistenceForPostgres(appsPg, validatorValues),
     auth: {
       ...validatorValues.auth,
-      audience: getValidatorAppApiAudience(auth0Config, xns.logicalName),
+      audience: getApiAudience('validatorApi', xns.logicalName),
     },
   };
 

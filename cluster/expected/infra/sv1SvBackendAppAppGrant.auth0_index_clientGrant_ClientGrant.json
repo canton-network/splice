@@ -2,7 +2,7 @@
   "custom": true,
   "id": "",
   "inputs": {
-    "audience": "https://sv.sv-1.test-stack.canton.network/api",
+    "audience": "https://sv.sv-1.mock.canton.network/api",
     "scopes": []
   },
   "name": "sv1SvBackendAppAppGrant",

@@ -3,7 +3,7 @@
   "id": "",
   "inputs": {
     "allowAllScopes": true,
-    "audience": "https://participant_admin_api.sv-1.test-stack.canton.network"
+    "audience": "https://participant_admin_api.sv-1.mock.canton.network"
   },
   "name": "sv1SvBackendAppParticipantAdminGrant",
   "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::04da6b54-80e4-46f7-96ec-b56ff0331ba9",

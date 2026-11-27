@@ -2,7 +2,7 @@
   "custom": true,
   "id": "",
   "inputs": {
-    "audience": "https://validator.sv-da-1.test-stack.canton.network/api",
+    "audience": "https://validator.sv-da-1.mock.canton.network/api",
     "scopes": []
   },
   "name": "svda1ValidatorBackendAppAppGrant",

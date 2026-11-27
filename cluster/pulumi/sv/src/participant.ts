@@ -9,9 +9,8 @@ import {
   DomainMigrationIndex,
   ExactNamespace,
   getAdditionalJvmOptions,
+  getApiAudience,
   getClientId,
-  getLedgerApiAudience,
-  getParticipantAdminApiAudience,
   getParticipantKmsHelmResources,
   InstalledHelmChart,
   installSpliceHelmChart,
@@ -157,8 +156,8 @@ function loadDefaultParticipantValues(
     {
       MIGRATION_ID: `${migrationId}`,
       OIDC_AUTHORITY_URL: auth0.auth0Domain,
-      OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getLedgerApiAudience(auth0, xns.logicalName),
-      OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(auth0, xns.logicalName),
+      OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getApiAudience('ledgerApi', xns.logicalName),
+      OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getApiAudience('participantAdminApi', xns.logicalName),
     }
   );
 }

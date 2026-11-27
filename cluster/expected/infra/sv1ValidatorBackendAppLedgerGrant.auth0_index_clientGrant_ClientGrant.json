@@ -2,7 +2,7 @@
   "custom": true,
   "id": "",
   "inputs": {
-    "audience": "https://ledger_api.sv-1.test-stack.canton.network",
+    "audience": "https://ledger_api.sv-1.mock.canton.network",
     "scopes": [
       "daml_ledger_api"
     ]
