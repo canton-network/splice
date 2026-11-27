@@ -22,7 +22,10 @@
           "hide": true,
           "iconColor": "rgba(0, 211, 255, 1)",
           "name": "Annotations & Alerts",
-          "builtIn": true
+          "builtIn": true,
+          "legacyOptions": {
+            "type": "dashboard"
+          }
         }
       }
     ],
@@ -34,7 +37,6 @@
         "spec": {
           "id": 10,
           "title": "Availability module queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -149,7 +151,6 @@
         "spec": {
           "id": 100,
           "title": "Postponed view messages duplicated (rate)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -263,7 +264,6 @@
         "spec": {
           "id": 101,
           "title": "Mempool module queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -377,7 +377,6 @@
         "spec": {
           "id": 102,
           "title": "Availability module queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -491,7 +490,6 @@
         "spec": {
           "id": 103,
           "title": "PekkoP2PGrpcConnectionManagingActor queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -601,7 +599,6 @@
         "spec": {
           "id": 104,
           "title": "Consensus module queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -715,7 +712,6 @@
         "spec": {
           "id": 105,
           "title": "Segment module queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -829,7 +825,6 @@
         "spec": {
           "id": 106,
           "title": "Output module queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -978,7 +973,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -1062,7 +1057,6 @@
         "spec": {
           "id": 109,
           "title": "Throughput - requests/s - irate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1098,7 +1092,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -1182,7 +1176,6 @@
         "spec": {
           "id": 11,
           "title": "PekkoP2PGrpcConnectionManagingActor queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1650,7 +1643,6 @@
         "spec": {
           "id": 112,
           "title": "Time until progress in view",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1770,7 +1762,6 @@
         "spec": {
           "id": 114,
           "title": "Relative peer segment completion delay",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -2239,7 +2230,6 @@
         "spec": {
           "id": 119,
           "title": "P2P receive processing latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -2708,7 +2698,6 @@
         "spec": {
           "id": 123,
           "title": "Local batch ID computation (dissemination, sync)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -2823,7 +2812,6 @@
         "spec": {
           "id": 124,
           "title": "Fetched batch ID validation (async)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4322,7 +4310,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -4517,7 +4505,6 @@
         "spec": {
           "id": 17,
           "title": "P2P gRPC onNext latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4632,7 +4619,6 @@
         "spec": {
           "id": 18,
           "title": "Mempool module queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4747,7 +4733,6 @@
         "spec": {
           "id": 20,
           "title": "Total batch dissemination and consensus time (permanence in availability module)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -5228,7 +5213,6 @@
         "spec": {
           "id": 20004,
           "title": "Output stage duration",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -5594,7 +5578,6 @@
         "spec": {
           "id": 20007,
           "title": "Sequencer core backpressure duration - percentile",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -5629,7 +5612,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -5744,7 +5727,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -5824,7 +5807,6 @@
         "spec": {
           "id": 20013,
           "title": "Sequencer core backpressure duration - average",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -5859,7 +5841,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -5974,7 +5956,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6089,7 +6071,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6204,7 +6186,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6319,7 +6301,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6439,7 +6421,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6531,7 +6513,6 @@
         "spec": {
           "id": 20019,
           "title": "Block full data reconstruction latency including fetch - average (additive)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -6566,7 +6547,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6681,7 +6662,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6761,7 +6742,6 @@
         "spec": {
           "id": 20025,
           "title": "Insert block - average (additive)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -6796,7 +6776,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -6916,7 +6896,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -7033,7 +7013,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -7120,7 +7100,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -7230,7 +7210,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -7286,7 +7266,6 @@
         "spec": {
           "id": 20030,
           "title": "Max tolerated faults",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -7326,7 +7305,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -7413,7 +7392,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -7500,7 +7479,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -7582,7 +7561,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -7661,7 +7640,6 @@
         "spec": {
           "id": 20034,
           "title": "Total number of epochs a sequencer was blacklisted in the last 5m",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -7705,7 +7683,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -7824,7 +7802,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -7936,7 +7914,6 @@
         "spec": {
           "id": 20036,
           "title": "P2P endpoints status",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -7958,7 +7935,7 @@
                         "expr": "daml_sequencer_bftordering_p2p_endpoint_status{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
                         "format": "time_series",
                         "instant": false,
-                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{exported_endpoint}}",
+                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{p2p_endpoint}}",
                         "range": true
                       }
                     },
@@ -7974,7 +7951,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "state-timeline",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "alignValue": "left",
@@ -7987,7 +7964,6 @@
                 "rowHeight": 0.9,
                 "showValue": "auto",
                 "tooltip": {
-                  "hideZeros": false,
                   "mode": "single",
                   "sort": "none"
                 }
@@ -8020,7 +7996,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": 0,
+                        "value": null,
                         "color": "green"
                       }
                     ]
@@ -8029,16 +8005,8 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
-                    "axisPlacement": "auto",
                     "fillOpacity": 70,
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineWidth": 1,
-                    "spanNulls": false
+                    "lineWidth": 1
                   }
                 },
                 "overrides": []
@@ -8336,7 +8304,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -8456,7 +8424,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -8568,7 +8536,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -8699,7 +8667,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -8845,7 +8813,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -8976,7 +8944,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -9122,7 +9090,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -9355,7 +9323,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -9506,7 +9474,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -9657,7 +9625,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -9813,7 +9781,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -9949,7 +9917,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -10065,7 +10033,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "state-timeline",
-            "version": "13.2.2",
+            "version": "",
             "spec": {
               "options": {
                 "alignValue": "left",
@@ -10078,7 +10046,6 @@
                 "rowHeight": 0.9,
                 "showValue": "auto",
                 "tooltip": {
-                  "hideZeros": false,
                   "mode": "single",
                   "sort": "none"
                 }
@@ -10106,7 +10073,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": 0,
+                        "value": null,
                         "color": "green"
                       }
                     ]
@@ -10115,13 +10082,7 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
-                    "axisPlacement": "auto",
                     "fillOpacity": 70,
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
                     "insertNulls": true,
                     "lineWidth": 1,
                     "spanNulls": false
@@ -10173,7 +10134,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -10253,7 +10214,6 @@
         "spec": {
           "id": 22,
           "title": "Batch validation",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -10403,7 +10363,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -10598,7 +10558,6 @@
         "spec": {
           "id": 26,
           "title": "Sign local batches",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -10828,7 +10787,6 @@
         "spec": {
           "id": 28,
           "title": "Fetch local batches from DB",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -11058,7 +11016,6 @@
         "spec": {
           "id": 30,
           "title": "Block full data reconstruction latency including fetch - percentile (not additive)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -11093,7 +11050,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -11173,7 +11130,6 @@
         "spec": {
           "id": 31,
           "title": "Save blacklist leader selection policy state",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -11288,7 +11244,6 @@
         "spec": {
           "id": 32,
           "title": "Insert epoch metadata",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -11403,7 +11358,6 @@
         "spec": {
           "id": 34,
           "title": "Query topology",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -11518,7 +11472,6 @@
         "spec": {
           "id": 35,
           "title": "Load epoch info",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -11668,7 +11621,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -11748,7 +11701,6 @@
         "spec": {
           "id": 37,
           "title": "Insert block - percentile (not additive)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -11783,7 +11735,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -11903,7 +11855,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -11995,7 +11947,6 @@
         "spec": {
           "id": 4,
           "title": "Batch ID hashing latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -12110,7 +12061,6 @@
         "spec": {
           "id": 40,
           "title": "Outgoing retransmission requests rate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -12224,7 +12174,6 @@
         "spec": {
           "id": 41,
           "title": "Retransmitted messages rate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -12338,7 +12287,6 @@
         "spec": {
           "id": 42,
           "title": "Retransmitted commit certificates rate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -12452,7 +12400,6 @@
         "spec": {
           "id": 43,
           "title": "Retransmission responses discarded due to wrong epoch - rate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -12566,7 +12513,6 @@
         "spec": {
           "id": 44,
           "title": "Retransmission requests discarded due to rate limiting - rate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -12715,7 +12661,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -12795,7 +12741,6 @@
         "spec": {
           "id": 47,
           "title": "Complete epoch (DB)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -12910,7 +12855,6 @@
         "spec": {
           "id": 48,
           "title": "Load latest epoch",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13025,7 +12969,6 @@
         "spec": {
           "id": 49,
           "title": "Accepted retransmitted pre-prepares - rate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13139,7 +13082,6 @@
         "spec": {
           "id": 5,
           "title": "Local Batch ID signing latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13254,7 +13196,6 @@
         "spec": {
           "id": 50,
           "title": "Insert prepares",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13369,7 +13310,6 @@
         "spec": {
           "id": 51,
           "title": "View changes occurred (rate)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13484,7 +13424,6 @@
         "spec": {
           "id": 52,
           "title": "Insert ordered block",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13599,7 +13538,6 @@
         "spec": {
           "id": 53,
           "title": "Load epoch progress",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13714,7 +13652,6 @@
         "spec": {
           "id": 54,
           "title": "Load completed blocks",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13829,7 +13766,6 @@
         "spec": {
           "id": 55,
           "title": "Output module queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -13944,7 +13880,6 @@
         "spec": {
           "id": 56,
           "title": "Load ordered blocks",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -14059,7 +13994,6 @@
         "spec": {
           "id": 6,
           "title": "Remote batch ID signing latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -14289,7 +14223,6 @@
         "spec": {
           "id": 63,
           "title": "Start epoch (DB)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -14404,7 +14337,6 @@
         "spec": {
           "id": 64,
           "title": "Insert pre-prepare",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -14519,7 +14451,6 @@
         "spec": {
           "id": 66,
           "title": "Check PoA ack signature",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -14749,7 +14680,6 @@
         "spec": {
           "id": 68,
           "title": "Validate message",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -14979,7 +14909,6 @@
         "spec": {
           "id": 72,
           "title": "Validate state transfer consensus certificate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15094,7 +15023,6 @@
         "spec": {
           "id": 76,
           "title": "Sign message",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15209,7 +15137,6 @@
         "spec": {
           "id": 77,
           "title": "Postponed view messages queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15324,7 +15251,6 @@
         "spec": {
           "id": 78,
           "title": "Sign retransmission message",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15439,7 +15365,6 @@
         "spec": {
           "id": 79,
           "title": "Verify retransmission message signature",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15554,7 +15479,6 @@
         "spec": {
           "id": 8,
           "title": "Batch ID signature verification",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15669,7 +15593,6 @@
         "spec": {
           "id": 80,
           "title": "Consensus module queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15784,7 +15707,6 @@
         "spec": {
           "id": 81,
           "title": "Segment module queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -15899,7 +15821,6 @@
         "spec": {
           "id": 82,
           "title": "Insert batch",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -16129,7 +16050,6 @@
         "spec": {
           "id": 84,
           "title": "Insert view change message",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -16244,7 +16164,6 @@
         "spec": {
           "id": 85,
           "title": "Incoming retransmission requests rate",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -16508,7 +16427,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "12.4.0",
             "spec": {
               "options": {
                 "legend": {
@@ -16818,7 +16737,6 @@
         "spec": {
           "id": 91,
           "title": "Postponed consensus messages queue latency",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -16933,7 +16851,6 @@
         "spec": {
           "id": 94,
           "title": "Postponed view messages dropped (rate)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -17047,7 +16964,6 @@
         "spec": {
           "id": 95,
           "title": "Postponed view messages queue max size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -17161,7 +17077,6 @@
         "spec": {
           "id": 96,
           "title": "Postponed consensus messages queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -17275,7 +17190,6 @@
         "spec": {
           "id": 97,
           "title": "Postponed view messages queue size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -17389,7 +17303,6 @@
         "spec": {
           "id": 98,
           "title": "Postponed consensus messages queue max size",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -17503,7 +17416,6 @@
         "spec": {
           "id": 99,
           "title": "Postponed consensus messages dropped (rate)",
-          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -18257,7 +18169,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 917,
                         "width": 24,
                         "height": 7,
                         "element": {
@@ -18270,7 +18182,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 7,
+                        "y": 924,
                         "width": 24,
                         "height": 6,
                         "element": {
@@ -18283,7 +18195,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 13,
+                        "y": 930,
                         "width": 24,
                         "height": 6,
                         "element": {
@@ -18296,7 +18208,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 19,
+                        "y": 936,
                         "width": 24,
                         "height": 6,
                         "element": {
@@ -18309,7 +18221,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 25,
+                        "y": 942,
                         "width": 24,
                         "height": 7,
                         "element": {
@@ -18336,7 +18248,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 949,
                         "width": 8,
                         "height": 6,
                         "element": {
@@ -18349,7 +18261,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 8,
-                        "y": 0,
+                        "y": 949,
                         "width": 8,
                         "height": 6,
                         "element": {
@@ -18362,7 +18274,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 16,
-                        "y": 0,
+                        "y": 949,
                         "width": 8,
                         "height": 6,
                         "element": {
@@ -18375,7 +18287,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 6,
+                        "y": 955,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -18388,7 +18300,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 6,
+                        "y": 955,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -18401,7 +18313,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 14,
+                        "y": 963,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18414,7 +18326,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 14,
+                        "y": 963,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18427,7 +18339,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 20,
+                        "y": 969,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18440,7 +18352,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 20,
+                        "y": 969,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18453,7 +18365,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 26,
+                        "y": 975,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18466,7 +18378,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 26,
+                        "y": 975,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18479,7 +18391,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 32,
+                        "y": 981,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18492,7 +18404,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 32,
+                        "y": 981,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18505,7 +18417,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 38,
+                        "y": 987,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18518,7 +18430,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 38,
+                        "y": 987,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18531,7 +18443,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 44,
+                        "y": 993,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18544,7 +18456,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 44,
+                        "y": 993,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18557,7 +18469,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 50,
+                        "y": 999,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18570,7 +18482,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 50,
+                        "y": 999,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18597,7 +18509,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 1005,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18610,7 +18522,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 0,
+                        "y": 1005,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18623,7 +18535,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 7,
+                        "y": 1012,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18636,7 +18548,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 7,
+                        "y": 1012,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18649,7 +18561,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 14,
+                        "y": 1019,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18662,7 +18574,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 14,
+                        "y": 1019,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18675,7 +18587,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 20,
+                        "y": 1025,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18688,7 +18600,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 20,
+                        "y": 1025,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18701,7 +18613,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 26,
+                        "y": 1031,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18714,7 +18626,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 27,
+                        "y": 1032,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18727,7 +18639,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 33,
+                        "y": 1038,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18740,7 +18652,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 33,
+                        "y": 1038,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18753,7 +18665,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 39,
+                        "y": 1044,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18766,7 +18678,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 39,
+                        "y": 1044,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18779,7 +18691,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 46,
+                        "y": 1051,
                         "width": 24,
                         "height": 7,
                         "element": {
@@ -18792,7 +18704,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 53,
+                        "y": 1058,
                         "width": 24,
                         "height": 7,
                         "element": {
@@ -18819,7 +18731,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 1105,
                         "width": 24,
                         "height": 7,
                         "element": {
@@ -18832,7 +18744,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 7,
+                        "y": 1112,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18845,7 +18757,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 7,
+                        "y": 1112,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18858,7 +18770,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 14,
+                        "y": 1119,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18871,7 +18783,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 14,
+                        "y": 1119,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18884,7 +18796,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 21,
+                        "y": 1126,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18897,7 +18809,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 21,
+                        "y": 1126,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18910,7 +18822,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 28,
+                        "y": 1133,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -18937,7 +18849,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 3886,
                         "width": 24,
                         "height": 7,
                         "element": {
@@ -18950,7 +18862,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 7,
+                        "y": 3893,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18963,7 +18875,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 7,
+                        "y": 3893,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18976,7 +18888,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 13,
+                        "y": 3899,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -18989,7 +18901,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 13,
+                        "y": 3899,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -19002,7 +18914,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 19,
+                        "y": 3905,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -19015,7 +18927,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 19,
+                        "y": 3905,
                         "width": 12,
                         "height": 6,
                         "element": {
@@ -19027,26 +18939,26 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 0,
-                        "y": 25,
+                        "x": 12,
+                        "y": 3911,
                         "width": 12,
                         "height": 6,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-49"
+                          "name": "panel-44"
                         }
                       }
                     },
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 12,
-                        "y": 25,
+                        "x": 0,
+                        "y": 3911,
                         "width": 12,
                         "height": 6,
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-44"
+                          "name": "panel-49"
                         }
                       }
                     }
@@ -19068,7 +18980,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 3886,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19081,7 +18993,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 0,
+                        "y": 3886,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19094,7 +19006,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 7,
+                        "y": 3893,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19107,7 +19019,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 7,
+                        "y": 3893,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19120,7 +19032,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 14,
+                        "y": 3900,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19133,7 +19045,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 14,
+                        "y": 3900,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19160,7 +19072,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 3886,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -19173,7 +19085,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 0,
+                        "y": 3886,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -19186,7 +19098,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 8,
+                        "y": 3894,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19213,7 +19125,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 4591,
                         "width": 24,
                         "height": 7,
                         "element": {
@@ -19226,7 +19138,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 7,
+                        "y": 4598,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19239,7 +19151,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 7,
+                        "y": 4598,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19252,7 +19164,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 14,
+                        "y": 4605,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -19265,7 +19177,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 14,
+                        "y": 4605,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -19278,7 +19190,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 22,
+                        "y": 4613,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -19291,7 +19203,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 22,
+                        "y": 4613,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -19318,7 +19230,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 10312,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19331,7 +19243,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 8,
+                        "y": 10320,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19358,7 +19270,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 10275,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19371,7 +19283,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 0,
+                        "y": 10275,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19384,7 +19296,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 7,
+                        "y": 10282,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19397,7 +19309,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 7,
+                        "y": 10282,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19410,7 +19322,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 14,
+                        "y": 10289,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -19527,6 +19439,19 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
+                        "x": 0,
+                        "y": 128,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-17"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
                         "x": 12,
                         "y": 55,
                         "width": 12,
@@ -19549,19 +19474,6 @@
                           "name": "panel-135"
                         }
                       }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 0,
-                        "y": 128,
-                        "width": 12,
-                        "height": 8,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-17"
-                        }
-                      }
                     }
                   ]
                 }
@@ -19581,7 +19493,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 9382,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19594,7 +19506,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 8,
+                        "y": 9390,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19607,7 +19519,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 16,
+                        "y": 9398,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19634,7 +19546,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 0,
+                        "y": 74,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19647,7 +19559,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 8,
+                        "y": 82,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19660,7 +19572,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 16,
+                        "y": 90,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19673,7 +19585,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 24,
+                        "y": 98,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19686,7 +19598,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 32,
+                        "y": 106,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19699,7 +19611,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 40,
+                        "y": 114,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19712,7 +19624,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 48,
+                        "y": 122,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19725,7 +19637,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 56,
+                        "y": 130,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19738,7 +19650,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 64,
+                        "y": 138,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19751,7 +19663,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 72,
+                        "y": 146,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19764,7 +19676,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 80,
+                        "y": 154,
                         "width": 24,
                         "height": 8,
                         "element": {
@@ -19788,7 +19700,7 @@
     "timeSettings": {
       "from": "now-30m",
       "to": "now",
-      "autoRefresh": "30s",
+      "autoRefresh": "1m",
       "autoRefreshIntervals": [
         "5s",
         "10s",
@@ -19933,6 +19845,14 @@
           "valuesFormat": "csv"
         }
       }
-    ]
+    ],
+    "preferences": {
+      "layout": {
+        "kind": "GridLayout",
+        "spec": {
+          "items": []
+        }
+      }
+    }
   }
 }
