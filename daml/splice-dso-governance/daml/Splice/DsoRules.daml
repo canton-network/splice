@@ -31,6 +31,7 @@ import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
 import Splice.Wallet.Subscriptions
+import Splice.Amulet.DedicatedSynchronizer (DedicatedSynchronizer(..), DedicatedSynchronizerConfig, DedicatedSynchronizer_UpdateConfig(..), DedicatedSynchronizer_UpdateConfigResult)
 import Splice.DecentralizedSynchronizer (MemberTraffic)
 
 import qualified Splice.CometBft as CometBft
@@ -128,6 +129,12 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Update a specific featured app right.
   | SRARC_CreateFeaturedAppConfigUpdateInstruction DsoRules_CreateFeaturedAppConfigUpdateInstruction
     -- ^ Voted action to change to a featured app right's config.
+  | SRARC_RegisterSynchronizer DsoRules_RegisterSynchronizer
+    -- ^ Voted action to register a dedicated synchronizer with its paymaster.
+  | SRARC_UpdateSynchronizerRegistration DsoRules_UpdateSynchronizerRegistration
+    -- ^ Voted action to change the config of a dedicated synchronizer.
+  | SRARC_ArchiveSynchronizerRegistration DsoRules_ArchiveSynchronizerRegistration
+    -- ^ Voted action to offboard a dedicated synchronizer by archiving it.
   deriving (Eq, Show, Serializable)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -426,6 +433,17 @@ data DsoRules_AllocateUnallocatedUnclaimedActivityRecordResult = DsoRules_Alloca
   deriving (Serializable)
 
 data DsoRules_ExpireUnallocatedUnclaimedActivityRecordResult = DsoRules_ExpireUnallocatedUnclaimedActivityRecordResult
+  deriving (Serializable)
+
+data DsoRules_RegisterSynchronizerResult = DsoRules_RegisterSynchronizerResult with
+    dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
+  deriving (Serializable)
+
+data DsoRules_UpdateSynchronizerRegistrationResult = DsoRules_UpdateSynchronizerRegistrationResult with
+    result : DedicatedSynchronizer_UpdateConfigResult
+  deriving (Serializable)
+
+data DsoRules_ArchiveSynchronizerRegistrationResult = DsoRules_ArchiveSynchronizerRegistrationResult {}
   deriving (Serializable)
 
 data DsoRules_ExpireUnclaimedActivityRecordResult = DsoRules_ExpireUnclaimedActivityRecordResult with
@@ -2000,6 +2018,50 @@ template DsoRules with
           expectedDso = dso
         pure DsoRules_BootstrapExternalPartyConfigStateResult
 
+    -- Dedicated synchronizer registry
+    ----------------------------------
+
+    nonconsuming choice DsoRules_RegisterSynchronizer : DsoRules_RegisterSynchronizerResult
+      -- ^ Registers a dedicated synchronizer by creating its `DedicatedSynchronizer`. The config's
+      -- paymaster pays for the synchronizer's traffic on the decentralized synchronizer.
+      -- Registration is the only way a `DedicatedSynchronizer` is created.
+      with
+        synchronizerId : Text -- ^ Id of the dedicated synchronizer to register.
+        config : DedicatedSynchronizerConfig -- ^ The synchronizer's config.
+      controller dso
+      do
+        dedicatedSynchronizerCid <- create DedicatedSynchronizer with
+          dso
+          synchronizerId
+          config
+        pure DsoRules_RegisterSynchronizerResult with dedicatedSynchronizerCid
+
+    nonconsuming choice DsoRules_UpdateSynchronizerRegistration : DsoRules_UpdateSynchronizerRegistrationResult
+      -- ^ Changes the config of a dedicated synchronizer. The synchronizer id identifies the
+      -- `DedicatedSynchronizer` and does not change. The vote names its contract id, so it fails
+      -- if the contract was changed or archived after the vote was requested. We expect a dedicated
+      -- synchronizer's config to change very rarely, so this is acceptable.
+      with
+        dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
+        update : DedicatedSynchronizer_UpdateConfig
+      controller dso
+      do
+        void $ fetchChecked (ForDso with dso) dedicatedSynchronizerCid
+        result <- exercise dedicatedSynchronizerCid update
+        pure DsoRules_UpdateSynchronizerRegistrationResult with result
+
+    nonconsuming choice DsoRules_ArchiveSynchronizerRegistration : DsoRules_ArchiveSynchronizerRegistrationResult
+      -- ^ Offboards a dedicated synchronizer by archiving its `DedicatedSynchronizer`, after which
+      -- its paymaster can no longer buy traffic for it. As for an update, the vote names the
+      -- contract id, so it fails if another vote changed the contract first. We accept that race,
+      -- as a dedicated synchronizer's config changes very rarely.
+      with
+        dedicatedSynchronizerCid : ContractId DedicatedSynchronizer
+      controller dso
+      do
+        void $ fetchAndArchive (ForDso with dso) dedicatedSynchronizerCid
+        pure DsoRules_ArchiveSynchronizerRegistrationResult {}
+
 
 pruneAtLeastOne : Ord t => t -> Schedule t a -> Optional (Schedule t a)
 pruneAtLeastOne now schedule =
@@ -2063,6 +2125,9 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateFeaturedAppConfigUpdateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_RegisterSynchronizer choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_UpdateSynchronizerRegistration choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_ArchiveSynchronizerRegistration choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of

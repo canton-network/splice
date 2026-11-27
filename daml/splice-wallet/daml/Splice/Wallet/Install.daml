@@ -203,6 +203,7 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
         migrationId
         trafficAmount
         expectedDso = Some executionContext.dso
+        optPaymasterTrafficPurchase = None
       pure (result.purchasedTraffic, result.senderChangeAmulet)
 
     handleCreateExternalPartySetupProposal : ExecutionContext -> Party -> Time -> Update (ContractId ExternalPartySetupProposal, [TransferInput])

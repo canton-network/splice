@@ -6,6 +6,7 @@ module Splice.ExternalPartyAmuletRules where
 
 import DA.Action
 import DA.Assert
+import DA.Fail
 import DA.Foldable (forA_)
 import DA.Optional
 import qualified DA.TextMap as TextMap
@@ -23,6 +24,7 @@ import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 
 import Splice.Amulet
 import Splice.AmuletConfig (getTokenStandardMaxTTL)
+import Splice.Amulet.DedicatedSynchronizer (DedicatedSynchronizer, PaymasterTrafficPurchase(..), mkActivityWeightWithoutPaymasterFailure)
 import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer
 import Splice.AmuletAllocation as AmuletAllocationV1
@@ -398,7 +400,6 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
   ensureNoAccountMeta "transfer" "receiver" transfer.meta
 
   if transfer.receiver == trafficPurchaseReceiver then do
-    -- TODO(#7561): accept a RegisteredSynchronizer to support dedicated synchronizers.
     purchaseMemo <- case parseTrafficPurchaseMemo (reasonFromMeta transfer.meta) of
       Left err -> fail err
       Right memo -> pure memo
@@ -422,12 +423,33 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
           assertDeadlineExceeded "openRound.opensAt" openRound.opensAt
           pure (IssueValidatorRewardCoupon openRound.round)
     let trafficCostUsd = transfer.amount * csum.amuletPrice
-        purchase = MemberTrafficPurchase with
+        trafficAmount = floor (trafficCostUsd * 1e6 / trafficConfig.trafficPrice)
+    -- The memo's synchronizer selects the kind of purchase, not the choice context, which one SV's
+    -- Scan provides. Only a paymaster's purchase for its dedicated synchronizer takes the dedicated
+    -- synchronizer from the choice context, and may give its activity weights in the memo.
+    optPaymasterTrafficPurchase <-
+      if purchaseMemo.synchronizerId `elem` trafficConfig.supportedSynchronizerIds
+        then do
+          when (isSome purchaseMemo.appActivityWeight || isSome purchaseMemo.assetActivityWeight) $
+            failWithStatus (mkActivityWeightWithoutPaymasterFailure purchaseMemo.appActivityWeight purchaseMemo.assetActivityWeight)
+          pure None
+        else do
+          optDedicatedSynchronizerCid <-
+            lookupFromContextU @(ContractId DedicatedSynchronizer) arg.extraArgs.context dedicatedSynchronizerContextKey
+          pure $ fmap
+            (\dedicatedSynchronizerCid -> PaymasterTrafficPurchase with
+              dedicatedSynchronizerCid
+              optAppActivityWeight = purchaseMemo.appActivityWeight
+              optAssetActivityWeight = purchaseMemo.assetActivityWeight)
+            optDedicatedSynchronizerCid
+    paymaster <- fetchOptPaymasterPurchaseReceipt dso trafficConfig transfer.sender purchaseMemo.synchronizerId trafficAmount optPaymasterTrafficPurchase
+    let purchase = MemberTrafficPurchase with
           provider = transfer.sender
           memberId = purchaseMemo.memberId
           synchronizerId = purchaseMemo.synchronizerId
           migrationId = purchaseMemo.migrationId
-          trafficAmount = floor (trafficCostUsd * 1e6 / trafficConfig.trafficPrice)
+          trafficAmount
+          paymaster
     inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
     result <- buyMemberTraffic (toInterfaceContractId configStateCid) csum trafficConfig purchase
       (transfer.amount, trafficCostUsd) inputs

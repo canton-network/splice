@@ -1,0 +1,108 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Unit tests for a paymaster's traffic purchase for its dedicated synchronizer, and for patching
+-- a dedicated synchronizer's config.
+module Splice.Scripts.UnitTests.DedicatedSynchronizer where
+
+import DA.Assert ((===))
+import DA.Fail (FailureStatus(..))
+
+import Daml.Script
+
+import Splice.Amulet.DedicatedSynchronizer
+import Splice.Util (patch)
+
+testParty : Text -> Party
+testParty name =
+  let Some p = partyFromText (name <> "::1220000000000000000000000000000000000000000000000000000000000000abcd")
+  in p
+
+testPaymaster : Party
+testPaymaster = testParty "paymaster"
+
+testSynchronizerId : Text
+testSynchronizerId = "dedicated-synchronizer::1220dede"
+
+testConfig : DedicatedSynchronizerConfig
+testConfig = DedicatedSynchronizerConfig with
+  paymaster = testPaymaster
+  maxAppActivityWeight = 3.0
+  maxAssetActivityWeight = 3.0
+
+testDedicatedSynchronizer : DedicatedSynchronizer
+testDedicatedSynchronizer = DedicatedSynchronizer with
+  dso = testParty "dso"
+  synchronizerId = testSynchronizerId
+  config = testConfig
+
+resolve : Int -> Optional Decimal -> Optional Decimal -> Either FailureStatus PaymasterPurchaseReceipt
+resolve trafficAmount optAppActivityWeight optAssetActivityWeight =
+  resolvePaymasterPurchaseReceipt testDedicatedSynchronizer testPaymaster testSynchronizerId trafficAmount
+    optAppActivityWeight optAssetActivityWeight
+
+activityFor : Int -> Int -> Either FailureStatus PaymasterPurchaseReceipt
+activityFor appActivity assetActivity = Right PaymasterPurchaseReceipt with
+  paymaster = testPaymaster
+  appActivity
+  assetActivity
+
+failureErrorId : Either FailureStatus a -> Optional Text
+failureErrorId result = case result of
+  Left failureStatus -> Some failureStatus.errorId
+  Right _ -> None
+
+test_resolvePaymasterPurchase_isBytesTimesWeight : Script ()
+test_resolvePaymasterPurchase_isBytesTimesWeight = script do
+  resolve 2_000_000 (Some 1.0) (Some 0.5) === activityFor 2_000_000 1_000_000
+  resolve 2_000_000 (Some 0.5) (Some 1.0) === activityFor 1_000_000 2_000_000
+
+test_resolvePaymasterPurchase_weightAboveOne : Script ()
+test_resolvePaymasterPurchase_weightAboveOne = script do
+  resolve 1_000_000 (Some 2.5) (Some 1.25) === activityFor 2_500_000 1_250_000
+
+test_resolvePaymasterPurchase_defaultsToMax : Script ()
+test_resolvePaymasterPurchase_defaultsToMax = script do
+  resolve 1_000_000 None None === activityFor 3_000_000 3_000_000
+  resolve 1_000_000 (Some 1.0) None === activityFor 1_000_000 3_000_000
+
+test_resolvePaymasterPurchase_capsAtMax : Script ()
+test_resolvePaymasterPurchase_capsAtMax = script do
+  resolve 1_000_000 (Some 4.0) (Some 3.5) === activityFor 3_000_000 3_000_000
+
+test_resolvePaymasterPurchase_zeroWeight : Script ()
+test_resolvePaymasterPurchase_zeroWeight = script do
+  resolve 1_000_000 (Some 0.0) (Some 0.0) === activityFor 0 0
+
+test_resolvePaymasterPurchase_roundsDown : Script ()
+test_resolvePaymasterPurchase_roundsDown = script do
+  resolve 1_000_001 (Some 0.5) (Some 0.3333333333) === activityFor 500_000 333_333
+  resolve 1_000_000 (Some 0.9999999999) (Some 0.0000000001) === activityFor 999_999 0
+
+test_resolvePaymasterPurchase_zeroBytes : Script ()
+test_resolvePaymasterPurchase_zeroBytes = script do
+  resolve 0 (Some 1.0) (Some 0.5) === activityFor 0 0
+
+test_resolvePaymasterPurchase_rejectsNegativeWeight : Script ()
+test_resolvePaymasterPurchase_rejectsNegativeWeight = script do
+  failureErrorId (resolve 1_000_000 (Some (-0.1)) None) === Some "splice.lfdecentralizedtrust.org/negative-activity-weight"
+  failureErrorId (resolve 1_000_000 None (Some (-0.1))) === Some "splice.lfdecentralizedtrust.org/negative-activity-weight"
+
+test_resolvePaymasterPurchase_rejectsNonPaymaster : Script ()
+test_resolvePaymasterPurchase_rejectsNonPaymaster = script do
+  let result = resolvePaymasterPurchaseReceipt testDedicatedSynchronizer (testParty "other") testSynchronizerId 1_000_000
+        None None
+  failureErrorId result === Some "splice.lfdecentralizedtrust.org/not-paymaster"
+
+test_resolvePaymasterPurchase_rejectsOtherSynchronizer : Script ()
+test_resolvePaymasterPurchase_rejectsOtherSynchronizer = script do
+  let result = resolvePaymasterPurchaseReceipt testDedicatedSynchronizer testPaymaster "other-synchronizer::1220dede" 1_000_000
+        None None
+  failureErrorId result === Some "splice.lfdecentralizedtrust.org/dedicated-synchronizer-mismatch"
+
+test_patchDedicatedSynchronizerConfig_keepsConcurrentChanges : Script ()
+test_patchDedicatedSynchronizerConfig_keepsConcurrentChanges = script do
+  let base = testConfig
+      new = base with maxAppActivityWeight = 1.0
+      current = base with paymaster = testParty "newPaymaster"
+  patch new base current === current with maxAppActivityWeight = 1.0

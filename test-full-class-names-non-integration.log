@@ -72,6 +72,7 @@ org.lfdecentralizedtrust.splice.store.db.DbTcsStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
 org.lfdecentralizedtrust.splice.store.db.InternedStringStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
+org.lfdecentralizedtrust.splice.sv.SvAppVoteRequestValidationTest
 org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClientTest
 org.lfdecentralizedtrust.splice.sv.admin.http.OnboardSvSnapshotHandlerTest
 org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTriggerTest
@@ -95,6 +96,7 @@ org.lfdecentralizedtrust.splice.util.PolicyTest
 org.lfdecentralizedtrust.splice.util.SpliceCircuitBreakerTest
 org.lfdecentralizedtrust.splice.util.SpliceRateLimiterTest
 org.lfdecentralizedtrust.splice.util.SpliceUtilTest
+org.lfdecentralizedtrust.splice.util.TokenStandardMetadataTest
 org.lfdecentralizedtrust.splice.util.TransactionTreeExtensionsTest
 org.lfdecentralizedtrust.splice.util.UploadablePackageTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecCodegenTest

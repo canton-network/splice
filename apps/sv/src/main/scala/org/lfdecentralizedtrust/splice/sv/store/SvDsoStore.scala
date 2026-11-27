@@ -964,6 +964,21 @@ trait SvDsoStore
     ]]
   ]
 
+  /** List the MemberTraffic contracts of the paymaster purchases for the given dedicated
+    * synchronizer, see [[SvDsoStore.isPaymasterTraffic]].
+    */
+  def listPaymasterTrafficContracts(
+      synchronizerId: SynchronizerId,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[
+    Seq[Contract[
+      splice.decentralizedsynchronizer.MemberTraffic.ContractId,
+      splice.decentralizedsynchronizer.MemberTraffic,
+    ]]
+  ]
+
   /** List issuing mining rounds past their targetClosesAt */
   def listExpiredIssuingMiningRounds: ListExpiredContracts[
     splice.round.IssuingMiningRound.ContractId,
@@ -1121,6 +1136,26 @@ trait SvDsoStore
     ]
   ] =
     lookupFeaturedAppRightWithOffset(providerPartyId).map(_.value)
+
+  /** Every active registration of a dedicated synchronizer id, ordered by contract id.
+    * Usually one, but the ledger does not prevent duplicates. There are only a few
+    * registrations, so they are filtered here rather than through an index column.
+    */
+  final def listSynchronizerRegistrations(
+      synchronizerId: String,
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[ContractWithState[
+    splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.ContractId,
+    splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer,
+  ]]] =
+    for {
+      registrations <- multiDomainAcsStore.listContracts(
+        splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.COMPANION,
+        limit,
+      )
+    } yield registrations
+      .filter(_.payload.synchronizerId == synchronizerId)
+      .sortBy(_.contractId.contractId)
 
   def getDsoTransferContextForRound(round: Round)(implicit
       tc: TraceContext
@@ -1304,6 +1339,13 @@ object SvDsoStore {
       defaultLimit = defaultLimit,
     )
   }
+
+  /** Whether the MemberTraffic is from a paymaster's purchase for a registered dedicated
+    * synchronizer. The purchase has no member, and since a registered synchronizer has no
+    * migrations, its migration id is always 0.
+    */
+  def isPaymasterTraffic(traffic: splice.decentralizedsynchronizer.MemberTraffic): Boolean =
+    traffic.memberId.isEmpty && traffic.migrationId == 0L
 
   /** Contract filter of an sv acs store for a specific acs party. */
   def contractFilter(
@@ -1557,7 +1599,9 @@ object SvDsoStore {
         )
       },
       mkFilter(splice.decentralizedsynchronizer.MemberTraffic.COMPANION)(vt =>
-        vt.payload.dso == dso && vt.payload.migrationId == domainMigrationId
+        vt.payload.dso == dso && (vt.payload.migrationId == domainMigrationId ||
+          // so that the DSO merges a paymaster's contracts on every migration
+          isPaymasterTraffic(vt.payload))
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
@@ -1569,10 +1613,18 @@ object SvDsoStore {
               _ => None,
               member => Some(StoreMemberId(member)),
             ),
-          memberTrafficDomain = Some(SynchronizerId.tryFromString(contract.payload.synchronizerId)),
+          // as for the member id, we ignore an invalid synchronizer id, e.g., a registered
+          // synchronizer's malformed id, instead of killing the ingestion pipeline
+          memberTrafficDomain = SynchronizerId.fromString(contract.payload.synchronizerId).toOption,
           totalTrafficPurchased = Some(contract.payload.totalPurchased),
         )
       },
+      mkFilter(splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsDedicatedSynchronizers(Seq(dsoParty), now)(tc)
+        },
+      )(DsoAcsStoreRowData(_)),
       mkFilter(splice.ans.AnsRules.COMPANION)(co => co.payload.dso == dso)(DsoAcsStoreRowData(_)),
       mkFilter(splice.ans.AnsEntry.COMPANION)(co => co.payload.dso == dso) { contract =>
         DsoAcsStoreRowData(

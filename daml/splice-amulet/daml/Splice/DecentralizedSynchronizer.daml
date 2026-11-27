@@ -5,10 +5,13 @@
 module Splice.DecentralizedSynchronizer where
 
 import DA.Action (foldlA)
+import DA.Optional (fromOptional)
 import qualified DA.Set as Set
 import DA.Text as T
 import qualified DA.TextMap as TextMap
 import DA.Time
+
+import Splice.Amulet.DedicatedSynchronizer (PaymasterPurchaseReceipt)
 
 import Splice.Types
 import Splice.Util
@@ -59,7 +62,8 @@ validAmuletDecentralizedSynchronizerConfig config =
 -- | The state of the extra synchronizer traffic purchases of a sequencer sv.
 template MemberTraffic with
     dso : Party
-    memberId : Text -- ^ The id of the sequencer member (participant or mediator) for which traffic has been purchased
+    memberId : Text -- ^ The id of the sequencer member (participant or mediator) for which traffic has been purchased.
+      -- Empty for traffic that a paymaster purchased for its dedicated synchronizer as a whole.
     synchronizerId : Text -- ^ The id of the synchronizer for which this contract tracks purchased extra traffic
     migrationId : Int -- ^ The migration id of the synchronizer for which this contract tracks purchased extra traffic
     totalPurchased : Int -- ^ The number of bytes of extra traffic purchased
@@ -69,12 +73,13 @@ template MemberTraffic with
   where
     signatory dso
 
+    -- The `memberId` may be empty, see its description. A purchase for the decentralized
+    -- synchronizer must name a member, which `validateBuyMemberTrafficInputs` checks.
     ensure totalPurchased >= 0
       && numPurchases >= 0
       && amuletSpent >= 0.0
       && usdSpent >= 0.0
       && migrationId >= 0
-      && not (T.isEmpty memberId)
       && not (T.isEmpty synchronizerId)
 
 
@@ -95,6 +100,9 @@ data MemberTrafficPurchase = MemberTrafficPurchase with
     synchronizerId : Text
     migrationId : Int
     trafficAmount : Int
+    paymaster : Optional PaymasterPurchaseReceipt
+      -- ^ A paymaster's purchase for its dedicated synchronizer. `None` for a purchase of
+      -- member traffic on the decentralized synchronizer.
   deriving (Eq, Show)
 
 data TrafficPurchaseMemo = TrafficPurchaseMemo with
@@ -102,28 +110,44 @@ data TrafficPurchaseMemo = TrafficPurchaseMemo with
     synchronizerId : Text
     migrationId : Int
     forfeitValidatorRewardCoupon : Bool
+    appActivityWeight : Optional Decimal
+      -- ^ Weight (i.e. scaling factor) to use for creating activity records for this traffic
+      -- purchase. This weight is upper-bounded by the SV voted `maxAppActivityWeight`. Paymasters
+      -- can set it to a lower value than the allowed maximum to cater for special operational
+      -- circumstances.
+    assetActivityWeight : Optional Decimal
+      -- ^ As `appActivityWeight`, for asset activity.
   deriving (Eq, Show)
 
 trafficPurchaseMemoPrefix : Text
 trafficPurchaseMemoPrefix = "splice/memo:"
 
 -- | Parse the purchase arguments from memo tag using url query param style:
--- `splice/memo:member-id=...&synchronizer-id=...&migration-id=...[&forfeit-validator-reward-coupon=true|false]`.
+-- `splice/memo:[member-id=...&]synchronizer-id=...&migration-id=...[&forfeit-validator-reward-coupon=true|false]`
+-- `[&app-activity-weight=...][&asset-activity-weight=...]`.
+-- A memo without a `member-id` parses to an empty `memberId`. Only a paymaster's purchase for its
+-- dedicated synchronizer may leave it out, which `validateBuyMemberTrafficInputs` checks. The
+-- activity weights are those of `PaymasterTrafficPurchase`, so only such a purchase may give them.
 parseTrafficPurchaseMemo : Text -> Either Text TrafficPurchaseMemo
 parseTrafficPurchaseMemo memo = do
   params <- case T.stripPrefix trafficPurchaseMemoPrefix memo of
     None -> Left $ "Traffic purchase memo must start with " <> trafficPurchaseMemoPrefix
     Some params -> Right params
   fields <- foldlA addField TextMap.empty (T.splitOn "&" params)
-  memberId <- requiredField fields "member-id"
+  let memberId = fromOptional "" (TextMap.lookup "member-id" fields)
   synchronizerId <- requiredField fields "synchronizer-id"
   migrationId <- requiredField fields "migration-id" >>= parseIntField "migration-id"
   forfeitValidatorRewardCoupon <- case TextMap.lookup "forfeit-validator-reward-coupon" fields of
     None -> Right False
     Some value -> parseBoolField "forfeit-validator-reward-coupon" value
+  appActivityWeight <- optionalDecimalField fields "app-activity-weight"
+  assetActivityWeight <- optionalDecimalField fields "asset-activity-weight"
   pure TrafficPurchaseMemo with ..
   where
-    knownKeys = ["member-id", "synchronizer-id", "migration-id", "forfeit-validator-reward-coupon"]
+    knownKeys =
+      [ "member-id", "synchronizer-id", "migration-id", "forfeit-validator-reward-coupon"
+      , "app-activity-weight", "asset-activity-weight"
+      ]
     addField fields field = case T.splitOn "=" field of
       [key, value]
         | not (key `elem` knownKeys) ->
@@ -142,6 +166,11 @@ parseTrafficPurchaseMemo memo = do
       "true" -> Right True
       "false" -> Right False
       _ -> Left $ "Expected true or false for " <> key <> " in traffic purchase memo, got: " <> value
+    optionalDecimalField fields key = case TextMap.lookup key fields of
+      None -> Right None
+      Some value -> case T.parseDecimal value of
+        None -> Left $ "Expected a decimal for " <> key <> " in traffic purchase memo, got: " <> value
+        Some parsed -> Right (Some parsed)
 
 trafficPurchaseReason : MemberTrafficPurchase -> Text
 trafficPurchaseReason purchase =
@@ -179,3 +208,4 @@ instance Patchable AmuletDecentralizedSynchronizerConfig where
     requiredSynchronizers = patch new.requiredSynchronizers base.requiredSynchronizers current.requiredSynchronizers
     activeSynchronizer = patch new.activeSynchronizer base.activeSynchronizer current.activeSynchronizer
     fees = patch new.fees base.fees current.fees
+

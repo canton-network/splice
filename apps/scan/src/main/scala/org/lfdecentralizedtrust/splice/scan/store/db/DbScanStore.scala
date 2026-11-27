@@ -26,6 +26,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   TransferPreapproval,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRules}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.dedicatedsynchronizer.DedicatedSynchronizer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
@@ -475,6 +476,32 @@ class DbScanStore private (
         contractWithStateFromRow(GovernanceLock.COMPANION)(_)
       )
     }
+
+  override def lookupDedicatedSynchronizer(
+      synchronizerId: SynchronizerId
+  )(implicit tc: TraceContext): Future[
+    Option[ContractWithState[DedicatedSynchronizer.ContractId, DedicatedSynchronizer]]
+  ] = waitUntilAcsIngested {
+    (for {
+      row <- storage
+        .querySingle(
+          selectFromAcsTableWithState(
+            ScanTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            DedicatedSynchronizer.COMPANION,
+            // indexed by scan_acs_store_sid_mid_pn_tid_rsi
+            additionalWhere = sql"""
+                and registered_synchronizer_id = $synchronizerId
+            """,
+            // Every Scan must pick the same registration, so this orders by the ledger's creation
+            // time and contract id rather than by the store's ingestion order.
+            orderLimit = sql"order by created_at desc, contract_id desc limit 1",
+          ).headOption,
+          "lookupDedicatedSynchronizer",
+        )
+    } yield contractWithStateFromRow(DedicatedSynchronizer.COMPANION)(row)).value
+  }
 
   override def lookupFeaturedAppRight(
       providerPartyId: PartyId
