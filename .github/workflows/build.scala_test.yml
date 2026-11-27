@@ -18,6 +18,11 @@ on:
       test_name:
         type: string
         required: true
+      repetitions:
+        description: "JSON array of repetition ids; every shard runs once per entry (for measuring flakiness)"
+        type: string
+        required: false
+        default: "[1]"
       with_gcp_creds:
         type: boolean
         required: false
@@ -108,7 +113,7 @@ jobs:
 
   scala_test:
     runs-on: ${{ inputs.runs_on }}
-    name: ${{ inputs.test_name }} (${{ matrix.runner-index }})
+    name: ${{ inputs.test_name }} (${{ matrix.runner-index }}) r${{ matrix.repetition }}
     timeout-minutes: 60 # TODO(#3013): Investigate, and reduce back
     permissions:
       id-token: write # Required for GCP Workload Identity for failure notifications
@@ -119,6 +124,7 @@ jobs:
     strategy:
       matrix:
         runner-index: ${{ fromjson(needs.split_tests.outputs.indices) }}
+        repetition: ${{ fromjson(inputs.repetitions) }}
       fail-fast: false
     container:
       image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
@@ -146,7 +152,7 @@ jobs:
           cache_version: 10
           with_canton: ${{ inputs.with_canton }}
           start_canton_options: ${{ inputs.start_canton_options }}
-          test_suite_name: ${{ inputs.test_name }}
+          test_suite_name: ${{ inputs.test_name }}-r${{ matrix.repetition }}
           test_names: ${{ needs.split_tests.outputs.test_names }}
           runner_index: ${{ matrix.runner-index }}
           with_gcp_creds: ${{ inputs.with_gcp_creds }}

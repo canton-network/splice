@@ -33,7 +33,7 @@ on:
         description: "Canton protocol version"
         type: string
         required: false
-        default: "35"
+        default: ""
 
 permissions:
   id-token: write # Required for GCP Workload Identity for failure notifications # zizmor: ignore[excessive-permissions]
@@ -44,10 +44,10 @@ permissions:
 jobs:
 
   cancel_if_not_opt_in:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     runs-on: ubuntu-24.04
     # Note that we don't auto-cancel on merged commits (e.g. in a post-merge workflow), and on
     # pull_request_target events (which indicate that we are running from a fork).
-    if: github.event_name == 'pull_request'
     name: Cancel if not opted in
     permissions:
       actions: write
@@ -85,6 +85,7 @@ jobs:
           fi
 
   static_tests:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.static_tests.yml
     secrets: inherit
     with:
@@ -92,12 +93,14 @@ jobs:
       self_hosted: true
 
   deployment_test:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.deployment_test.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
   daml_test:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.daml_test.yml
     secrets: inherit
     with:
@@ -107,9 +110,10 @@ jobs:
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-large
-      test_names_file: 'test-full-class-names-sim-time.log'
+      test_names_file: 'test-full-class-names-sim-time-4sv.log'
       start_canton_options: -s
-      parallelism: 6
+      parallelism: 9
+      repetitions: '[1,2,3,4,5]'
       test_name: simtime
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
@@ -117,6 +121,7 @@ jobs:
     secrets: inherit
 
   scala_test_resource_intensive:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-x-large
@@ -130,6 +135,7 @@ jobs:
     secrets: inherit
 
   scala_test_key_download:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       # x-large because of SvReonboardingIntegrationTest, which starts additional Canton instances
@@ -145,6 +151,7 @@ jobs:
     secrets: inherit
 
   scala_test_record_time_tolerance:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-medium
@@ -158,6 +165,7 @@ jobs:
     secrets: inherit
 
   scala_test_logical_sync_upgrade:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-x-large
@@ -172,6 +180,7 @@ jobs:
     secrets: inherit
 
   scala_test_roll_forward_lsu:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-x-large
@@ -186,6 +195,7 @@ jobs:
     secrets: inherit
 
   scala_test_signatures:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-medium
@@ -200,6 +210,7 @@ jobs:
     secrets: inherit
 
   scala_test_wall_clock_time:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-large
@@ -214,6 +225,7 @@ jobs:
     secrets: inherit
 
   scala_test_frontend_wall_clock_time:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-large
@@ -228,6 +240,7 @@ jobs:
     secrets: inherit
 
   scala_test_frontend_simtime:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-large
@@ -242,6 +255,7 @@ jobs:
     secrets: inherit
 
   scala_test_docker_compose:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
       runs_on: self-hosted-docker-large
@@ -255,6 +269,7 @@ jobs:
     secrets: inherit
 
   scala_test_with_docker_no_canton:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
       runs_on: self-hosted-docker-large
@@ -269,6 +284,7 @@ jobs:
     secrets: inherit
 
   scala_test_with_docker_and_canton_simtime:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test_for_compose.yml
     with:
       runs_on: self-hosted-docker-large
@@ -285,6 +301,7 @@ jobs:
 
 
   scala_test_app_upgrade:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-large
@@ -301,36 +318,42 @@ jobs:
     secrets: inherit
 
   ui_tests:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.ui_tests.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
   ts_cli_tests:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.ts_cli_tests.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
   python_tests:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.python_tests.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
   compile_checks:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.compile_checks.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
   bundle_smoke_test:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.bundle_smoke_test.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
   scala_test_without_canton:
+    if: false # bft measurement branch: only scala_test_sim_time runs
     uses: ./.github/workflows/build.scala_test.yml
     with:
       runs_on: self-hosted-k8s-medium
@@ -345,7 +368,7 @@ jobs:
     secrets: inherit
 
   final_result:
-    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') }}
+    if: false # bft measurement branch: only scala_test_sim_time runs
     needs:
     - static_tests
     - deployment_test
