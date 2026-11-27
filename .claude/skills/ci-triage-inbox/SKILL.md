@@ -59,7 +59,11 @@ person who made the latest decision about it (on its tracker, its design issue).
 list the fix extends is not the owner by that alone; recency only breaks a tie between people who own the behaviour
 (11780: the breaker's author, who decided its tracker, not the author of a later one-entry ignore).
 An owner is a critical decision: when the reviewer changes it, or the main thread wants to change it after the triage,
-it is a contested owner. Present the candidates with their evidence and let the user choose; do not pick one alone. Name the evidence next to every suggested login (the PR or commit) and the case it falls under. External contributors: when the person found is an external contributor (not a member of the organisation; a
+it is a contested owner. Present the candidates with their evidence and let the user choose; do not pick one alone. Name the evidence next to every suggested login (the PR or commit) and the case it falls under.
+Assign only members of the canton-network team: `gh api orgs/DACH-NY/teams/canton-network/memberships/<login> -q .state`
+must print `active` (org membership and repository access are not enough: 11744, cgrigis-da, a Canton engineer, passes
+both). Someone outside it, e.g. a Canton engineer whose code the fix is in, is named in the comment as the person to ask,
+without assignee or ping; the issue stays unassigned unless a team member owns the follow-up. External contributors: when the person found is an external contributor (not a member of the organisation; a
 login ending in `-da` is only a hint, check with `gh api orgs/<org>/members/<login>` or the PR's `author_association`),
 do not assign them; assign the internal owner or reviewer of that test or production change instead: the reviewers
 who approved and the person who merged the PR (`gh pr view <n> --json reviews,mergedBy,author`), the `CODEOWNERS`
