@@ -6,7 +6,6 @@ module Splice.Scripts.TestAmuletRulesContractStateSchemaMigration where
 import DA.Assert
 import Daml.Script
 
-import Splice.Amulet
 import Splice.AmuletRules
 import Splice.DsoRules
 
@@ -20,28 +19,17 @@ testAmuletRulesContractStateSchemaMigration = do
   [(dsoRulesCid, _)] <- query @DsoRules dso
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
   amuletRules.contractStateSchemaVersion === None
-  [] <- query @ActivityRecorder dso
 
   -- only SV can call migrate
   submitMustFail (actAs nonSv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AmuletRules_MigrateContractStateSchema with
     amuletRulesCid
     sv = nonSv
 
-  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AmuletRules_MigrateContractStateSchema with
-    amuletRulesCid
-    sv = sv1
-
-  [(newAmuletRulesCid, newAmuletRules)] <- query @AmuletRules dso
-  newAmuletRulesCid === result.result.newAmuletRulesCid
-  newAmuletRules.contractStateSchemaVersion === Some latestContractStateSchemaVersion
-
-  [(_, activityRecorder)] <- query @ActivityRecorder dso
-  result.result.changesDescription === [(1, "created ActivityRecorder")]
-  activityRecorder.dso === dso
-
-  -- After reaching latestContractStateSchemaVersion calling migrate fails
+  -- There are no migrations yet, so the initial state is already at the latest version
+  -- and calling migrate fails.
+  latestContractStateSchemaVersion === 0
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AmuletRules_MigrateContractStateSchema with
-    amuletRulesCid = newAmuletRulesCid
+    amuletRulesCid
     sv = sv1
 
   pure ()
