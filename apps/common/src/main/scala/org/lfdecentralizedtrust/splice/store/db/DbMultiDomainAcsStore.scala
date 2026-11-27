@@ -761,9 +761,8 @@ final class DbMultiDomainAcsStore[TXE] private[db] (
   ): Source[SelectFromAcsTableResult, NotUsed] = {
     Source
       .future(
-        // TODO(#863): this is currently waiting until the whole ACS has been ingested.
-        //  After switching to streaming ACS ingestion, we could start streaming contracts while
-        //  the ACS is being ingested.
+        // We could start streaming contracts while the ACS is being ingested,
+        // but we don't have a use-case that makes any performance impact on the ACS ingestion worth it.
         waitUntilAcsIngested()
       )
       .flatMapConcat { _ =>
