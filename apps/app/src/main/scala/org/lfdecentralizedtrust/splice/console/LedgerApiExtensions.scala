@@ -29,6 +29,7 @@ import com.digitalasset.canton.crypto.provider.jce.JcePureCrypto
 import com.digitalasset.canton.crypto.provider.jce.JcePureCryptoAccess.*
 import com.digitalasset.canton.crypto.{SigningKeyUsage, SigningPrivateKey}
 import com.digitalasset.canton.data.{CantonTimestamp, DeduplicationPeriod}
+import com.digitalasset.canton.LfPackageId
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
@@ -76,6 +77,7 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
             userId: String = LedgerApiCommands.defaultUserId,
             disclosedContracts: Seq[CommandsOuterClass.DisclosedContract] = Seq.empty,
             includeCreatedEventBlob: Boolean = false,
+            packageIdSelectionPreference: Seq[String] = Seq.empty,
         ): JavaTransaction = {
           val tx = ledgerApi.consoleEnvironment.run {
             ledgerApi.ledgerApiCommand(
@@ -97,7 +99,8 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
                   .map(DisclosedContract.fromJavaProto),
                 synchronizerId = synchronizerId,
                 userId = userId,
-                packageIdSelectionPreference = Seq.empty,
+                packageIdSelectionPreference =
+                  packageIdSelectionPreference.map(LfPackageId.assertFromString),
                 transactionShape = TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS,
                 includeCreatedEventBlob = includeCreatedEventBlob,
                 optTimeout = None,

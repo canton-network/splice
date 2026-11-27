@@ -59,12 +59,13 @@ trait SynchronizerNodeConfigClient {
           synchronizerId.toProtoPrimitive,
           newSvNodeConfig,
           rulesAndState.svNodeState.contractId,
-          otherSvNodeStateCids,
+          otherSvNodeStateCids.cids,
         )
       )
       _ <- connection
         .submit(Seq(store.key.svParty), Seq(store.key.dsoParty), cmd)
         .noDedup
+        .withPreferredPackage(otherSvNodeStateCids.preferredPackageIds)
         .yieldResult()
     } yield ()
   }
@@ -72,6 +73,11 @@ trait SynchronizerNodeConfigClient {
 }
 
 object SynchronizerNodeConfigClient {
+
+  final case class OtherSvNodeStateCids(
+      cids: java.util.Optional[java.util.Map[String, SvNodeState.ContractId]],
+      preferredPackageIds: Seq[String],
+  )
 
   def otherSvNodeStateCids(
       store: SvDsoStore,
@@ -81,19 +87,21 @@ object SynchronizerNodeConfigClient {
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
-  ): Future[java.util.Optional[java.util.Map[String, SvNodeState.ContractId]]] =
+  ): Future[OtherSvNodeStateCids] =
     packageVersionSupport
       .supportsSynchronizerNodeIdClaimsCheck(Seq(store.key.dsoParty), now)
       .flatMap { featureSupport =>
-        if (featureSupport.supported)
-          store.getDsoRulesWithSvNodeStates().map { rulesAndStates =>
-            Some(
-              rulesAndStates.svNodeStates.collect {
-                case (otherSvParty, svNodeState) if otherSvParty != svParty =>
-                  otherSvParty.toProtoPrimitive -> svNodeState.contractId
-              }.asJava
-            ).toJava
-          }
-        else Future.successful(None.toJava)
+        val cids: Future[java.util.Optional[java.util.Map[String, SvNodeState.ContractId]]] =
+          if (featureSupport.supported)
+            store.getDsoRulesWithSvNodeStates().map { rulesAndStates =>
+              Some(
+                rulesAndStates.svNodeStates.collect {
+                  case (otherSvParty, svNodeState) if otherSvParty != svParty =>
+                    otherSvParty.toProtoPrimitive -> svNodeState.contractId
+                }.asJava
+              ).toJava
+            }
+          else Future.successful(None.toJava)
+        cids.map(OtherSvNodeStateCids(_, featureSupport.packageIds))
       }
 }

@@ -266,11 +266,12 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
               synchronizerId,
               nodeConfig,
               currentNodeStateCid,
-              otherSvNodeStateCids,
+              otherSvNodeStateCids.cids,
             )
             .commands()
             .asScala
             .toSeq,
+          packageIdSelectionPreference = otherSvNodeStateCids.preferredPackageIds,
         )
     }
   }
