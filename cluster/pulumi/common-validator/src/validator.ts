@@ -16,7 +16,7 @@ import {
   failOnAppVersionMismatch,
   fetchAndInstallParticipantBootstrapDump,
   getAdditionalJvmOptions,
-  getValidatorAppApiAudience,
+  getApiAudience,
   installSpliceHelmChart,
   installValidatorOnboardingSecret,
   installValidatorSecrets,
@@ -231,10 +231,7 @@ export async function installValidatorApp(
       auth: config.disableAuth
         ? undefined
         : {
-            audience: getValidatorAppApiAudience(
-              config.auth0Client.getCfg(),
-              config.xns.logicalName
-            ),
+            audience: getApiAudience('validatorApi', config.xns.logicalName),
             jwksUrl: `https://${config.auth0Client.getCfg().auth0Domain}/.well-known/jwks.json`,
           },
       walletSweep,

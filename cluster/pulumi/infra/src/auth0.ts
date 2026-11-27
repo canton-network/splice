@@ -8,13 +8,12 @@ import {
   Auth0ClusterConfig,
   config,
   isMainNet,
-  clusterProdLike,
   Auth0NamespaceConfig,
-  DEFAULT_AUDIENCE,
   NamespacedAuth0Configs,
   fixedTokens,
   ResolvedOutput,
   resolvedOutput,
+  getApiAudience,
 } from '@canton-network/splice-pulumi-common';
 import { dsoSize } from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
 import {
@@ -25,6 +24,7 @@ import {
   allValidatorsConfig,
   validatorIngressName,
 } from '@canton-network/splice-pulumi-common-validator/src/config';
+import { auth0Config } from '@canton-network/splice-pulumi-common/src/auth0/config';
 import _ from 'lodash';
 
 function tokenLifetime(): number {
@@ -36,12 +36,9 @@ function createLedgerApiAudience(
   clusterBasename: string,
   auth0DomainProvider: auth0.Provider
 ): ResolvedOutput<string> {
-  if (isMainNet) {
-    // TODO(DACH-NY/canton-network-internal#2873): get rid of this
-    return resolvedOutput('https://ledger_api.main.digitalasset.com');
-  }
-  if (clusterProdLike) {
-    const identifier = `https://ledger_api.${svNamespace}.${clusterBasename}.canton.network`;
+  const audienceConfig = auth0Config.audiences.ledgerApi;
+  const identifier = getApiAudience('ledgerApi', svNamespace);
+  if (audienceConfig.type === 'namespaced-managed') {
     // On prod clusters, we create a ledger API per SV namespace
     const resource = new auth0.ResourceServer(
       `LedgerApi${svNamespace.replace(/-/g, '')}`,
@@ -70,8 +67,7 @@ function createLedgerApiAudience(
 
     return { value: identifier, output: resource.identifier };
   } else {
-    // On non-prod clusters, we currently use the hard-coded identifier that matches our docs, and the manually created auth0 API
-    return resolvedOutput('https://canton.network.global');
+    return resolvedOutput(identifier);
   }
 }
 
@@ -80,12 +76,9 @@ function createSvAppAudience(
   clusterBasename: string,
   auth0DomainProvider: auth0.Provider
 ): ResolvedOutput<string> {
-  if (isMainNet) {
-    // TODO(DACH-NY/canton-network-internal#2873): get rid of this
-    return resolvedOutput('https://sv.main.digitalasset.com');
-  }
-  if (clusterProdLike) {
-    const identifier = `https://sv.${svNamespace}.${clusterBasename}.canton.network/api`;
+  const audienceConfig = auth0Config.audiences.svAppApi;
+  const identifier = getApiAudience('svAppApi', svNamespace);
+  if (audienceConfig.type === 'namespaced-managed') {
     // On prod clusters, we create a SV App API per SV namespace
     const resource = new auth0.ResourceServer(
       `SvAppApi${svNamespace.replace(/-/g, '')}`,
@@ -100,8 +93,7 @@ function createSvAppAudience(
 
     return { value: identifier, output: resource.identifier };
   } else {
-    // On non-prod clusters, we currently use the hard-coded identifier that matches our docs, and the manually created auth0 API (same one as ledger API)
-    return resolvedOutput('https://canton.network.global');
+    return resolvedOutput(identifier);
   }
 }
 
@@ -110,12 +102,9 @@ function createValidatorAppAudience(
   clusterBasename: string,
   auth0DomainProvider: auth0.Provider
 ): ResolvedOutput<string> {
-  if (isMainNet) {
-    // TODO(DACH-NY/canton-network-internal#2873): get rid of this
-    return resolvedOutput('https://validator.main.digitalasset.com');
-  }
-  if (clusterProdLike) {
-    const identifier = `https://validator.${svNamespace}.${clusterBasename}.canton.network/api`;
+  const audienceConfig = auth0Config.audiences.validatorApi;
+  const identifier = getApiAudience('validatorApi', svNamespace);
+  if (audienceConfig.type === 'namespaced-managed') {
     // On prod clusters, we create a Validator App API per SV namespace
     const resource = new auth0.ResourceServer(
       `ValidatorAppApi${svNamespace.replace(/-/g, '')}`,
@@ -130,8 +119,7 @@ function createValidatorAppAudience(
 
     return { value: identifier, output: resource.identifier };
   } else {
-    // On non-prod clusters, we currently use the hard-coded identifier that matches our docs, and the manually created auth0 API (same one as ledger API)
-    return resolvedOutput('https://canton.network.global');
+    return resolvedOutput(identifier);
   }
 }
 
@@ -140,7 +128,7 @@ function createParticipantAdminApiAudience(
   clusterBasename: string,
   auth0DomainProvider: auth0.Provider
 ): ResolvedOutput<string> {
-  const identifier = `https://participant_admin_api.${namespace}.${clusterBasename}.canton.network`;
+  const identifier = getApiAudience('participantAdminApi', namespace);
   const resource = new auth0.ResourceServer(
     `ParticipantAdminApi${namespace
       .split('-')
@@ -542,9 +530,9 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
     .apply(([clientId, walletGatewayClientId]) => {
       return {
         audiences: {
-          ledgerApi: DEFAULT_AUDIENCE,
-          participantAdminApi: DEFAULT_AUDIENCE,
-          validatorApi: DEFAULT_AUDIENCE,
+          ledgerApi: getApiAudience('ledgerApi', 'validator1'),
+          participantAdminApi: getApiAudience('participantAdminApi', 'validator1'),
+          validatorApi: getApiAudience('validatorApi', 'validator1'),
         },
         backendClientIds: {
           // hardcoded client IDs
@@ -575,9 +563,9 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
     clientId => {
       return {
         audiences: {
-          ledgerApi: DEFAULT_AUDIENCE,
-          participantAdminApi: DEFAULT_AUDIENCE,
-          validatorApi: DEFAULT_AUDIENCE,
+          ledgerApi: getApiAudience('ledgerApi', 'splitwell'),
+          participantAdminApi: getApiAudience('participantAdminApi', 'splitwell'),
+          validatorApi: getApiAudience('validatorApi', 'splitwell'),
         },
         backendClientIds: {
           // hardcoded client IDs
@@ -762,11 +750,9 @@ function auth0ForValidatorNamespace(
     .apply(([walletUiAppId, ansUiAppId, walletGatewayAppId]) => {
       return {
         audiences: {
-          // The Ledger API in the validator-test tenant
-          ledgerApi: 'https://ledger_api.example.com',
-          participantAdminApi: 'https://participant_admin_api.example.com',
-          // The Validator App API in the validator-test tenant
-          validatorApi: 'https://validator.example.com/api',
+          ledgerApi: getApiAudience('ledgerApi', namespace),
+          participantAdminApi: getApiAudience('participantAdminApi', namespace),
+          validatorApi: getApiAudience('validatorApi', namespace),
         },
         backendClientIds: {
           validator: 'cznBUeB70fnpfjaq9TzblwiwjkVyvh5z',

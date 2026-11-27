@@ -16,10 +16,9 @@ import {
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
   spliceConfig,
-  getLedgerApiAudience,
   DecentralizedSynchronizerUpgradeConfig,
-  getParticipantAdminApiAudience,
   getClientId,
+  getApiAudience,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorNodeConfig } from '@canton-network/splice-pulumi-common-validator';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
@@ -68,11 +67,8 @@ export async function installParticipant(
       `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/participant-values.yaml`,
       {
         OIDC_AUTHORITY_URL: auth0Config.auth0Domain,
-        OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getLedgerApiAudience(auth0Config, xns.logicalName),
-        OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(
-          auth0Config,
-          xns.logicalName
-        ),
+        OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getApiAudience('ledgerApi', xns.logicalName),
+        OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getApiAudience('participantAdminApi', xns.logicalName),
       }
     ),
     ...loadYamlFromFile(

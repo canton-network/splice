@@ -2,7 +2,7 @@
   "custom": true,
   "id": "",
   "inputs": {
-    "identifier": "https://participant_admin_api.sv-1.test-stack.canton.network",
+    "identifier": "https://participant_admin_api.sv-1.mock.canton.network",
     "name": "Participant Admin API for SV sv-1 on test-stack (Pulumi managed)",
     "tokenLifetime": 86400
   },

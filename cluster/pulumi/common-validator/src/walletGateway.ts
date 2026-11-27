@@ -13,6 +13,7 @@ import {
   InstalledHelmChart,
   LogLevel,
   appsKubernetesScheduling,
+  getApiAudience,
   getNamespaceConfig,
   installWalletGatewayAdminSecret,
   spliceConfig,
@@ -129,7 +130,7 @@ export async function installWalletGateway(
                 ledgerApi: { baseUrl: pulumi.interpolate`http://${participantAddress}:7575` },
                 auth: {
                   method: 'authorization_code',
-                  audience: nsAuth0.audiences.ledgerApi,
+                  audience: getApiAudience('ledgerApi', ns),
                   scope: 'openid daml_ledger_api offline_access',
                   clientId: nsAuth0.uiClientIds.walletGateway,
                 },
@@ -137,7 +138,7 @@ export async function installWalletGateway(
                 // gateway can allocate parties and grant user rights
                 adminAuth: {
                   method: 'client_credentials',
-                  audience: nsAuth0.audiences.ledgerApi,
+                  audience: getApiAudience('ledgerApi', ns),
                   scope: 'daml_ledger_api',
                   clientId: nsAuth0.backendClientIds.validator,
                   clientSecretEnv: 'OAUTH2_ADMIN_CLIENT_SECRET',

@@ -3,7 +3,7 @@
   "id": "",
   "inputs": {
     "allowOfflineAccess": true,
-    "identifier": "https://sv.sv-da-1.test-stack.canton.network/api",
+    "identifier": "https://sv.sv-da-1.mock.canton.network/api",
     "name": "SV App API for SV sv-da-1 on test-stack (Pulumi managed)",
     "tokenLifetime": 86400
   },

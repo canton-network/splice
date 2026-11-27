@@ -9,7 +9,7 @@ import {
   ExactNamespace,
   failOnAppVersionMismatch,
   getAdditionalJvmOptions,
-  getSvAppApiAudience,
+  getApiAudience,
   initialPackageConfigJson,
   initialSynchronizerFeesConfig,
   InstalledHelmChart,
@@ -116,7 +116,7 @@ export function installSvApp(
     onboardingPollingInterval: config.onboardingPollingInterval,
     enablePostgresMetrics: true,
     auth: {
-      audience: getSvAppApiAudience(config.auth0Client.getCfg(), xns.logicalName),
+      audience: getApiAudience('svAppApi', xns.logicalName),
       jwksUrl: `https://${config.auth0Client.getCfg().auth0Domain}/.well-known/jwks.json`,
     },
     contactPoint: daContactPoint,

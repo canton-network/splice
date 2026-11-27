@@ -36,13 +36,13 @@ import {
   ansDomainPrefix,
   failOnAppVersionMismatch,
   networkWideConfig,
-  getValidatorAppApiAudience,
   getNamespaceConfig,
   persistentHeapDumpsPvc,
   standardStorageClassName,
   pvcSuffix,
   CnChartVersion,
   defaultPostgresImage,
+  getApiAudience,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
@@ -312,7 +312,7 @@ async function installValidator(
     ...validatorValuesWithOnboardingOverride,
     auth: {
       ...validatorValuesWithOnboardingOverride.auth,
-      audience: getValidatorAppApiAudience(auth0Client.getCfg(), xns.logicalName),
+      audience: getApiAudience('validatorApi', xns.logicalName),
     },
   };
 

@@ -2,7 +2,7 @@
   "custom": true,
   "id": "",
   "inputs": {
-    "resourceServerIdentifier": "https://ledger_api.sv-da-1.test-stack.canton.network",
+    "resourceServerIdentifier": "https://ledger_api.sv-da-1.mock.canton.network",
     "scopes": [
       {
         "description": "Access to the Ledger API",

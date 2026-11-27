@@ -4,6 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 
 import { isMainNet } from '../config';
 import { ExactNamespace, fixedTokens } from '../utils';
+import { getApiAudience } from './audiences';
 import { getClientId, getNamespaceConfig } from './auth0';
 import { Auth0Client, Auth0ClientSecret, Auth0SecretMap } from './auth0types';
 
@@ -63,7 +64,7 @@ async function ledgerApiSecretContent(
   const clientId = getClientId(auth0Client, clientName, namespace);
 
   const clientSecrets = lookupClientSecrets(allSecrets, auth0Client, namespace, clientName);
-  const audience = cfg.namespacedConfigs[namespace]!.audiences.ledgerApi;
+  const audience = getApiAudience('ledgerApi', namespace);
 
   const clientSecret = clientSecrets.client_secret;
 
@@ -326,7 +327,7 @@ async function participantAdminApiSecretContent(
   const clientId = getClientId(auth0Client, clientName, namespace);
 
   const clientSecrets = lookupClientSecrets(allSecrets, auth0Client, namespace, clientName);
-  const audience = cfg.namespacedConfigs[namespace]!.audiences.participantAdminApi;
+  const audience = getApiAudience('participantAdminApi', namespace);
 
   const clientSecret = clientSecrets.client_secret;
 
