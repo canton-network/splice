@@ -176,6 +176,14 @@ log it names: a quote must be a real line (shortened only with `...`), never rec
 from a truncated message. Check its interpretations of names and versions the same way (e.g. "latest" against
 DarResources).
 
+Then a simplicity pass by the main thread, on every comment before it is presented, also after a reviewer's rewrite
+(agents, the reviewer most of all, write long: 11742 and 11744 came back at about 1100 words and had to be cut):
+keep the conclusion, the facts it rests on, the diagrams in full, and two or three log lines per block (stack traces cut
+to the frames that show the path); move the rest (alternatives ruled out one by one, line numbers, every timing,
+long PR lists) to the packet. Aim for about 300 to 450 words of text outside diagrams and log blocks for a root cause,
+less for a duplicate; check with `awk '/^```/{f=!f;next} !f' <file> | wc -w`. Re-check the cut version's quotes and
+Mermaid like the original.
+
 Then stop. The user may question the analysis, ask for more digging, disagree, edit the action, skip, or report what
 ran. A discussion that changes the cause changes the packet, the comment and the action before anything else
 happens. Do not present the next group before the user says so.
