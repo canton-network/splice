@@ -5,9 +5,6 @@ import { z } from 'zod';
 import { clusterProdLike, isMainNet } from '../config';
 import { clusterYamlConfig } from '../config/config';
 
-// TODO(#2873): can we get to a point where we no longer even export this outside of this file?
-export const DEFAULT_AUDIENCE = 'https://canton.network.global';
-
 const AudienceConfigSchema = z.union([
   z.strictObject({
     type: z.literal('namespaced-managed'),
@@ -55,9 +52,9 @@ const Auth0RootConfigSchema = z.object({
       } else {
         return {
           audiences: {
-            ledgerApi: { type: 'unmanaged' as const, audience: DEFAULT_AUDIENCE },
-            validatorApi: { type: 'unmanaged' as const, audience: DEFAULT_AUDIENCE },
-            svAppApi: { type: 'unmanaged' as const, audience: DEFAULT_AUDIENCE },
+            ledgerApi: { type: 'unmanaged' as const, audience: 'https://canton.network.global' },
+            validatorApi: { type: 'unmanaged' as const, audience: 'https://canton.network.global' },
+            svAppApi: { type: 'unmanaged' as const, audience: 'https://canton.network.global' },
           },
         };
       }
