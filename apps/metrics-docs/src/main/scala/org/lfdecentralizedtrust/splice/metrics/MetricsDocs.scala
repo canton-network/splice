@@ -86,7 +86,7 @@ final case class GeneratedMetrics(
 }
 
 object GeneratedMetrics {
-  private val rstMarkup: Set[Char] = Set('\\', '*', '`', '_', '|', ':')
+  private val rstMarkup: Set[Char] = raw"\*`_|:".toSet
 
   def rstText(text: String): String =
     text.trim
