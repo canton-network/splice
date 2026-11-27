@@ -17,6 +17,12 @@ export const DeployValidatorRunbook = spliceEnvConfig.envFlag(
 
 export const clusterProdLike = spliceEnvConfig.envFlag('GCP_CLUSTER_PROD_LIKE');
 
+export const enableAlerts = clusterProdLike || spliceEnvConfig.envFlag('ENABLE_ALERTS_FOR_TESTING');
+export const clusterIsResetPeriodically = spliceEnvConfig.envFlag('GCP_CLUSTER_RESET_PERIODICALLY');
+// Whether the observability stack installs its GCP alert policies; also
+// gates what those policies watch, e.g. the BigQuery max_staleness check.
+export const enableGcpAlerts = enableAlerts && !clusterIsResetPeriodically;
+
 // During development we often overwrite the same tag so we use imagePullPolicy: Always.
 // Outside of development, we use the default which corresponds to IfNotPresent
 // (unless the tag is LATEST which it never is in our setup).
