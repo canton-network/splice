@@ -264,8 +264,9 @@ class DbValidatorStore private (
                 acsStoreId,
                 domainMigrationId,
                 TransferPreapproval.COMPANION,
-                additionalWhere =
-                  sql"""and contract_expires_at < ${now.plus(renewalDuration.asJava)}
+                // Expired preapprovals cannot be renewed; retrying them would block the others.
+                additionalWhere = sql"""and contract_expires_at > $now
+                and contract_expires_at < ${now.plus(renewalDuration.asJava)}
               """,
               ),
               "listExpiringTransferPreapprovals",

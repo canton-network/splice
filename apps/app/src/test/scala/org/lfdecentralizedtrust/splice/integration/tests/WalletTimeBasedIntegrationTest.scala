@@ -271,6 +271,14 @@ class WalletTimeBasedIntegrationTest
           expired.payload.expiresAt should be < getLedgerTime.toInstant
         }
 
+        clue("Renewal automation does not pick up the expired TransferPreapproval") {
+          // the trigger reads `now` `clockSkewAutomationDelay` behind the clock
+          advanceTime(aliceValidatorBackend.config.automation.clockSkewAutomationDelay.asJava)
+          runExpectingNoTask(
+            aliceValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
+          )
+        }
+
         actAndCheck(
           "Alice creates another TransferPreapprovalProposal",
           aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
