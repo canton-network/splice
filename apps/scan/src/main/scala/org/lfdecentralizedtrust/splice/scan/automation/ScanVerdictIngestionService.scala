@@ -283,11 +283,7 @@ class ScanVerdictIngestionService(
               records = computed.flatMap { case (summary, _, recordO, _) =>
                 recordO.map(summary.sequencingTime -> _)
               }
-              firstActiveRoundO <- recordTimes.minOption match {
-                case Some(minRecordTime) =>
-                  appActivityComputation.lookupActiveOpenMiningRound(minRecordTime)
-                case None => Future.successful(None)
-              }
+              firstActiveRoundO = computed.flatMap(_._4).minOption
               lastArchivedRoundO <- recordTimes.maxOption match {
                 case Some(maxRecordTime) =>
                   appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
