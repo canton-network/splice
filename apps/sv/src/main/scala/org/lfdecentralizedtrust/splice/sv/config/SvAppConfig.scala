@@ -335,7 +335,7 @@ final case class InitialGovernanceLockConfig(
   * Unset fields use the CIP defaults: 90 days and 1.0 USD per year.
   */
 final case class InitialCredentialRegistryConfig(
-    freePeriod: Option[PositiveFiniteDuration] = None,
+    freePeriod: Option[NonNegativeFiniteDuration] = None,
     extensionUsdPerYear: Option[PositiveNumeric[BigDecimal]] = None,
 ) {
   final def toCredentialRegistryConfig: splice.amuletconfig.CredentialRegistryConfig =
