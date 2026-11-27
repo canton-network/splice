@@ -44,6 +44,9 @@ class ManualStartIntegrationTest
   // This test runs against a temporary Canton instance, disable all automatic setup of the shared canton instance
   override lazy val resetRequiredTopologyState = false
 
+  // The Splice apps initialize the fresh Canton nodes, so their participants have no Ledger API user before the apps start
+  override lazy val sequentialBftSequencerOnboarding = false
+
   override lazy val dbsSuffix = "manual_start_2_" + UUID.randomUUID.toString.substring(0, 4)
 
   val sv1PruningScheduleOverride = PruningConfig(

@@ -33,13 +33,18 @@ import org.lfdecentralizedtrust.splice.integration.plugins.{
   EventHistorySanityCheckPlugin,
   ResetDecentralizedNamespace,
   ResetSequencerSynchronizerStateThreshold,
+  SequentialBftSequencerOnboarding,
   TokenStandardCliSanityCheckPlugin,
   UpdateHistorySanityCheckPlugin,
   WaitForPorts,
 }
 import org.lfdecentralizedtrust.splice.sv.config.{SvOnboardingConfig, SynchronizerFeesConfig}
 import org.lfdecentralizedtrust.splice.test.HasRetryProvider
-import org.lfdecentralizedtrust.splice.util.{BigDecimalMatchers, CommonAppInstanceReferences}
+import org.lfdecentralizedtrust.splice.util.{
+  BigDecimalMatchers,
+  CommonAppInstanceReferences,
+  SequentialSvStartUtil,
+}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.{AppendedClues, BeforeAndAfterEach}
 
@@ -119,6 +124,9 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     }
 
     registerPlugin(new WaitForPorts(extraPortsToWaitFor))
+    if (sequentialBftSequencerOnboarding) {
+      registerPlugin(new SequentialBftSequencerOnboarding())
+    }
 
     if (resetRequiredTopologyState) {
       registerPlugin(new ResetDecentralizedNamespace())
@@ -170,6 +178,9 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     protected lazy val resetRequiredTopologyState: Boolean = true
 
     registerPlugin(new WaitForPorts(extraPortsToWaitFor))
+    if (sequentialBftSequencerOnboarding) {
+      registerPlugin(new SequentialBftSequencerOnboarding())
+    }
 
     protected def runTokenStandardCliSanityCheck: Boolean = true
     protected lazy val tokenStandardCliBehavior
@@ -292,7 +303,17 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
       with CommonAppInstanceReferences
       with LedgerApiExtensions
       with AppendedClues
-      with BigDecimalMatchers {
+      with BigDecimalMatchers
+      with SequentialSvStartUtil {
+
+    /** Whether to start the SVs one at a time while their BFT sequencers are not all in the ordering topology
+      * (see [[SequentialSvStartUtil]]). Disable this for tests where the SV apps initialize fresh Canton nodes,
+      * as starting the SVs one at a time requires their participants to be initialized.
+      */
+    protected lazy val sequentialBftSequencerOnboarding: Boolean = true
+
+    private def startSvsOneAtATimeIfEnabled(nodes: Seq[AppBackendReference]): Unit =
+      if (sequentialBftSequencerOnboarding) startSvsOneAtATimeIfNeeded(nodes)
 
     val grpcClientMetrics: GrpcClientMetrics = testGrpcClientMetrics
 
@@ -309,6 +330,7 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
         includeLocal: Boolean = true
     )(implicit env: SpliceTestConsoleEnvironment): Unit = {
       val apps = env.fullDsoApps.local.filter(a => !a.name.endsWith("Local") || includeLocal)
+      startSvsOneAtATimeIfEnabled(apps)
       apps.foreach(_.start())
       apps.foreach(_.waitForInitialization())
     }
@@ -444,6 +466,7 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
       LfContractId.assertFromString(cid.contractId)
 
     protected def startAllSync(nodes: AppBackendReference*): Unit = {
+      startSvsOneAtATimeIfEnabled(nodes)
       nodes.foreach(_.start())
       nodes.foreach(_.waitForInitialization())
     }
