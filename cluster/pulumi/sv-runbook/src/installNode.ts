@@ -48,6 +48,7 @@ import {
   clusterNetwork,
   CnChartVersion,
   envoyClientIpHeaderEnvVar,
+  supportsSvRunbookReset,
 } from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
@@ -394,10 +395,8 @@ async function installSvAndValidator(
         : {}),
     },
   };
-  // The runbook SV is reset daily (its stacks are torn down), so its buckets are emptied and deleted with it:
-  // every day it joins with empty buckets, as a new SV would.
   const bulkStorageBuckets = svConfig.scanApp?.bulkStorage
-    ? installScanBulkStorage(xns, svConfig.scanApp.bulkStorage, true)
+    ? installScanBulkStorage(xns, svConfig.scanApp.bulkStorage, supportsSvRunbookReset)
     : undefined;
   const scanValues: ChartValues = {
     ...defaultScanValues,
@@ -435,10 +434,12 @@ async function installSvAndValidator(
     fixedTokens() ? scanValuesWithFixedTokens : scanValues,
     activeVersion,
     {
-      dependsOn: imagePullDeps
-        .concat(svAppSecrets)
-        .concat([appsPg])
-        .concat(scanBulkStorageDependencies(bulkStorageBuckets)),
+      dependsOn: [
+        ...imagePullDeps,
+        ...svAppSecrets,
+        appsPg,
+        ...scanBulkStorageDependencies(bulkStorageBuckets),
+      ],
     }
   );
 

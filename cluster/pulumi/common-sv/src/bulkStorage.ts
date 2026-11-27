@@ -122,7 +122,6 @@ export function installScanBulkStorage(
   };
 }
 
-// Helm values of the splice-scan chart for the buckets created by installScanBulkStorage.
 export function scanBulkStorageValues(buckets: BulkStorageBuckets | undefined): ChartValues {
   if (!buckets) {
     return {};
@@ -141,7 +140,6 @@ export function scanBulkStorageValues(buckets: BulkStorageBuckets | undefined): 
   };
 }
 
-// The resources the splice-scan chart needs before it starts with bulk storage.
 export function scanBulkStorageDependencies(
   buckets: BulkStorageBuckets | undefined
 ): pulumi.Resource[] {
