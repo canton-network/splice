@@ -252,7 +252,7 @@ class VerdictStoreIngestionPerformanceTest(
       .zipWithIndex
       .runWith(Sink.foreachAsync(parallelism = 1) { case (batch, index) =>
         logger.info(s"Ingesting batch $index of ${batch.length} verdicts")
-        val items = batch.map(lv => toVerdictRow(lv.verdict, lv.trafficSummary, lv.resolvedRound))
+        val items = batch.map(lv => toVerdictRow(lv.verdict, lv.trafficSummary))
         // App activity records, keyed by the verdict's record time
         val appActivityRecords = batch.flatMap { lv =>
           lv.appActivityRecords.map { aar =>
@@ -337,7 +337,6 @@ class VerdictStoreIngestionPerformanceTest(
   private def toVerdictRow(
       v: httpDefs.EventHistoryVerdict,
       trafficSummaryO: Option[httpDefs.EventHistoryTrafficSummary],
-      roundNumberO: Option[Long],
   ): (VerdictT, Long => Seq[TransactionViewT]) = {
     val recordTime = parseTimestamp(v.recordTime)
     val trafficSummary = trafficSummaryO.map { ts =>
@@ -361,7 +360,6 @@ class VerdictStoreIngestionPerformanceTest(
       submittingParties = v.submittingParties.toSeq,
       transactionRootViews = v.transactionViews.rootViews.toSeq,
       trafficSummaryO = trafficSummary,
-      roundNumber = roundNumberO,
     )
     val mkViews: Long => Seq[TransactionViewT] = rowId =>
       v.transactionViews.views.toSeq.map { view =>
