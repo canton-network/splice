@@ -1,9 +1,12 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterProdLike, config } from '@canton-network/splice-pulumi-common';
-import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
+import {
+  clusterIsResetPeriodically,
+  config,
+  enableAlerts,
+} from '@canton-network/splice-pulumi-common';
 
-export const enableAlerts = clusterProdLike || config.envFlag('ENABLE_ALERTS_FOR_TESTING');
+export { clusterIsResetPeriodically, enableAlerts };
 export const slackAlertNotificationChannel = config.optionalEnv('SLACK_ALERT_NOTIFICATION_CHANNEL');
 // empty or missing value for the high prio notification channel disables high prio notifications
 export const slackHighPrioAlertNotificationChannel =
@@ -17,7 +20,6 @@ export function slackToken(): string {
   return config.requireEnv('SLACK_ACCESS_TOKEN');
 }
 
-export const clusterIsResetPeriodically = spliceEnvConfig.envFlag('GCP_CLUSTER_RESET_PERIODICALLY');
 export const enablePrometheusAlerts = config.envFlag(
   'ENABLE_PROMETHEUS_ALERTS',
   !clusterIsResetPeriodically

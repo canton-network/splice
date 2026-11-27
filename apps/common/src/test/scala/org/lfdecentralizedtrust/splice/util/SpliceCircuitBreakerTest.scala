@@ -2,7 +2,9 @@ package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.base.error.ErrorCode
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.error.MediatorError
+import com.digitalasset.canton.ledger.error.groups.ConsistencyErrors
 import com.digitalasset.canton.participant.protocol.TransactionProcessor.SubmissionErrors
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import com.digitalasset.canton.time.SimClock
@@ -161,6 +163,27 @@ class SpliceCircuitBreakerTest
         whenReady(future.failed) { ex =>
           ex shouldBe a[StatusRuntimeException]
           cb.isClosed shouldBe true
+        }
+      }
+    }
+
+    "not open after failures with ignored error codes" in {
+      val cb = createCircuitBreaker()
+
+      val exceptions = Seq(
+        ErrorCode.asGrpcError(
+          SubmissionErrors.NoViewWithValidRecipients.Error(CantonTimestamp.Epoch)
+        ),
+        ConsistencyErrors.SubmissionAlreadyInFlight.Reject().asGrpcError,
+      )
+      exceptions.foreach { exception =>
+        1 to 20 foreach { _ =>
+          val future = cb.withCircuitBreaker(Future.failed(exception))
+
+          whenReady(future.failed) { ex =>
+            ex shouldBe a[StatusRuntimeException]
+            cb.isClosed shouldBe true
+          }
         }
       }
     }

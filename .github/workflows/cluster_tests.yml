@@ -51,15 +51,20 @@ jobs:
           SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          if ! result=$(curl -sSL -X POST --fail-with-body \
+          # Write the body to a file: on a retry, curl overwrites it, so only the last
+          # attempt's body is kept. On stdout, --fail-with-body would leave the body of
+          # every failed attempt before it, which breaks the single-line step output.
+          if ! curl -sSL -X POST --fail-with-body \
             --retry 3 --retry-delay 10 --retry-max-time 60 \
             --connect-timeout 10 --max-time 60 \
             -H "Authorization: Bearer $ID_TOKEN" \
-            "${INVOKER_URL}?workflow=${WORKFLOW}&splice-git-ref=${SHA}"); then
+            -o response.json \
+            "${INVOKER_URL}?workflow=${WORKFLOW}&splice-git-ref=${SHA}"; then
             echo "::error::Failed to trigger cluster test workflow '${WORKFLOW}' for sha '${SHA}'"
-            echo "Response body: $result"
+            echo "Response body: $(cat response.json 2>/dev/null)"
             exit 1
           fi
+          result=$(cat response.json)
           echo "Triggered ${WORKFLOW}: $result"
           echo "result=$result" >> "$GITHUB_OUTPUT"
 

@@ -176,9 +176,14 @@ data AmuletRules_MigrateContractStateSchemaResult = AmuletRules_MigrateContractS
   deriving (Show, Eq, Serializable)
 
 -- | The latest contract state schema version that AmuletRules can be migrated to.
--- When bumping this also update the value in AmuletRulesContractStateMigrationTrigger
+-- When bumping this, add the corresponding migration step to `AmuletRules_MigrateContractStateSchema`.
+--
+-- Version 0 corresponds to `contractStateSchemaVersion = None`. There are no migrations yet,
+-- so `AmuletRules_MigrateContractStateSchema` cannot be exercised successfully yet.
+--
+-- When a migration is added perform the `AmuletRules_MigrateContractStateSchema` in `DsoBootstrap_Bootstrap`.
 latestContractStateSchemaVersion : Int
-latestContractStateSchemaVersion = 1
+latestContractStateSchemaVersion = 0
 
 -- | The rules governing how Amulet users can modify the Amulet state managed by the DSO party.
 template AmuletRules
@@ -1059,12 +1064,9 @@ template AmuletRules
         let currentVersion = fromOptional 0 contractStateSchemaVersion
         require' ("currentVersion", currentVersion) isLessR
           ("latestContractStateSchemaVersion", latestContractStateSchemaVersion)
-        changesDescription <-
-          if currentVersion == 0
-            then do
-              _ <- create ActivityRecorder with dso
-              pure [(1, "created ActivityRecorder")]
-            else pure []
+        -- Add the migration steps for every version > currentVersion here,
+        -- and describe each of them in the result.
+        let changesDescription = []
         newAmuletRulesCid <- create this with
           contractStateSchemaVersion = Some latestContractStateSchemaVersion
         pure AmuletRules_MigrateContractStateSchemaResult with newAmuletRulesCid; changesDescription

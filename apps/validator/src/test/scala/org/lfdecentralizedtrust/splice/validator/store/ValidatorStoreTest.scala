@@ -195,8 +195,8 @@ abstract class ValidatorStoreTest extends StoreTestBase with HasExecutionContext
         for {
           store <- mkStore()
           signatories = Seq(dsoParty, validator, user1)
-          preapproval1 = transferPreapproval(user1, validator, time(0), expiresAt = time(2))
-          preapproval2 = transferPreapproval(user2, validator, time(0), expiresAt = time(3))
+          preapproval1 = transferPreapproval(user1, validator, time(0), expiresAt = time(4))
+          preapproval2 = transferPreapproval(user2, validator, time(0), expiresAt = time(5))
           _ <- dummyDomain.create(preapproval1, createdEventSignatories = signatories)(
             store.multiDomainAcsStore
           )
@@ -205,7 +205,7 @@ abstract class ValidatorStoreTest extends StoreTestBase with HasExecutionContext
           )
         } yield {
           def expiringContractsAt(timestamp: CantonTimestamp) = store
-            .listExpiringTransferPreapprovals(NonNegativeFiniteDuration.ofSeconds(1))(
+            .listExpiringTransferPreapprovals(NonNegativeFiniteDuration.ofSeconds(3))(
               timestamp,
               PageLimit.tryCreate(10),
             )(TraceContext.empty)
@@ -218,6 +218,8 @@ abstract class ValidatorStoreTest extends StoreTestBase with HasExecutionContext
             preapproval1,
             preapproval2,
           )
+          expiringContractsAt(time(4)) should contain theSameElementsAs Seq(preapproval2)
+          expiringContractsAt(time(5)) should be(empty)
         }
       }
     }

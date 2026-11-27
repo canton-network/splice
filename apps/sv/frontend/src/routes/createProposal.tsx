@@ -10,7 +10,6 @@ import { OffboardSvForm } from '../components/forms/OffboardSvForm';
 import { SelectAction } from '../components/forms/SelectAction';
 import { SetAmuletConfigRulesForm } from '../components/forms/SetAmuletConfigRulesForm';
 import { SetDsoConfigRulesForm } from '../components/forms/SetDsoConfigRulesForm';
-import { UpdateFeaturedAppForm } from '../components/forms/UpdateFeaturedAppForm';
 import { UpdateSvRewardWeightForm } from '../components/forms/UpdateSvRewardWeightForm';
 import { InitiateProposalLayout } from '../components/governance/InitiateProposalLayout';
 import { useDsoInfos } from '../contexts/SvContext';
@@ -37,8 +36,6 @@ const ProposalForm: React.FC<{ action: SupportedActionTag }> = ({ action }) => {
       return <SetDsoConfigRulesForm />;
     case 'CRARC_SetConfig':
       return <SetAmuletConfigRulesForm />;
-    case 'SRARC_UpdateFeaturedAppRight':
-      return <UpdateFeaturedAppForm />;
     case 'SRARC_CreateFeaturedAppConfigUpdateInstruction':
       return <CreateFeaturedAppConfigUpdateForm />;
   }

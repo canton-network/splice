@@ -1705,7 +1705,7 @@ class UpdateHistory private (
         /*acsDelta = */ false,
       )
     }
-    val events: Seq[Event] = (createEvents ++ exerciseEvents).sortBy(_.getNodeId)
+    val events: Seq[Event] = (createEvents ++ exerciseEvents).toVector.sortBy(_.getNodeId)
 
     UpdateHistoryResponse(
       update = TransactionTreeUpdate(

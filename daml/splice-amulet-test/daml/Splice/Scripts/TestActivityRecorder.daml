@@ -1,0 +1,29 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TestActivityRecorder where
+
+import Daml.Script
+
+import Splice.Amulet
+
+import Splice.Scripts.Util
+
+
+testActivityRecorder : Script ()
+testActivityRecorder = do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+  let recordActivityCmd = createAndExerciseCmd (ActivityRecorder with dso = app.dso) ActivityRecorder_DsoRecordActivity with
+        appActivity = [(provider1.primaryParty, 1000)]
+        assetActivity = [(provider2.primaryParty, 2000)]
+
+  -- only the DSO party can record activity
+  submitMustFail alice.primaryParty recordActivityCmd
+
+  -- recording activity consumes the freshly created recorder, so it can be done repeatedly
+  -- without any context dependencies and without leaving contracts behind
+  ActivityRecorder_DsoRecordActivityResult <- submit app.dso recordActivityCmd
+  ActivityRecorder_DsoRecordActivityResult <- submit app.dso recordActivityCmd
+  [] <- query @ActivityRecorder app.dso
+
+  pure ()

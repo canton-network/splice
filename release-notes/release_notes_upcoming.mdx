@@ -13,6 +13,22 @@
       repair commands such as `participant.repair.import_acs`.
       The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
 
+  - Scan App
+
+    - SVs can enable bulk storage: Scan exports its update history and daily ACS snapshots to S3-compatible object
+      storage. It is optional for now. See [SV Bulk Storage](https://docs.canton.network/global-synchronizer/production-operations/sv-bulk-storage)
+      for the buckets, credentials and Helm values, and the commented `bulkStorage` section in the example `scan-values.yaml`.
+
+  - SV App
+
+    - Removed the legacy "Update Featured Application Metadata (use before Splice 0.10.0)" proposal option from the SV UI.
+      Use "Update Featured Application Metadata" instead. Existing votes of the old type are still displayed.
+
+  - Validator
+
+    - Fix bug causing the validator app to retry renewing transfer preapprovals that have already expired.
+      Such renewals always fail and retrying them can in some cases prevent the renewal of other preapprovals.
+
 ## Upcoming for next minor release (template):
 
   - Helm charts and Docker images
@@ -108,6 +124,10 @@
       - Added a new template `ActivityRecorder` in `splice-amulet` to support extra activity reporting
         by dedicated synchronizers, as specified by the
         [CIP-0104 App Activity Recording Extension Hook](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md#app-activity-recording-extension-hook).
+        Unlike the nonconsuming choice in the CIP's sketch, `ActivityRecorder_DsoRecordActivity` is consuming:
+        activity is recorded by creating a fresh `ActivityRecorder` and immediately exercising the choice on it.
+        Thereby any DSO-controlled code can record activity without first having to fetch
+        a shared, long-lived `ActivityRecorder` contract.
 
     - The deprecated `splice-postgres` Helm chart has been removed. Run Splice against a PostgreSQL
       instance that you provision yourself; see the [migration guide](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration).
