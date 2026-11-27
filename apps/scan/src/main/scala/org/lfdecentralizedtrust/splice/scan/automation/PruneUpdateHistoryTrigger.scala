@@ -43,13 +43,17 @@ class PruneUpdateHistoryTrigger(
   ): Future[Seq[PrunableDay]] =
     if (!updateHistory.isReady) Future.successful(Seq.empty)
     else
-      for {
-        committed <- bulkStorage.getCommittedProgressTimestamp(Some(BulkObjectKind.Updates))
-        days <- updateHistory.listDatesWithAllPartitions()
-      } yield PruneUpdateHistoryTrigger
-        .prunable(days, updateHistory.startAnalyzableTimeWindow, committed)
-        .map(PrunableDay(_))
-        .toList
+      updateHistory.legacyTablesExist().flatMap {
+        case true => Future.successful(Seq.empty)
+        case false =>
+          for {
+            committed <- bulkStorage.getCommittedProgressTimestamp(Some(BulkObjectKind.Updates))
+            days <- updateHistory.listDatesWithAllPartitions()
+          } yield PruneUpdateHistoryTrigger
+            .prunable(days, updateHistory.startAnalyzableTimeWindow, committed)
+            .map(PrunableDay(_))
+            .toList
+      }
 
   override protected def completeTask(task: PrunableDay)(implicit
       tc: TraceContext

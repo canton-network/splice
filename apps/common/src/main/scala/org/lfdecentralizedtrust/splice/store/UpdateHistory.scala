@@ -428,6 +428,11 @@ class UpdateHistory private (
     )
   }
 
+  def legacyTablesExist()(implicit tc: TraceContext): Future[Boolean] =
+    UpdateHistory
+      .filterExistingTables(PartitionedTables.map(UpdateHistory.legacyTableName), storage)
+      .map(_.nonEmpty)
+
   def readLastIngestedRecordTime()(implicit
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] = {

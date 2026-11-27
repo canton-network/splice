@@ -94,6 +94,43 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
       }
     }
 
+    "legacyTablesExist" should {
+
+      "be true while any legacy table exists, and false once all are gone" in {
+        val legacyTables = Seq(
+          "update_history_transactions_legacy",
+          "update_history_creates_legacy",
+          "update_history_exercises_legacy",
+          "update_history_assignments_legacy",
+          "update_history_unassignments_legacy",
+        )
+        def rename(tables: Seq[String], from: String => String, to: String => String) =
+          MonadUtil.sequentialTraverse(tables) { table =>
+            storage.underlying
+              .update(
+                sqlu"alter table #${from(table)} rename to #${to(table)}",
+                "renameLegacyTable",
+              )
+              .failOnShutdown
+          }
+        val hidden = (table: String) => s"${table}_hidden"
+        val store = mkStore()
+        for {
+          _ <- initStore(store)
+          allExist <- store.legacyTablesExist()
+          _ <- rename(legacyTables.drop(1), identity, hidden)
+          oneExists <- store.legacyTablesExist()
+          _ <- rename(legacyTables.take(1), identity, hidden)
+          noneExists <- store.legacyTablesExist()
+          _ <- rename(legacyTables, hidden, identity)
+        } yield {
+          allExist shouldBe true
+          oneExists shouldBe true
+          noneExists shouldBe false
+        }
+      }
+    }
+
     "analyzePartitionedTables" should {
 
       "use ANALYZE ONLY from Postgres 18 and plain ANALYZE before" in {
